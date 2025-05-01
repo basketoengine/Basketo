@@ -17,6 +17,9 @@ add_executable(BasketoGameEngine
         src/InputManager.cpp
         src/Entity.cpp
         src/Physics.cpp
+        src/SceneManager.cpp
+        src/scenes/GameScene.cpp
+        src/scenes/MenuScene.cpp
         )
 
 target_link_libraries(BasketoGameEngine ${SDL2_LIBRARIES} ${SDL2_IMAGE_LIBRARIES})
