@@ -23,3 +23,12 @@ void Entity::move(float dx, float dy) {
     rect.x += static_cast<int>(dx);
     rect.y += static_cast<int>(dy);
 }
+
+SDL_Rect Entity::getRect() const {
+    return rect;
+}
+
+void Entity::setRect(const SDL_Rect& r) {
+    rect = r;
+}
+

@@ -26,5 +26,6 @@ private:
     SDL_Texture* loadTexture(const std::string& path);
     bool running = false;
     Entity* player = nullptr;
+    Entity wall = Entity(300, 100, 100, 100);
 
 };

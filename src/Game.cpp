@@ -3,6 +3,7 @@
 #include "../utils/utility.h"
 #include <SDL2/SDL_image.h>
 #include "InputManager.h"
+#include "Physics.h"
 
 Game::Game() {}
 
@@ -59,7 +60,7 @@ void Game::update() {
     deltaTime = (currentFrameTime - lastFrameTime) / 1000.0f;
     lastFrameTime = currentFrameTime;
 
-    float speed = 200.0f; // pixels per second
+    float speed = 200.0f;
     float vx = 0.0f;
     float vy = 0.0f;
 
@@ -68,9 +69,25 @@ void Game::update() {
     if (InputManager::getInstance().isActionPressed("MoveUp"))    vy -= speed;
     if (InputManager::getInstance().isActionPressed("MoveDown"))  vy += speed;
 
+    SDL_Rect prevPos = player->getRect(); // Save the player's current position
+
     player->setVelocity(vx, vy);
     player->update(deltaTime);
 
+    // Check for collisions with the wall
+    if (Physics::checkCollision(player->getRect(), wall.getRect())) {
+        std::cout << "Collision detected!" << std::endl;
+        player->setRect(prevPos); // Reset to the previous position
+        player->setVelocity(0, 0); // Stop the player's movement
+    }
+
+    // Clamp the player's position within the window borders
+    SDL_Rect playerRect = player->getRect();
+    if (playerRect.x < 0) playerRect.x = 0; // Left border
+    if (playerRect.y < 0) playerRect.y = 0; // Top border
+    if (playerRect.x + playerRect.w > 800) playerRect.x = 800 - playerRect.w; // Right border
+    if (playerRect.y + playerRect.h > 600) playerRect.y = 600 - playerRect.h; // Bottom border
+    player->setRect(playerRect); // Update the player's position
 }
 
 void Game::render() {
@@ -91,7 +108,9 @@ void Game::render() {
         SDL_DestroyTexture(texture);
     }
 
-    player->render(renderer);
+    player->render(renderer);\
+
+    wall.render(renderer);
 
 
     SDL_RenderPresent(renderer);

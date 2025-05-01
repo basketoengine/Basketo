@@ -4,6 +4,9 @@
 class Entity {
 public:
     Entity(int x, int y, int w, int h);
+    SDL_Rect getRect() const;
+    void setRect(const SDL_Rect& r);
+
 
     void update(float deltaTime);
     void render(SDL_Renderer* renderer);
