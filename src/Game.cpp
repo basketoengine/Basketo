@@ -20,8 +20,12 @@ bool Game::init(const char* title, int width, int height) {
                               width, height, SDL_WINDOW_SHOWN);
     IMG_Init(IMG_INIT_PNG);
 
-    InputManager::getInstance().mapAction("Jump", SDL_SCANCODE_SPACE);
-    InputManager::getInstance().mapAction("Shoot", SDL_SCANCODE_LCTRL);
+    player = new Entity(100, 100, 50, 50);
+
+    InputManager::getInstance().mapAction("MoveLeft", SDL_SCANCODE_A);
+    InputManager::getInstance().mapAction("MoveRight", SDL_SCANCODE_D);
+    InputManager::getInstance().mapAction("MoveUp", SDL_SCANCODE_W);
+    InputManager::getInstance().mapAction("MoveDown", SDL_SCANCODE_S);
 
     if (!window) {
         std::cerr << "Window Error: " << SDL_GetError() << std::endl;
@@ -46,6 +50,8 @@ void Game::handleEvents() {
             running = false;
         }
     }
+
+    InputManager::getInstance().update();
 }
 
 void Game::update() {
@@ -53,11 +59,17 @@ void Game::update() {
     deltaTime = (currentFrameTime - lastFrameTime) / 1000.0f;
     lastFrameTime = currentFrameTime;
 
-    InputManager::getInstance().update();
+    float speed = 200.0f; // pixels per second
+    float vx = 0.0f;
+    float vy = 0.0f;
 
-    if (InputManager::getInstance().isActionPressed("Jump")) {
-        std::cout << "Jump!\n";
-    }
+    if (InputManager::getInstance().isActionPressed("MoveLeft"))  vx -= speed;
+    if (InputManager::getInstance().isActionPressed("MoveRight")) vx += speed;
+    if (InputManager::getInstance().isActionPressed("MoveUp"))    vy -= speed;
+    if (InputManager::getInstance().isActionPressed("MoveDown"))  vy += speed;
+
+    player->setVelocity(vx, vy);
+    player->update(deltaTime);
 
 }
 
@@ -79,6 +91,7 @@ void Game::render() {
         SDL_DestroyTexture(texture);
     }
 
+    player->render(renderer);
 
 
     SDL_RenderPresent(renderer);

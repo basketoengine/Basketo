@@ -10,6 +10,11 @@ find_package(SDL2 REQUIRED)
 include_directories(${SDL2_INCLUDE_DIRS} /usr/include/SDL2)
 set(SDL2_IMAGE_LIBRARIES -lSDL2_image)
 
-add_executable(BasketoGameEngine src/main.cpp src/Game.cpp utils/utility.cpp src/InputManager.cpp)
+add_executable(BasketoGameEngine 
+        src/main.cpp 
+        src/Game.cpp 
+        utils/utility.cpp 
+        src/InputManager.cpp
+        src/Entity.cpp)
 
 target_link_libraries(BasketoGameEngine ${SDL2_LIBRARIES} ${SDL2_IMAGE_LIBRARIES})
