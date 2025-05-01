@@ -13,6 +13,10 @@ GameScene::GameScene(SDL_Renderer* ren) : renderer(ren) {
     InputManager::getInstance().mapAction("MoveDown", SDL_SCANCODE_S);
 }
 
+GameScene::~GameScene() {
+    delete player;
+}
+
 void GameScene::handleInput() {
     InputManager::getInstance().update();
 }
@@ -57,7 +61,7 @@ void GameScene::render() {
     SDL_SetRenderDrawColor(renderer, 100, 200, 255, 255);
     drawCircle(renderer, 400, 300, 50);
 
-    SDL_Texture* texture = loadTexture("../Image/logo.png");
+    SDL_Texture* texture = loadTexture("../assets/Image/logo.png");
     if (texture) {
         SDL_Rect destRect = { 300, 200, 100, 64 }; 
         SDL_RenderCopy(renderer, texture, nullptr, &destRect);

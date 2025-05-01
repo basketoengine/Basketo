@@ -7,6 +7,7 @@
 class GameScene : public Scene {
 public:
     GameScene(SDL_Renderer* renderer);
+    ~GameScene() override;
     void handleInput() override;
     void update(float deltaTime) override;
     void render() override;
