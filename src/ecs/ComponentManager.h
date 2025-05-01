@@ -4,7 +4,11 @@
 #include <memory>
 #include <typeindex>
 #include <cassert>
+#include <array>
+#include <iostream>
+#include <type_traits>
 #include "Types.h"
+#include "components/TransformComponent.h" 
 
 class IComponentArray {
 public:
@@ -21,6 +25,15 @@ public:
         entityToIndex[entity] = newIndex;
         indexToEntity[newIndex] = entity;
         componentArray[newIndex] = component;
+
+        // // Debug print specifically for TransformComponent
+        // if constexpr (std::is_same_v<T, TransformComponent>) {
+        //     std::cout << "  [ComponentArray<Transform>] Inserted Entity " << entity
+        //               << " at index " << newIndex
+        //               << " with Data: pos=(" << component.x << "," << component.y
+        //               << "), size=(" << component.width << "," << component.height << ")" << std::endl;
+        // }
+
         ++size;
     }
 
@@ -41,7 +54,18 @@ public:
 
     T& getData(Entity entity) {
         assert(entityToIndex.find(entity) != entityToIndex.end());
-        return componentArray[entityToIndex[entity]];
+        size_t index = entityToIndex[entity];
+
+        // // Debug print specifically for TransformComponent
+        // if constexpr (std::is_same_v<T, TransformComponent>) {
+        //     auto& data = componentArray[index];
+        //     std::cout << "  [ComponentArray<Transform>] Getting Entity " << entity
+        //               << " from index " << index
+        //               << ". Stored Data: pos=(" << data.x << "," << data.y
+        //               << "), size=(" << data.width << "," << data.height << ")" << std::endl;
+        // }
+
+        return componentArray[index];
     }
 
     void entityDestroyed(Entity entity) override {

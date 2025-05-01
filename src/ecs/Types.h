@@ -1,10 +1,8 @@
 #pragma once
 
-#include <bitset>
 #include <cstdint>
-
-using Entity = std::uint32_t;
-const Entity MAX_ENTITIES = 5000;
+#include <bitset>
+#include "Entity.h" // Include the canonical definition instead
 
 using ComponentType = std::uint8_t;
 const ComponentType MAX_COMPONENTS = 32;

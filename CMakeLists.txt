@@ -23,7 +23,6 @@ add_executable(BasketoGameEngine
     src/Game.cpp 
     utils/utility.cpp 
     src/InputManager.cpp
-    src/Entity.cpp
     src/Physics.cpp
     src/SceneManager.cpp
     src/scenes/GameScene.cpp
