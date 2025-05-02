@@ -18,16 +18,18 @@ link_directories(${SDL2_TTF_LIBRARY_DIRS})
 
 include_directories(${SDL2_INCLUDE_DIRS})
 
-add_executable(BasketoGameEngine 
-    src/main.cpp 
-    src/Game.cpp 
-    utils/utility.cpp 
+set(SOURCE_FILES
+    src/main.cpp
+    src/Game.cpp
     src/InputManager.cpp
-    src/Physics.cpp
     src/SceneManager.cpp
+    src/AssetManager.cpp
     src/scenes/GameScene.cpp
     src/scenes/MenuScene.cpp
+    utils/utility.cpp
 )
+
+add_executable(BasketoGameEngine ${SOURCE_FILES})
 
 target_link_libraries(BasketoGameEngine 
     ${SDL2_LIBRARIES} 

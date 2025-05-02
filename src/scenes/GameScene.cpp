@@ -1,8 +1,10 @@
 #include "GameScene.h"
 #include "../InputManager.h"
+#include "../AssetManager.h" // Include AssetManager
 #include "../../utils/utility.h"
 #include "../ecs/components/TransformComponent.h"
 #include "../ecs/components/VelocityComponent.h"
+#include "../ecs/components/SpriteComponent.h" // Include SpriteComponent
 #include <SDL2/SDL_image.h>
 #include <iostream>
 #include <memory>
@@ -16,11 +18,13 @@ GameScene::GameScene(SDL_Renderer* ren) : renderer(ren) {
     // Register components
     componentManager->registerComponent<TransformComponent>();
     componentManager->registerComponent<VelocityComponent>();
+    componentManager->registerComponent<SpriteComponent>(); // Register SpriteComponent
 
     // Register systems and set signatures
     renderSystem = systemManager->registerSystem<RenderSystem>();
     Signature renderSig;
     renderSig.set(componentManager->getComponentType<TransformComponent>());
+    renderSig.set(componentManager->getComponentType<SpriteComponent>()); // Add SpriteComponent to signature
     systemManager->setSignature<RenderSystem>(renderSig);
 
     movementSystem = systemManager->registerSystem<MovementSystem>(); 
@@ -29,37 +33,49 @@ GameScene::GameScene(SDL_Renderer* ren) : renderer(ren) {
     moveSig.set(componentManager->getComponentType<VelocityComponent>());
     systemManager->setSignature<MovementSystem>(moveSig);
 
+    // Load assets using AssetManager
+    if (!AssetManager::getInstance().loadTexture("logo", "../assets/Image/logo.png")) {
+        std::cerr << "GameScene Error: Failed to load logo texture!" << std::endl;
+    }
+    if (!AssetManager::getInstance().loadTexture("player", "../assets/Image/player.png")) {
+        std::cerr << "GameScene Error: Failed to load player texture!" << std::endl;
+    }
+
     playerEntity = entityManager->createEntity();
 
-    // I need to remove this shit
+    // Player components
     TransformComponent playerTransform;
     playerTransform.x = 100.0f;
     playerTransform.y = 100.0f;
-    playerTransform.width = 50.0f; // Explicitly set width not cool here
-    playerTransform.height = 50.0f; 
-
+    playerTransform.width = 64.0f; // Adjust size based on player.png
+    playerTransform.height = 64.0f; 
     componentManager->addComponent(playerEntity, playerTransform); 
     componentManager->addComponent(playerEntity, VelocityComponent{0.0f, 0.0f});
+    componentManager->addComponent(playerEntity, SpriteComponent{"player"}); // Add SpriteComponent
+
     // Update player signature
     Signature playerSignature = entityManager->getSignature(playerEntity);
     playerSignature.set(componentManager->getComponentType<TransformComponent>());
     playerSignature.set(componentManager->getComponentType<VelocityComponent>());
+    playerSignature.set(componentManager->getComponentType<SpriteComponent>()); // Add SpriteComponent to signature
     entityManager->setSignature(playerEntity, playerSignature);
     systemManager->entitySignatureChanged(playerEntity, playerSignature); // Notify systems
 
     // Create wall entity
     wallEntity = entityManager->createEntity();
-    // need to be removed too
     TransformComponent wallTransform;
     wallTransform.x = 300.0f;
     wallTransform.y = 100.0f;
     wallTransform.width = 100.0f; 
     wallTransform.height = 100.0f; 
-    
     componentManager->addComponent(wallEntity, wallTransform);
+    // Use logo texture for the wall for now
+    componentManager->addComponent(wallEntity, SpriteComponent{"logo"}); // Add SpriteComponent
 
+    // Update wall signature
     Signature wallSignature = entityManager->getSignature(wallEntity);
     wallSignature.set(componentManager->getComponentType<TransformComponent>());
+    wallSignature.set(componentManager->getComponentType<SpriteComponent>()); // Add SpriteComponent to signature
     entityManager->setSignature(wallEntity, wallSignature);
     systemManager->entitySignatureChanged(wallEntity, wallSignature); // Notify systems
 
@@ -114,39 +130,8 @@ void GameScene::render() {
     SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255);
     SDL_RenderClear(renderer);
 
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    SDL_Rect rect = { 100, 100, 200, 150 };
-    SDL_RenderFillRect(renderer, &rect);
-
-    SDL_SetRenderDrawColor(renderer, 100, 200, 255, 255);
-    drawCircle(renderer, 400, 300, 50);
-
-    SDL_Texture* texture = loadTexture("../assets/Image/logo.png");
-    if (texture) {
-        SDL_Rect destRect = { 300, 200, 100, 64 };
-        SDL_RenderCopy(renderer, texture, nullptr, &destRect);
-        SDL_DestroyTexture(texture);
-    }
-
+    // Render entities via RenderSystem
     renderSystem->update(renderer, componentManager.get());
 
     SDL_RenderPresent(renderer);
-}
-
-SDL_Texture* GameScene::loadTexture(const std::string& path) {
-    SDL_Surface* surface = IMG_Load(path.c_str());
-    if (!surface) {
-        std::cerr << "IMG_Load Error: " << IMG_GetError() << std::endl;
-        return nullptr;
-    }
-
-    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
-    SDL_FreeSurface(surface);
-    if (!texture) {
-        std::cerr << "SDL_CreateTextureFromSurface Error: " << SDL_GetError() << std::endl;
-        return nullptr;
-    }
-    SDL_SetTextureColorMod(texture, 255, 255, 255);
-    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
-    return texture;
 }

@@ -5,6 +5,7 @@
 #include "SceneManager.h"
 #include "./scenes/GameScene.h"
 #include "./scenes/MenuScene.h"
+#include "AssetManager.h" // Include AssetManager
 #include <SDL2/SDL_image.h>
 
 Game::Game() {}
@@ -33,7 +34,18 @@ bool Game::init(const char* title, int width, int height) {
         return false;
     }
 
-    IMG_Init(IMG_INIT_PNG);
+    // Initialize SDL_image *before* AssetManager needs it
+    if (!(IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG)) {
+        std::cerr << "IMG_Init Error: " << IMG_GetError() << std::endl;
+        // Handle initialization error, maybe return false
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return false;
+    }
+
+    // Initialize AssetManager with the renderer
+    AssetManager::getInstance().init(renderer);
 
     //SceneManager::getInstance().changeScene(std::make_unique<GameScene>(renderer));
     SceneManager::getInstance().changeScene(std::make_unique<MenuScene>(renderer));
@@ -80,10 +92,13 @@ void Game::render() {
 }
 
 void Game::clean() {
+    // Clean up assets *before* destroying the renderer
+    AssetManager::getInstance().cleanup();
+
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
+    IMG_Quit(); // Quit SDL_image
     SDL_Quit();
-    IMG_Quit();
 }
 
 bool Game::isRunning() const {
