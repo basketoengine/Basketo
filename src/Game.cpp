@@ -5,8 +5,14 @@
 #include "SceneManager.h"
 #include "./scenes/GameScene.h"
 #include "./scenes/MenuScene.h"
-#include "AssetManager.h" // Include AssetManager
+#include "./scenes/DevModeScene.h"
+#include "AssetManager.h"
 #include <SDL2/SDL_image.h>
+#include <SDL2/SDL_mixer.h>
+#include <SDL2/SDL_ttf.h>
+#include "../vendor/imgui/imgui.h"
+#include "../vendor/imgui/backends/imgui_impl_sdl2.h"  
+#include "../vendor/imgui/backends/imgui_impl_sdlrenderer2.h" 
 
 Game::Game() {}
 
@@ -20,35 +26,72 @@ bool Game::init(const char* title, int width, int height) {
         return false;
     }
 
+    if (TTF_Init() == -1) {
+        std::cerr << "TTF_Init Error: " << TTF_GetError() << std::endl;
+        SDL_Quit();
+        return false;
+    }
+
+    if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048) < 0) {
+        std::cerr << "Mix_OpenAudio Error: " << Mix_GetError() << std::endl;
+        TTF_Quit();
+        SDL_Quit();
+        return false;
+    }
+
     window = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                               width, height, SDL_WINDOW_SHOWN);
 
     if (!window) {
         std::cerr << "Window Error: " << SDL_GetError() << std::endl;
+        Mix_CloseAudio();
+        TTF_Quit();
+        SDL_Quit();
         return false;
     }
 
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
     if (!renderer) {
         std::cerr << "Renderer Error: " << SDL_GetError() << std::endl;
-        return false;
-    }
-
-    // Initialize SDL_image *before* AssetManager needs it
-    if (!(IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG)) {
-        std::cerr << "IMG_Init Error: " << IMG_GetError() << std::endl;
-        // Handle initialization error, maybe return false
-        SDL_DestroyRenderer(renderer);
         SDL_DestroyWindow(window);
+        Mix_CloseAudio();
+        TTF_Quit();
         SDL_Quit();
         return false;
     }
 
-    // Initialize AssetManager with the renderer
+    if (!(IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG)) {
+        std::cerr << "IMG_Init Error: " << IMG_GetError() << std::endl;
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        Mix_CloseAudio();
+        TTF_Quit();
+        SDL_Quit();
+        return false;
+    }
+
     AssetManager::getInstance().init(renderer);
 
-    //SceneManager::getInstance().changeScene(std::make_unique<GameScene>(renderer));
-    SceneManager::getInstance().changeScene(std::make_unique<MenuScene>(renderer));
+    // Setup Dear ImGui context
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+    //io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+    // Setup Dear ImGui style
+    ImGui::StyleColorsDark();
+    //ImGui::StyleColorsClassic();
+
+    // Setup Platform/Renderer backends
+    ImGui_ImplSDL2_InitForSDLRenderer(window, renderer);
+    ImGui_ImplSDLRenderer2_Init(renderer);
+
+    // Load Fonts (Optional - ImGui uses default if none loaded)
+    // io.Fonts->AddFontFromFileTTF("../assets/fonts/roboto/Roboto-Regular.ttf", 16.0f);
+
+    // Switch to DevModeScene initially for testing
+    SceneManager::getInstance().changeScene(std::make_unique<DevModeScene>(renderer, window));
+    //SceneManager::getInstance().changeScene(std::make_unique<MenuScene>(renderer));
 
     running = true;
     return true;
@@ -57,12 +100,26 @@ bool Game::init(const char* title, int width, int height) {
 void Game::handleEvents() {
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
-        if (event.type == SDL_QUIT || 
-           (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE)) {
-            running = false;
+        // Pass SDL events to ImGui
+        ImGui_ImplSDL2_ProcessEvent(&event);
+
+        // Handle your specific events *after* ImGui potentially consumes them
+        ImGuiIO& io = ImGui::GetIO();
+        if (io.WantCaptureMouse || io.WantCaptureKeyboard) {
+            // ImGui is handling input, skip game input processing for this event
+        } else {
+             // Process game-specific input if ImGui isn't using it
+             if (event.type == SDL_QUIT ||
+                (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE)) {
+                 running = false;
+             }
+             // Let InputManager process events if not captured by ImGui
+             // This assumes InputManager processes based on polled events within its update
+             // If InputManager uses SDL_GetKeyboardState etc., it might not need this check
+             // InputManager::getInstance().processEvent(event); // Example if InputManager handles raw events
         }
     }
-
+    // Update InputManager state (e.g., key held status) after processing all events
     InputManager::getInstance().update();
 }
 
@@ -92,12 +149,22 @@ void Game::render() {
 }
 
 void Game::clean() {
+    // Cleanup ImGui
+    ImGui_ImplSDLRenderer2_Shutdown();
+    ImGui_ImplSDL2_Shutdown();
+    ImGui::DestroyContext();
+
     // Clean up assets *before* destroying the renderer
     AssetManager::getInstance().cleanup();
 
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
-    IMG_Quit(); // Quit SDL_image
+
+    // Quit SDL subsystems
+    Mix_CloseAudio(); // Close mixer audio
+    Mix_Quit();       // Quit SDL_mixer
+    TTF_Quit();       // Quit SDL_ttf
+    IMG_Quit();       // Quit SDL_image
     SDL_Quit();
 }
 

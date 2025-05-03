@@ -73,6 +73,11 @@ public:
             removeData(entity);
     }
 
+    // Method to check if an entity exists in this array
+    bool hasData(Entity entity) const {
+        return entityToIndex.find(entity) != entityToIndex.end();
+    }
+
 private:
     std::array<T, MAX_ENTITIES> componentArray;
     std::unordered_map<Entity, size_t> entityToIndex;
@@ -110,6 +115,12 @@ public:
     template<typename T>
     T& getComponent(Entity entity) {
         return getComponentArray<T>()->getData(entity);
+    }
+
+    // Method to check if an entity has a specific component
+    template<typename T>
+    bool hasComponent(Entity entity) {
+        return getComponentArray<T>()->hasData(entity);
     }
 
     void entityDestroyed(Entity entity) {

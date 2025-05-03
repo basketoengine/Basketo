@@ -1,11 +1,13 @@
 #include "GameScene.h"
 #include "../InputManager.h"
-#include "../AssetManager.h" // Include AssetManager
+#include "../AssetManager.h"
 #include "../../utils/utility.h"
 #include "../ecs/components/TransformComponent.h"
 #include "../ecs/components/VelocityComponent.h"
-#include "../ecs/components/SpriteComponent.h" // Include SpriteComponent
+#include "../ecs/components/SpriteComponent.h" 
 #include <SDL2/SDL_image.h>
+#include <SDL2/SDL_ttf.h>  
+#include <SDL2/SDL_mixer.h>
 #include <iostream>
 #include <memory>
 
@@ -18,13 +20,13 @@ GameScene::GameScene(SDL_Renderer* ren) : renderer(ren) {
     // Register components
     componentManager->registerComponent<TransformComponent>();
     componentManager->registerComponent<VelocityComponent>();
-    componentManager->registerComponent<SpriteComponent>(); // Register SpriteComponent
+    componentManager->registerComponent<SpriteComponent>(); 
 
     // Register systems and set signatures
     renderSystem = systemManager->registerSystem<RenderSystem>();
     Signature renderSig;
     renderSig.set(componentManager->getComponentType<TransformComponent>());
-    renderSig.set(componentManager->getComponentType<SpriteComponent>()); // Add SpriteComponent to signature
+    renderSig.set(componentManager->getComponentType<SpriteComponent>());
     systemManager->setSignature<RenderSystem>(renderSig);
 
     movementSystem = systemManager->registerSystem<MovementSystem>(); 
@@ -34,34 +36,40 @@ GameScene::GameScene(SDL_Renderer* ren) : renderer(ren) {
     systemManager->setSignature<MovementSystem>(moveSig);
 
     // Load assets using AssetManager
-    if (!AssetManager::getInstance().loadTexture("logo", "../assets/Image/logo.png")) {
+    AssetManager& assets = AssetManager::getInstance();
+
+    if (!assets.loadTexture("logo", "../assets/Image/logo.png")) {
         std::cerr << "GameScene Error: Failed to load logo texture!" << std::endl;
     }
-    if (!AssetManager::getInstance().loadTexture("player", "../assets/Image/player.png")) {
+    if (!assets.loadTexture("player", "../assets/Image/player.png")) {
         std::cerr << "GameScene Error: Failed to load player texture!" << std::endl;
+    }
+
+    if (!assets.loadFont("roboto_16", "../assets/fonts/roboto/Roboto-Regular.ttf", 16)) {
+         std::cerr << "GameScene Error: Failed to load roboto font size 16!" << std::endl;
+    }
+    if (!assets.loadSound("test_sound", "../assets/Sound/test.mp3")) { 
+         std::cerr << "GameScene Error: Failed to load test sound!" << std::endl;
     }
 
     playerEntity = entityManager->createEntity();
 
-    // Player components
     TransformComponent playerTransform;
     playerTransform.x = 100.0f;
     playerTransform.y = 100.0f;
-    playerTransform.width = 64.0f; // Adjust size based on player.png
+    playerTransform.width = 64.0f;
     playerTransform.height = 64.0f; 
     componentManager->addComponent(playerEntity, playerTransform); 
     componentManager->addComponent(playerEntity, VelocityComponent{0.0f, 0.0f});
-    componentManager->addComponent(playerEntity, SpriteComponent{"player"}); // Add SpriteComponent
+    componentManager->addComponent(playerEntity, SpriteComponent{"player"});
 
-    // Update player signature
     Signature playerSignature = entityManager->getSignature(playerEntity);
     playerSignature.set(componentManager->getComponentType<TransformComponent>());
     playerSignature.set(componentManager->getComponentType<VelocityComponent>());
-    playerSignature.set(componentManager->getComponentType<SpriteComponent>()); // Add SpriteComponent to signature
+    playerSignature.set(componentManager->getComponentType<SpriteComponent>());
     entityManager->setSignature(playerEntity, playerSignature);
-    systemManager->entitySignatureChanged(playerEntity, playerSignature); // Notify systems
+    systemManager->entitySignatureChanged(playerEntity, playerSignature); 
 
-    // Create wall entity
     wallEntity = entityManager->createEntity();
     TransformComponent wallTransform;
     wallTransform.x = 300.0f;
@@ -69,13 +77,12 @@ GameScene::GameScene(SDL_Renderer* ren) : renderer(ren) {
     wallTransform.width = 100.0f; 
     wallTransform.height = 100.0f; 
     componentManager->addComponent(wallEntity, wallTransform);
-    // Use logo texture for the wall for now
-    componentManager->addComponent(wallEntity, SpriteComponent{"logo"}); // Add SpriteComponent
 
-    // Update wall signature
+    componentManager->addComponent(wallEntity, SpriteComponent{"logo"}); 
+
     Signature wallSignature = entityManager->getSignature(wallEntity);
     wallSignature.set(componentManager->getComponentType<TransformComponent>());
-    wallSignature.set(componentManager->getComponentType<SpriteComponent>()); // Add SpriteComponent to signature
+    wallSignature.set(componentManager->getComponentType<SpriteComponent>());
     entityManager->setSignature(wallEntity, wallSignature);
     systemManager->entitySignatureChanged(wallEntity, wallSignature); // Notify systems
 
@@ -83,13 +90,23 @@ GameScene::GameScene(SDL_Renderer* ren) : renderer(ren) {
     InputManager::getInstance().mapAction("MoveRight", SDL_SCANCODE_D);
     InputManager::getInstance().mapAction("MoveUp", SDL_SCANCODE_W);
     InputManager::getInstance().mapAction("MoveDown", SDL_SCANCODE_S);
+
+    InputManager::getInstance().mapAction("PlaySound", SDL_SCANCODE_SPACE);
 }
 
 GameScene::~GameScene() {
 }
 
 void GameScene::handleInput() {
-    // InputManager::getInstance().update(); // Removed redundant update call
+    if (InputManager::getInstance().isActionPressed("PlaySound")) {
+        Mix_Chunk* sound = AssetManager::getInstance().getSound("test_sound");
+        if (sound) {
+            Mix_PlayChannel(-1, sound, 0); 
+            std::cout << "Played test_sound" << std::endl;
+        } else {
+            std::cerr << "Could not get test_sound to play." << std::endl;
+        }
+    }
 }
 
 void GameScene::update(float deltaTime) {
@@ -132,6 +149,33 @@ void GameScene::render() {
 
     // Render entities via RenderSystem
     renderSystem->update(renderer, componentManager.get());
+
+    // Test font rendering - Use the combined key "roboto_16_16"
+    TTF_Font* font = AssetManager::getInstance().getFont("roboto_16_16");
+    if (font) {
+        SDL_Color textColor = {255, 255, 255, 255}; // White color
+        SDL_Surface* textSurface = TTF_RenderText_Solid(font, "AssetManager Test!", textColor);
+        if (textSurface) {
+            SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
+            if (textTexture) {
+                SDL_Rect textRect;
+                textRect.x = 10; // Position on screen
+                textRect.y = 10;
+                textRect.w = textSurface->w;
+                textRect.h = textSurface->h;
+                SDL_RenderCopy(renderer, textTexture, nullptr, &textRect);
+                SDL_DestroyTexture(textTexture); // Clean up texture
+            } else {
+                 std::cerr << "Failed to create text texture: " << SDL_GetError() << std::endl;
+            }
+            SDL_FreeSurface(textSurface); // Clean up surface
+        } else {
+             std::cerr << "Failed to render text surface: " << TTF_GetError() << std::endl;
+        }
+    } else {
+         // Updated error message to reflect the key used
+         std::cerr << "Could not get font roboto_16_16 for rendering." << std::endl;
+    }
 
     SDL_RenderPresent(renderer);
 }

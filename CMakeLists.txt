@@ -16,7 +16,18 @@ pkg_check_modules(SDL2_TTF REQUIRED SDL2_ttf)
 include_directories(${SDL2_TTF_INCLUDE_DIRS})
 link_directories(${SDL2_TTF_LIBRARY_DIRS})
 
+pkg_check_modules(SDL2_MIXER REQUIRED SDL2_mixer)
+include_directories(${SDL2_MIXER_INCLUDE_DIRS})
+link_directories(${SDL2_MIXER_LIBRARY_DIRS})
+
+# Add OpenGL (needed by some ImGui backends or for future use)
+find_package(OpenGL REQUIRED)
+include_directories(${OpenGL_INCLUDE_DIRS})
+
 include_directories(${SDL2_INCLUDE_DIRS})
+
+# Add ImGui include directory
+include_directories(vendor/imgui)
 
 set(SOURCE_FILES
     src/main.cpp
@@ -26,13 +37,25 @@ set(SOURCE_FILES
     src/AssetManager.cpp
     src/scenes/GameScene.cpp
     src/scenes/MenuScene.cpp
+    src/scenes/DevModeScene.cpp
     utils/utility.cpp
+
+    # Add ImGui core source files
+    vendor/imgui/imgui.cpp
+    vendor/imgui/imgui_demo.cpp
+    vendor/imgui/imgui_draw.cpp
+    vendor/imgui/imgui_tables.cpp
+    vendor/imgui/imgui_widgets.cpp
+    vendor/imgui/backends/imgui_impl_sdl2.cpp
+    vendor/imgui/backends/imgui_impl_sdlrenderer2.cpp
 )
 
 add_executable(BasketoGameEngine ${SOURCE_FILES})
 
-target_link_libraries(BasketoGameEngine 
-    ${SDL2_LIBRARIES} 
-    ${SDL2_IMAGE_LIBRARIES} 
+target_link_libraries(BasketoGameEngine
+    ${SDL2_LIBRARIES}
+    ${SDL2_IMAGE_LIBRARIES}
     ${SDL2_TTF_LIBRARIES}
+    ${SDL2_MIXER_LIBRARIES}
+    ${OpenGL_LIBRARIES}
 )
