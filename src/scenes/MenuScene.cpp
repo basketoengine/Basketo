@@ -30,15 +30,12 @@ void MenuScene::renderText(const std::string& text, int x, int y, SDL_Color colo
     SDL_DestroyTexture(texture);
 }
 
-void MenuScene::handleInput(SDL_Event& event) { // Changed signature
-    // Check for the specific event to trigger scene change
+void MenuScene::handleInput(SDL_Event& event) {
     if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_RETURN) {
-        // Check if the action is pressed (updated to match InputManager's API)
         if (InputManager::getInstance().isActionPressed("StartGame")) {
              switchToGame = true;
         }
     }
-    // You could add other event handling specific to the menu here
 }
 
 void MenuScene::update(float deltaTime) {
@@ -52,7 +49,6 @@ void MenuScene::render() {
     SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255);
     SDL_RenderClear(renderer);
 
-    // Placeholder UI
     SDL_Rect title = { 200, 100, 400, 100 };
     SDL_SetRenderDrawColor(renderer, 100, 200, 255, 255);
     SDL_RenderFillRect(renderer, &title);

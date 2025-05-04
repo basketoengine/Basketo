@@ -1,28 +1,22 @@
 #pragma once
 
 #include <string>
-#include <SDL2/SDL.h> // Include for SDL_Rect if needed for source rect
-#include "../../vendor/nlohmann/json.hpp" // Corrected spelling
+#include <SDL2/SDL.h>
+#include "../../vendor/nlohmann/json.hpp"
 
 struct SpriteComponent {
-    std::string textureId; // ID used to lookup texture in AssetManager
-    SDL_Rect srcRect = {0, 0, 0, 0}; // Initialize source rectangle
-    bool useSrcRect = false; // Flag to indicate if srcRect should be used
-    int layer = 0; // Layer for rendering order
-    bool isFixed = false; // For UI elements, etc.
+    std::string textureId;
+    SDL_Rect srcRect = {0, 0, 0, 0};
+    bool useSrcRect = false;
+    int layer = 0;
+    bool isFixed = false;
 
-    // Default constructor
     SpriteComponent() : textureId(""), useSrcRect(false), layer(0), isFixed(false) {}
-
-    // Constructor for simple texture ID
     SpriteComponent(const std::string& id) : textureId(id), useSrcRect(false), layer(0), isFixed(false) {}
-
-    // Constructor for texture ID and source rectangle
     SpriteComponent(const std::string& id, int x, int y, int w, int h)
         : textureId(id), srcRect{x, y, w, h}, useSrcRect(true), layer(0), isFixed(false) {}
 };
 
-// Serialization functions for SpriteComponent
 inline void to_json(nlohmann::json& j, const SpriteComponent& c) {
     j = nlohmann::json{
         {"textureId", c.textureId},

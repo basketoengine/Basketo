@@ -5,7 +5,6 @@
 
 class InputManager {
 public:
-    // Singleton access
     static InputManager& getInstance();
 
     void mapAction(const std::string& action, SDL_Scancode key);

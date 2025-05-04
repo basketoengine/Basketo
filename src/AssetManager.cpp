@@ -1,11 +1,7 @@
 #include "AssetManager.h"
-#include <iostream> // For error reporting
-
-// Initialize singleton instance (implementation detail)
-// AssetManager* AssetManager::instance = nullptr; // If using pointer approach
+#include <iostream>
 
 AssetManager& AssetManager::getInstance() {
-    // Static instance created on first call and guaranteed to be destroyed.
     static AssetManager instance;
     return instance;
 }
@@ -23,10 +19,9 @@ bool AssetManager::loadTexture(const std::string& id, const std::string& path) {
         return false;
     }
 
-    // Check if texture already exists
     if (textures.find(id) != textures.end()) {
         std::cout << "AssetManager Info: Texture with ID '" << id << "' already loaded." << std::endl;
-        return true; 
+        return true;
     }
 
     SDL_Surface* surface = IMG_Load(path.c_str());
@@ -36,17 +31,14 @@ bool AssetManager::loadTexture(const std::string& id, const std::string& path) {
     }
 
     SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
-    SDL_FreeSurface(surface); 
+    SDL_FreeSurface(surface);
 
     if (!texture) {
         std::cerr << "AssetManager Error: Failed to create texture from surface '" << path << "'. SDL_Error: " << SDL_GetError() << std::endl;
         return false;
     }
 
-    // Optional: Set blend mode or other texture properties if needed globally
-    // SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
-
-    textures[id] = texture; // Store the texture
+    textures[id] = texture;
     std::cout << "AssetManager Info: Loaded texture '" << id << "' from '" << path << "'" << std::endl;
     return true;
 }
@@ -91,10 +83,10 @@ bool AssetManager::loadFont(const std::string& id, const std::string& path, int 
 SDL_Texture* AssetManager::getTexture(const std::string& id) const {
     auto it = textures.find(id);
     if (it != textures.end()) {
-        return it->second; 
+        return it->second;
     } else {
         std::cerr << "AssetManager Warning: Texture with ID '" << id << "' not found." << std::endl;
-        return nullptr; 
+        return nullptr;
     }
 }
 

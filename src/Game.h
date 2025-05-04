@@ -17,10 +17,8 @@ public:
     const int targetFPS = 60;
     const int frameDelay = 1000 / targetFPS;
 
-
 private:
     SDL_Window* window = nullptr;
     SDL_Renderer* renderer = nullptr;
     bool running = false;
-
 };

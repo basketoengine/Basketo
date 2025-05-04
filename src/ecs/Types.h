@@ -2,7 +2,7 @@
 
 #include <cstdint>
 #include <bitset>
-#include "Entity.h" // Include the canonical definition instead
+#include "Entity.h"
 
 using ComponentType = std::uint8_t;
 const ComponentType MAX_COMPONENTS = 32;

@@ -2,15 +2,15 @@
 #include "../Scene.h"
 #include "../ecs/EntityManager.h"
 #include "../ecs/ComponentManager.h"
-#include "../ecs/SystemManager.h" 
+#include "../ecs/SystemManager.h"
 #include "../ecs/components/TransformComponent.h"
 #include "../ecs/components/VelocityComponent.h"
-#include "../ecs/systems/RenderSystem.h" 
-#include "../ecs/systems/MovementSystem.h" 
+#include "../ecs/systems/RenderSystem.h"
+#include "../ecs/systems/MovementSystem.h"
 #include "../ecs/Types.h"
 #include <SDL2/SDL.h>
 #include <string>
-#include <memory> 
+#include <memory>
 
 class GameScene : public Scene {
 public:
@@ -23,11 +23,11 @@ public:
 private:
     SDL_Renderer* renderer;
     Entity playerEntity;
-    Entity wallEntity; 
+    Entity wallEntity;
     std::unique_ptr<EntityManager> entityManager;
     std::unique_ptr<ComponentManager> componentManager;
-    std::unique_ptr<SystemManager> systemManager; 
-    std::shared_ptr<MovementSystem> movementSystem; 
+    std::unique_ptr<SystemManager> systemManager;
+    std::shared_ptr<MovementSystem> movementSystem;
     std::shared_ptr<RenderSystem> renderSystem;
     SDL_Texture* loadTexture(const std::string& path);
 };
