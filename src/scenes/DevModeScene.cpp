@@ -3,7 +3,16 @@
 #include "../../vendor/imgui/backends/imgui_impl_sdl2.h"
 #include "../../vendor/imgui/backends/imgui_impl_sdlrenderer2.h"
 #include <iostream>
-#include <set> 
+#include <set>
+#include <fstream> // For file I/O
+#include <string>
+#include "../../vendor/nlohmann/json.hpp" // Corrected spelling
+#include "imgui_internal.h" // For ImGui::IsWindowHovered
+#include <SDL2/SDL_rect.h> // For SDL_Rect
+
+// Include component headers needed for serialization/deserialization
+#include "../ecs/components/TransformComponent.h"
+#include "../ecs/components/SpriteComponent.h"
 
 DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win) : renderer(ren), window(win) {
     std::cout << "Entering Dev Mode Scene" << std::endl;
@@ -39,14 +48,104 @@ DevModeScene::~DevModeScene() {
     // ECS managers clean up automatically via unique_ptr
 }
 
-void DevModeScene::handleInput() {
-    // ImGui_ImplSDL2_ProcessEvent handles SDL events for ImGui
-    // This is called from Game::handleEvents
+void DevModeScene::handleInput(SDL_Event& event) {
+    // Let ImGui handle its events first
+    ImGui_ImplSDL2_ProcessEvent(&event);
+
+    // Check if ImGui wants to capture mouse input
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.WantCaptureMouse) {
+        // If ImGui is using the mouse, stop dragging if it was active
+        if (isDragging) {
+            isDragging = false;
+            // Optionally apply final snap position here if needed
+        }
+        return; // Don't process viewport interaction if ImGui has focus
+    }
+
+    int mouseX, mouseY;
+    SDL_GetMouseState(&mouseX, &mouseY);
+
+    switch (event.type) {
+        case SDL_MOUSEBUTTONDOWN:
+            if (event.button.button == SDL_BUTTON_LEFT) {
+                bool clickedOnExistingSelection = false;
+                if (selectedEntity != NO_ENTITY_SELECTED && isMouseOverEntity(mouseX, mouseY, selectedEntity)) {
+                    // Start dragging the currently selected entity
+                    isDragging = true;
+                    dragStartMouseX = mouseX;
+                    dragStartMouseY = mouseY;
+                    auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
+                    dragStartEntityX = transform.x;
+                    dragStartEntityY = transform.y;
+                    clickedOnExistingSelection = true;
+                }
+
+                if (!clickedOnExistingSelection) {
+                    // If not clicking the selected entity, check others for selection/drag start
+                    Entity clickedEntity = NO_ENTITY_SELECTED;
+                    // Iterate in reverse order potentially (top-most rendered first? depends on render order)
+                    const auto& activeEntities = entityManager->getActiveEntities();
+                    for (auto it = activeEntities.rbegin(); it != activeEntities.rend(); ++it) {
+                         Entity entity = *it;
+                         if (isMouseOverEntity(mouseX, mouseY, entity)) {
+                             clickedEntity = entity;
+                             break; // Found the top-most entity under the mouse
+                         }
+                    }
+
+                    selectedEntity = clickedEntity; // Select the clicked entity (or deselect if none)
+                    inspectorTextureIdBuffer[0] = '\0'; // Reset inspector buffer on new selection
+
+                    if (selectedEntity != NO_ENTITY_SELECTED) {
+                        // Start dragging the newly selected entity
+                        isDragging = true;
+                        dragStartMouseX = mouseX;
+                        dragStartMouseY = mouseY;
+                        auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
+                        dragStartEntityX = transform.x;
+                        dragStartEntityY = transform.y;
+                    }
+                }
+            }
+            break;
+
+        case SDL_MOUSEBUTTONUP:
+            if (event.button.button == SDL_BUTTON_LEFT && isDragging) {
+                isDragging = false;
+                // Apply final position, especially if snapping
+                if (snapToGrid && selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<TransformComponent>(selectedEntity)) {
+                    auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
+                    transform.x = std::roundf(transform.x / gridSize) * gridSize;
+                    transform.y = std::roundf(transform.y / gridSize) * gridSize;
+                }
+            }
+            break;
+
+        case SDL_MOUSEMOTION:
+            if (isDragging && selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<TransformComponent>(selectedEntity)) {
+                int deltaX = mouseX - dragStartMouseX;
+                int deltaY = mouseY - dragStartMouseY;
+
+                auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
+                float newX = dragStartEntityX + deltaX;
+                float newY = dragStartEntityY + deltaY;
+
+                if (snapToGrid) {
+                    // Snap during drag for visual feedback
+                    transform.x = std::roundf(newX / gridSize) * gridSize;
+                    transform.y = std::roundf(newY / gridSize) * gridSize;
+                } else {
+                    transform.x = newX;
+                    transform.y = newY;
+                }
+            }
+            break;
+    }
 }
 
 void DevModeScene::update(float deltaTime) {
-    // Update scene logic here (if any)
-    // Could update ECS systems if needed, e.g., movementSystem->update(...)
+    // No dragging logic needed here currently, handled in handleInput
 }
 
 void DevModeScene::render() {
@@ -58,7 +157,36 @@ void DevModeScene::render() {
     SDL_SetRenderDrawColor(renderer, (Uint8)(clear_color.x * 255), (Uint8)(clear_color.y * 255), (Uint8)(clear_color.z * 255), (Uint8)(clear_color.w * 255));
     SDL_RenderClear(renderer);
 
+    // --- Render Grid (Optional) ---
+    // Example: Draw a light gray grid
+    if (snapToGrid) { // Only draw if snapping is enabled
+        SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255); // Light gray
+        int screenWidth, screenHeight;
+        SDL_GetRendererOutputSize(renderer, &screenWidth, &screenHeight);
+        for (float x = 0; x < screenWidth; x += gridSize) {
+            SDL_RenderDrawLineF(renderer, x, 0, x, (float)screenHeight);
+        }
+        for (float y = 0; y < screenHeight; y += gridSize) {
+            SDL_RenderDrawLineF(renderer, 0, y, (float)screenWidth, y);
+        }
+    }
+
     renderSystem->update(renderer, componentManager.get());
+
+    // --- Render Selection Box ---
+    if (selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<TransformComponent>(selectedEntity)) {
+        auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
+        SDL_Rect selectionRect = {
+            static_cast<int>(transform.x),
+            static_cast<int>(transform.y),
+            static_cast<int>(transform.width),
+            static_cast<int>(transform.height)
+        };
+
+        // Set color for selection box (e.g., white)
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        SDL_RenderDrawRect(renderer, &selectionRect);
+    }
 
     if (show_demo_window)
         ImGui::ShowDemoWindow(&show_demo_window);
@@ -173,6 +301,22 @@ void DevModeScene::render() {
     }
     ImGui::End();
 
+    ImGui::Begin("Scene Controls");
+    ImGui::InputText("Filename", sceneFilePath, sizeof(sceneFilePath));
+    if (ImGui::Button("Save Scene")) {
+        saveScene(sceneFilePath);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Load Scene")) {
+        loadScene(sceneFilePath);
+    }
+    ImGui::Separator();
+    ImGui::Checkbox("Snap to Grid", &snapToGrid);
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(100); // Adjust width as needed
+    ImGui::DragFloat("Grid Size", &gridSize, 1.0f, 1.0f, 256.0f); // Min 1, Max 256
+    ImGui::End();
+
     //Show another simple window (Optional)
     if (show_another_window)
     {
@@ -188,4 +332,132 @@ void DevModeScene::render() {
     ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
 
     SDL_RenderPresent(renderer);
+}
+
+void DevModeScene::saveScene(const std::string& filepath) {
+    nlohmann::json sceneJson;
+    sceneJson["entities"] = nlohmann::json::array();
+
+    std::cout << "Saving scene to " << filepath << "..." << std::endl;
+
+    const auto& activeEntities = entityManager->getActiveEntities();
+    for (Entity entity : activeEntities) {
+        nlohmann::json entityJson;
+        entityJson["id_saved"] = entity;
+        entityJson["components"] = nlohmann::json::object();
+
+        if (componentManager->hasComponent<TransformComponent>(entity)) {
+            entityJson["components"]["TransformComponent"] = componentManager->getComponent<TransformComponent>(entity);
+        }
+        if (componentManager->hasComponent<SpriteComponent>(entity)) {
+            entityJson["components"]["SpriteComponent"] = componentManager->getComponent<SpriteComponent>(entity);
+        }
+
+        if (!entityJson["components"].empty()) {
+             sceneJson["entities"].push_back(entityJson);
+        }
+    }
+
+    std::ofstream outFile(filepath);
+    if (outFile.is_open()) {
+        outFile << sceneJson.dump(4);
+        outFile.close();
+        std::cout << "Scene saved successfully." << std::endl;
+    } else {
+        std::cerr << "Error: Could not open file " << filepath << " for writing!" << std::endl;
+    }
+}
+
+void DevModeScene::loadScene(const std::string& filepath) {
+    std::ifstream inFile(filepath);
+    if (!inFile.is_open()) {
+        std::cerr << "Error: Could not open file " << filepath << " for reading!" << std::endl;
+        return;
+    }
+
+    nlohmann::json sceneJson;
+    try {
+        inFile >> sceneJson;
+        inFile.close();
+    } catch (nlohmann::json::parse_error& e) {
+        std::cerr << "Error: Failed to parse scene file " << filepath << ". " << e.what() << std::endl;
+        inFile.close();
+        return;
+    }
+
+    std::cout << "Loading scene from " << filepath << "..." << std::endl;
+
+    // --- Clear Existing Scene ---
+    // Iterate and destroy existing entities
+    std::set<Entity> entitiesToDestroy = entityManager->getActiveEntities();
+    for (Entity entity : entitiesToDestroy) {
+        entityManager->destroyEntity(entity);
+        componentManager->entityDestroyed(entity);
+    }
+    if (!entityManager->getActiveEntities().empty()) {
+        std::cerr << "Warning: Not all entities were destroyed during scene load cleanup!" << std::endl;
+    }
+
+    selectedEntity = NO_ENTITY_SELECTED;
+    inspectorTextureIdBuffer[0] = '\0';
+
+    // --- Load Entities ---
+    if (!sceneJson.contains("entities") || !sceneJson["entities"].is_array()) {
+         std::cerr << "Error: Scene file format incorrect. Missing 'entities' array." << std::endl;
+         return;
+    }
+
+    const auto& entitiesJson = sceneJson["entities"];
+    for (const auto& entityJson : entitiesJson) {
+        Entity newEntity = entityManager->createEntity();
+
+        if (!entityJson.contains("components") || !entityJson["components"].is_object()) {
+            std::cerr << "Warning: Entity definition missing 'components' object. Skipping." << std::endl;
+            entityManager->destroyEntity(newEntity);
+            continue;
+        }
+
+        Signature entitySignature;
+
+        const auto& componentsJson = entityJson["components"];
+        for (auto it = componentsJson.begin(); it != componentsJson.end(); ++it) {
+            const std::string& componentType = it.key();
+            const nlohmann::json& componentData = it.value();
+
+            try {
+                if (componentType == "TransformComponent") {
+                    TransformComponent comp;
+                    from_json(componentData, comp);
+                    componentManager->addComponent(newEntity, comp);
+                    entitySignature.set(componentManager->getComponentType<TransformComponent>());
+                } else if (componentType == "SpriteComponent") {
+                    SpriteComponent comp;
+                    from_json(componentData, comp);
+                    componentManager->addComponent(newEntity, comp);
+                    entitySignature.set(componentManager->getComponentType<SpriteComponent>());
+                    if (!AssetManager::getInstance().getTexture(comp.textureId)) {
+                         std::cerr << "Warning: Texture '" << comp.textureId
+                                   << "' needed by loaded entity " << newEntity
+                                   << " is not loaded in AssetManager! Ensure it's loaded before loading the scene." << std::endl;
+                    }
+                } else {
+                    std::cerr << "Warning: Unknown component type '" << componentType << "' encountered during loading for entity." << std::endl;
+                }
+            } catch (nlohmann::json::exception& e) {
+                 std::cerr << "Error parsing component '" << componentType << "' for entity. " << e.what() << std::endl;
+            }
+        }
+        entityManager->setSignature(newEntity, entitySignature);
+        systemManager->entitySignatureChanged(newEntity, entitySignature);
+    }
+    std::cout << "Scene loaded successfully." << std::endl;
+}
+
+bool DevModeScene::isMouseOverEntity(int mouseX, int mouseY, Entity entity) {
+    if (entity == NO_ENTITY_SELECTED || !componentManager->hasComponent<TransformComponent>(entity)) {
+        return false;
+    }
+    auto& transform = componentManager->getComponent<TransformComponent>(entity);
+    return (mouseX >= transform.x && mouseX < (transform.x + transform.width) &&
+            mouseY >= transform.y && mouseY < (transform.y + transform.height));
 }

@@ -97,16 +97,21 @@ GameScene::GameScene(SDL_Renderer* ren) : renderer(ren) {
 GameScene::~GameScene() {
 }
 
-void GameScene::handleInput() {
-    if (InputManager::getInstance().isActionPressed("PlaySound")) {
-        Mix_Chunk* sound = AssetManager::getInstance().getSound("test_sound");
-        if (sound) {
-            Mix_PlayChannel(-1, sound, 0); 
-            std::cout << "Played test_sound" << std::endl;
-        } else {
-            std::cerr << "Could not get test_sound to play." << std::endl;
+void GameScene::handleInput(SDL_Event& event) { // Changed signature
+    // Process specific events if needed, or rely on InputManager for polling actions
+    if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_SPACE) {
+         if (InputManager::getInstance().isActionPressed("PlaySound")) { // Check action mapping
+            Mix_Chunk* sound = AssetManager::getInstance().getSound("test_sound");
+            if (sound) {
+                Mix_PlayChannel(-1, sound, 0);
+                std::cout << "Played test_sound via event" << std::endl;
+            } else {
+                std::cerr << "Could not get test_sound to play." << std::endl;
+            }
         }
     }
+    // Example: Check for mouse clicks specific to this scene (if not handled by ImGui)
+    // if (event.type == SDL_MOUSEBUTTONDOWN) { ... }
 }
 
 void GameScene::update(float deltaTime) {

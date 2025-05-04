@@ -77,6 +77,7 @@ bool Game::init(const char* title, int width, int height) {
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // Enable Docking
     //io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
     // Setup Dear ImGui style
     ImGui::StyleColorsDark();
@@ -99,28 +100,29 @@ bool Game::init(const char* title, int width, int height) {
 
 void Game::handleEvents() {
     SDL_Event event;
+    InputManager::getInstance().update(); // Update InputManager state first
+
     while (SDL_PollEvent(&event)) {
-        // Pass SDL events to ImGui
+        // Pass SDL events to ImGui FIRST
         ImGui_ImplSDL2_ProcessEvent(&event);
 
-        // Handle your specific events *after* ImGui potentially consumes them
+        // Pass event to the active scene's handleInput
+        Scene* activeScene = SceneManager::getInstance().getActiveScene();
+        if (activeScene) {
+            activeScene->handleInput(event); // Pass the event object
+        }
+
+        // Handle your specific events *after* ImGui and the scene potentially consume them
         ImGuiIO& io = ImGui::GetIO();
-        if (io.WantCaptureMouse || io.WantCaptureKeyboard) {
-            // ImGui is handling input, skip game input processing for this event
-        } else {
-             // Process game-specific input if ImGui isn't using it
+        // Only process game-level quit/escape if ImGui is NOT capturing keyboard
+        if (!io.WantCaptureKeyboard) {
              if (event.type == SDL_QUIT ||
                 (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE)) {
                  running = false;
              }
-             // Let InputManager process events if not captured by ImGui
-             // This assumes InputManager processes based on polled events within its update
-             // If InputManager uses SDL_GetKeyboardState etc., it might not need this check
-             // InputManager::getInstance().processEvent(event); // Example if InputManager handles raw events
         }
+        // Note: Scene handles mouse events if io.WantCaptureMouse is false
     }
-    // Update InputManager state (e.g., key held status) after processing all events
-    InputManager::getInstance().update();
 }
 
 void Game::update() {
@@ -130,7 +132,7 @@ void Game::update() {
 
     Scene* current = SceneManager::getInstance().getActiveScene();
     if (current) {
-        current->handleInput();
+        // Remove handleInput call from update, it's now handled per-event in handleEvents
         current->update(deltaTime);
     }
 }

@@ -5,6 +5,8 @@
 #include "imgui.h"
 #include <memory> 
 #include <string> 
+#include <fstream> // Include for file operations
+#include <cmath> // For std::roundf
 
 #include "../ecs/EntityManager.h"
 #include "../ecs/ComponentManager.h"
@@ -14,6 +16,7 @@
 #include "../ecs/systems/RenderSystem.h"
 #include "../AssetManager.h" 
 #include "../ecs/Entity.h"
+#include "../../vendor/nlohmann/json.hpp" // Corrected spelling
 
 const Entity NO_ENTITY_SELECTED = MAX_ENTITIES;
 
@@ -22,7 +25,7 @@ public:
     DevModeScene(SDL_Renderer* ren, SDL_Window* win);
     ~DevModeScene() override;
 
-    void handleInput() override;
+    void handleInput(SDL_Event& event) override; // Modify to accept event
     void update(float deltaTime) override;
     void render() override;
 
@@ -49,4 +52,20 @@ private:
     Entity selectedEntity = NO_ENTITY_SELECTED; 
     char inspectorTextureIdBuffer[64] = ""; 
 
+    // --- Save/Load ---
+    char sceneFilePath[256] = "scene.json"; // Buffer for filename input
+
+    // --- Viewport Interaction State ---
+    bool isDragging = false;
+    int dragStartMouseX = 0;
+    int dragStartMouseY = 0;
+    float dragStartEntityX = 0.0f;
+    float dragStartEntityY = 0.0f;
+    float gridSize = 16.0f; // Grid size for snapping
+    bool snapToGrid = true; // Toggle for snapping
+
+    void saveScene(const std::string& filepath);
+    void loadScene(const std::string& filepath);
+
+    bool isMouseOverEntity(int mouseX, int mouseY, Entity entity);
 };
