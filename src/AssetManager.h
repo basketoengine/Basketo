@@ -31,6 +31,9 @@ public:
 
     TTF_Font* getFont(const std::string& id) const;
 
+    const std::unordered_map<std::string, SDL_Texture*>& getAllTextures() const { return textures; }
+    const std::unordered_map<std::string, Mix_Chunk*>& getAllSounds() const { return sounds; }
+
     void cleanup();
 
 private:

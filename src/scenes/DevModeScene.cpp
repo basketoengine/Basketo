@@ -317,6 +317,73 @@ void DevModeScene::render() {
     ImGui::DragFloat("Grid Size", &gridSize, 1.0f, 1.0f, 256.0f); // Min 1, Max 256
     ImGui::End();
 
+    // --- Asset Browser Panel ---
+    static std::string selectedTextureId;
+    static std::string selectedSoundId;
+    static bool previewTexture = false;
+    static bool previewSound = false;
+    static char assignTextureMsg[128] = "";
+    static char assignSoundMsg[128] = "";
+    ImGui::Begin("Asset Browser");
+    if (ImGui::BeginTabBar("AssetsTabBar")) {
+        // --- Texture Tab ---
+        if (ImGui::BeginTabItem("Textures")) {
+            for (const auto& [id, tex] : AssetManager::getInstance().getAllTextures()) {
+                ImGui::PushID(id.c_str());
+                if (ImGui::Selectable(id.c_str(), selectedTextureId == id)) {
+                    selectedTextureId = id;
+                    previewTexture = true;
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Preview")) {
+                    selectedTextureId = id;
+                    previewTexture = true;
+                }
+                if (selectedTextureId == id && previewTexture && tex) {
+                    int w, h;
+                    SDL_QueryTexture(tex, nullptr, nullptr, &w, &h);
+                    ImGui::Text("%s (%dx%d)", id.c_str(), w, h);
+                    ImGui::Image((ImTextureID)tex, ImVec2(64, 64));
+                    if (selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<SpriteComponent>(selectedEntity)) {
+                        if (ImGui::Button("Assign to Selected SpriteComponent")) {
+                            auto& sprite = componentManager->getComponent<SpriteComponent>(selectedEntity);
+                            sprite.textureId = id;
+                            snprintf(assignTextureMsg, sizeof(assignTextureMsg), "Assigned '%s' to entity %u", id.c_str(), selectedEntity);
+                        }
+                        if (assignTextureMsg[0]) ImGui::TextColored(ImVec4(0,1,0,1), "%s", assignTextureMsg);
+                    }
+                }
+                ImGui::PopID();
+            }
+            ImGui::EndTabItem();
+        }
+        // --- Audio Tab ---
+        if (ImGui::BeginTabItem("Audio")) {
+            for (const auto& [id, chunk] : AssetManager::getInstance().getAllSounds()) {
+                ImGui::PushID(id.c_str());
+                if (ImGui::Selectable(id.c_str(), selectedSoundId == id)) {
+                    selectedSoundId = id;
+                    previewSound = true;
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Play")) {
+                    selectedSoundId = id;
+                    previewSound = true;
+                    Mix_PlayChannel(-1, chunk, 0);
+                    snprintf(assignSoundMsg, sizeof(assignSoundMsg), "Playing '%s'", id.c_str());
+                }
+                if (selectedSoundId == id && previewSound && chunk) {
+                    ImGui::Text("%s (Mix_Chunk*)", id.c_str());
+                    if (assignSoundMsg[0]) ImGui::TextColored(ImVec4(0,1,0,1), "%s", assignSoundMsg);
+                }
+                ImGui::PopID();
+            }
+            ImGui::EndTabItem();
+        }
+    ImGui::EndTabBar();
+    }
+    ImGui::End();
+
     //Show another simple window (Optional)
     if (show_another_window)
     {
