@@ -32,7 +32,9 @@ public:
 
             SDL_Rect* srcRectPtr = sprite.useSrcRect ? &sprite.srcRect : nullptr;
 
-            SDL_RenderCopy(renderer, texture, srcRectPtr, &destRect);
+            // Use SDL_RenderCopyEx for rotation
+            SDL_Point center = { static_cast<int>(transform.width / 2), static_cast<int>(transform.height / 2) };
+            SDL_RenderCopyEx(renderer, texture, srcRectPtr, &destRect, transform.rotation, &center, SDL_FLIP_NONE);
         }
     }
 };

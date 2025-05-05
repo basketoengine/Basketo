@@ -5,8 +5,9 @@
 #include "imgui.h"
 #include <memory> 
 #include <string> 
-#include <fstream> // Include for file operations
-#include <cmath> // For std::roundf
+#include <fstream>
+#include <cmath> 
+#include <vector>
 
 #include "../ecs/EntityManager.h"
 #include "../ecs/ComponentManager.h"
@@ -16,9 +17,20 @@
 #include "../ecs/systems/RenderSystem.h"
 #include "../AssetManager.h" 
 #include "../ecs/Entity.h"
-#include "../../vendor/nlohmann/json.hpp" // Corrected spelling
+#include "../../vendor/nlohmann/json.hpp"
 
 const Entity NO_ENTITY_SELECTED = MAX_ENTITIES;
+const int HANDLE_SIZE = 8; // Size of the resize handles
+
+// Enum to identify which handle is being interacted with
+enum class ResizeHandle {
+    NONE,
+    TOP_LEFT,
+    TOP_RIGHT,
+    BOTTOM_LEFT,
+    BOTTOM_RIGHT,
+    // Potentially add side handles later: TOP, BOTTOM, LEFT, RIGHT
+};
 
 class DevModeScene : public Scene {
 public:
@@ -64,8 +76,21 @@ private:
     float gridSize = 16.0f; // Grid size for snapping
     bool snapToGrid = true; // Toggle for snapping
 
+    // --- Play Mode State ---
+    bool isPlaying = false;
+
+    // --- Editor Interaction State ---
+    bool isResizing = false;
+    ResizeHandle activeHandle = ResizeHandle::NONE;
+    float dragStartWidth = 0.0f;
+    float dragStartHeight = 0.0f;
+
     void saveScene(const std::string& filepath);
     void loadScene(const std::string& filepath);
 
     bool isMouseOverEntity(int mouseX, int mouseY, Entity entity);
+    // Helper function to get handle rectangles
+    std::vector<std::pair<ResizeHandle, SDL_Rect>> getResizeHandles(const TransformComponent& transform);
+    // Helper function to check mouse over handles
+    ResizeHandle getHandleAtPosition(int mouseX, int mouseY, const TransformComponent& transform);
 };

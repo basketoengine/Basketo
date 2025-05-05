@@ -6,6 +6,7 @@ struct TransformComponent {
     float y = 0.0f;
     float width = 32.0f;
     float height = 32.0f;
+    float rotation = 0.0f;
 };
 
 inline void to_json(nlohmann::json& j, const TransformComponent& c) {
@@ -13,7 +14,8 @@ inline void to_json(nlohmann::json& j, const TransformComponent& c) {
         {"x", c.x},
         {"y", c.y},
         {"width", c.width},
-        {"height", c.height}
+        {"height", c.height},
+        {"rotation", c.rotation}
     };
 }
 
@@ -22,4 +24,5 @@ inline void from_json(const nlohmann::json& j, TransformComponent& c) {
     c.y = j.value("y", 0.0f);
     c.width = j.value("width", 32.0f);
     c.height = j.value("height", 32.0f);
+    c.rotation = j.value("rotation", 0.0f); 
 }
