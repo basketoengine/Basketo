@@ -622,6 +622,46 @@ void DevModeScene::render() {
                 }
                 ImGui::PopID();
             }
+
+            // --- SOUNDS SECTION ---
+            ImGui::Separator();
+            ImGui::Text("Available Sounds:");
+            namespace fs = std::filesystem;
+            std::string soundDir = "../assets/Sound/";
+            if (fs::exists(soundDir)) {
+                for (const auto& entry : fs::directory_iterator(soundDir)) {
+                    if (entry.is_regular_file()) {
+                        std::string filename = entry.path().filename().string();
+                        std::string ext = entry.path().extension().string();
+                        if (ext == ".mp3" || ext == ".wav" || ext == ".ogg" || ext == ".flac") {
+                            ImGui::BulletText("%s", filename.c_str());
+                            // Optionally: add drag-drop source for sound files here
+                        }
+                    }
+                }
+            } else {
+                ImGui::TextDisabled("No sound directory found.");
+            }
+
+            // --- FONTS SECTION ---
+            ImGui::Separator();
+            ImGui::Text("Available Fonts:");
+            std::string fontDir = "../assets/fonts/roboto/";
+            if (fs::exists(fontDir)) {
+                for (const auto& entry : fs::directory_iterator(fontDir)) {
+                    if (entry.is_regular_file()) {
+                        std::string filename = entry.path().filename().string();
+                        std::string ext = entry.path().extension().string();
+                        if (ext == ".ttf" || ext == ".otf") {
+                            ImGui::BulletText("%s", filename.c_str());
+                            // Optionally: add drag-drop source for font files here
+                        }
+                    }
+                }
+            } else {
+                ImGui::TextDisabled("No font directory found.");
+            }
+
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Console")) {
