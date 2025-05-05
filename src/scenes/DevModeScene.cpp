@@ -314,14 +314,11 @@ void DevModeScene::render() {
     const float inspectorWidth = displaySize.x * 0.22f;
     const float bottomPanelHeight = displaySize.y * 0.25f;
     const float topToolbarHeight = 40.0f;
-    const float centerViewX = hierarchyWidth;
-    const float centerViewY = topToolbarHeight;
-    const float centerViewWidth = displaySize.x - hierarchyWidth - inspectorWidth;
-    const float centerViewHeight = displaySize.y - bottomPanelHeight - topToolbarHeight;
 
-    gameViewport = { (int)centerViewX, (int)centerViewY, (int)centerViewWidth, (int)centerViewHeight };
+    gameViewport = { (int)hierarchyWidth, (int)topToolbarHeight, (int)(displaySize.x - hierarchyWidth - inspectorWidth), (int)(displaySize.y - bottomPanelHeight - topToolbarHeight) };
 
     const ImGuiWindowFlags fixedPanelFlags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar;
+    const ImGuiWindowFlags viewWindowFlags = ImGuiWindowFlags_None; // Define viewWindowFlags
 
     SDL_SetRenderDrawColor(renderer, (Uint8)(clear_color.x * 255), (Uint8)(clear_color.y * 255), (Uint8)(clear_color.z * 255), (Uint8)(clear_color.w * 255));
     SDL_RenderClear(renderer);
@@ -334,11 +331,11 @@ void DevModeScene::render() {
             SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255);
             float gridStartX = -fmodf(cameraX, gridSize);
             float gridStartY = -fmodf(cameraY, gridSize);
-            for (float x = gridStartX; x < centerViewWidth; x += gridSize) {
-                SDL_RenderDrawLineF(renderer, x, 0, x, centerViewHeight);
+            for (float x = gridStartX; x < gameViewport.w; x += gridSize) {
+                SDL_RenderDrawLineF(renderer, x, 0, x, gameViewport.h);
             }
-            for (float y = gridStartY; y < centerViewHeight; y += gridSize) {
-                SDL_RenderDrawLineF(renderer, 0, y, centerViewWidth, y);
+            for (float y = gridStartY; y < gameViewport.h; y += gridSize) {
+                SDL_RenderDrawLineF(renderer, 0, y, gameViewport.w, y);
             }
         }
 
@@ -368,8 +365,47 @@ void DevModeScene::render() {
         ImGui::ShowDemoWindow(&show_demo_window);
     }
 
+    ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
+
+    // --- Render Fixed Panels (Toolbar, Hierarchy, Inspector, Bottom) ---
+    // Toolbar at the very top, full width
     ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(hierarchyWidth, displaySize.y), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(displaySize.x, topToolbarHeight), ImGuiCond_Always);
+    ImGui::Begin("Toolbar", nullptr, fixedPanelFlags | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    if (ImGui::Button("Save")) saveScene(sceneFilePath);
+    ImGui::SameLine(); if (ImGui::Button("Save As...")) std::cout << "Placeholder: Save As." << std::endl;
+    ImGui::SameLine(); if (ImGui::Button("Load")) loadScene(sceneFilePath);
+    ImGui::SameLine(); ImGui::PushItemWidth(120); ImGui::InputText("##Filename", sceneFilePath, sizeof(sceneFilePath)); ImGui::PopItemWidth();
+    ImGui::SameLine(); if (ImGui::Button("Import...")) std::cout << "Placeholder: Import." << std::endl;
+    ImGui::SameLine(); if (ImGui::Button("Export...")) std::cout << "Placeholder: Export." << std::endl;
+    ImGui::SameLine(); ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical); ImGui::SameLine();
+    if (isPlaying) { if (ImGui::Button("Stop")) { isPlaying = false; loadScene(sceneFilePath); } }
+    else { if (ImGui::Button("Play")) { isPlaying = true; selectedEntity = NO_ENTITY_SELECTED; isDragging = false; isResizing = false; activeHandle = ResizeHandle::NONE; inspectorTextureIdBuffer[0] = '\0'; } }
+    ImGui::SameLine(); ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical); ImGui::SameLine();
+    ImGui::BeginDisabled(isPlaying);
+    ImGui::Checkbox("Snap", &snapToGrid); ImGui::SameLine(); ImGui::PushItemWidth(60); ImGui::DragFloat("Grid", &gridSize, 1.0f, 1.0f, 256.0f, "%.0f"); ImGui::PopItemWidth();
+    ImGui::EndDisabled();
+    ImGui::SameLine(); ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical); ImGui::SameLine();
+    ImGui::Checkbox("Show Grid", &showGrid);
+    ImGui::SameLine(); ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical); ImGui::SameLine();
+    ImGui::Text("Spawn:"); ImGui::SameLine(); ImGui::PushItemWidth(40); ImGui::InputFloat("X", &spawnPosX, 0, 0, "%.0f"); ImGui::SameLine(); ImGui::InputFloat("Y", &spawnPosY, 0, 0, "%.0f"); ImGui::PopItemWidth(); ImGui::SameLine(); ImGui::PushItemWidth(60); ImGui::InputText("TexID", spawnTextureId, IM_ARRAYSIZE(spawnTextureId)); ImGui::PopItemWidth(); ImGui::SameLine();
+    if (ImGui::Button("Spawn")) {
+        Entity newEntity = entityManager->createEntity();
+        float spawnWorldX = cameraX + gameViewport.w / 2.0f;
+        float spawnWorldY = cameraY + gameViewport.h / 2.0f;
+        TransformComponent transform; transform.x = spawnWorldX + spawnPosX; transform.y = spawnWorldY + spawnPosY; transform.width = spawnSizeW > 0 ? spawnSizeW : 32; transform.height = spawnSizeH > 0 ? spawnSizeH : 32;
+        componentManager->addComponent(newEntity, transform);
+        Signature entitySignature; entitySignature.set(componentManager->getComponentType<TransformComponent>());
+        std::string textureIdStr(spawnTextureId);
+        if (strlen(spawnTextureId) > 0 && AssetManager::getInstance().loadTexture(textureIdStr, textureIdStr)) { componentManager->addComponent(newEntity, SpriteComponent{textureIdStr}); entitySignature.set(componentManager->getComponentType<SpriteComponent>()); }
+        else if (strlen(spawnTextureId) > 0) std::cerr << "Spawn Warning: Texture ID '" << textureIdStr << "' not found. Sprite not added." << std::endl;
+        entityManager->setSignature(newEntity, entitySignature); systemManager->entitySignatureChanged(newEntity, entitySignature);
+    }
+    ImGui::End(); // End Toolbar
+
+    // Hierarchy below Toolbar on the left
+    ImGui::SetNextWindowPos(ImVec2(0, topToolbarHeight), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(hierarchyWidth, displaySize.y - topToolbarHeight - bottomPanelHeight), ImGuiCond_Always);
     ImGui::Begin("Hierarchy", nullptr, fixedPanelFlags);
     ImGui::Text("Entities:");
     ImGui::Separator();
@@ -387,13 +423,13 @@ void DevModeScene::render() {
     }
     ImGui::End();
 
-    ImGui::SetNextWindowPos(ImVec2(displaySize.x - inspectorWidth, 0), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(inspectorWidth, displaySize.y), ImGuiCond_Always);
+    // Inspector below Toolbar on the right
+    ImGui::SetNextWindowPos(ImVec2(displaySize.x - inspectorWidth, topToolbarHeight), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(inspectorWidth, displaySize.y - topToolbarHeight - bottomPanelHeight), ImGuiCond_Always);
     ImGui::Begin("Inspector", nullptr, fixedPanelFlags);
     if (selectedEntity != NO_ENTITY_SELECTED) {
         ImGui::Text("Selected Entity: %u", selectedEntity);
         ImGui::Separator();
-
         if (componentManager->hasComponent<TransformComponent>(selectedEntity)) {
             if (ImGui::CollapsingHeader("Transform Component", ImGuiTreeNodeFlags_DefaultOpen)) {
                 auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
@@ -403,235 +439,58 @@ void DevModeScene::render() {
                 ImGui::DragFloat("Height##Transform", &transform.height, 1.0f, HANDLE_SIZE);
                 ImGui::DragFloat("Rotation##Transform", &transform.rotation, 1.0f, -360.0f, 360.0f);
             }
-        } else {
-            ImGui::TextDisabled("No Transform Component");
-        }
-
+        } else ImGui::TextDisabled("No Transform Component");
         if (componentManager->hasComponent<SpriteComponent>(selectedEntity)) {
             if (ImGui::CollapsingHeader("Sprite Component", ImGuiTreeNodeFlags_DefaultOpen)) {
                 auto& sprite = componentManager->getComponent<SpriteComponent>(selectedEntity);
-
                 if (inspectorTextureIdBuffer[0] == '\0' || sprite.textureId != inspectorTextureIdBuffer) {
                     strncpy(inspectorTextureIdBuffer, sprite.textureId.c_str(), IM_ARRAYSIZE(inspectorTextureIdBuffer) - 1);
                     inspectorTextureIdBuffer[IM_ARRAYSIZE(inspectorTextureIdBuffer) - 1] = '\0';
                 }
-
                 ImGui::Text("Texture ID/Path:");
                 if (ImGui::InputText("##SpriteTexturePath", inspectorTextureIdBuffer, IM_ARRAYSIZE(inspectorTextureIdBuffer), ImGuiInputTextFlags_EnterReturnsTrue)) {
                     std::string newTexturePath(inspectorTextureIdBuffer);
                     AssetManager& assets = AssetManager::getInstance();
-                    if (assets.loadTexture(newTexturePath, newTexturePath)) {
-                        sprite.textureId = newTexturePath;
-                        std::cout << "Inspector: Assigned new texture '" << newTexturePath << "' to entity " << selectedEntity << std::endl;
-                    } else {
-                        std::cerr << "Inspector Error: Failed to load texture from path: '" << newTexturePath << "'. Reverting." << std::endl;
+                    if (assets.loadTexture(newTexturePath, newTexturePath)) sprite.textureId = newTexturePath;
+                    else {
+                        std::cerr << "Inspector Error: Failed to load texture: '" << newTexturePath << "'. Reverting." << std::endl;
                         strncpy(inspectorTextureIdBuffer, sprite.textureId.c_str(), IM_ARRAYSIZE(inspectorTextureIdBuffer) - 1);
                         inspectorTextureIdBuffer[IM_ARRAYSIZE(inspectorTextureIdBuffer) - 1] = '\0';
                     }
                 }
-
                 SDL_Texture* tex = AssetManager::getInstance().getTexture(sprite.textureId);
                 if (tex) {
-                    int w, h;
-                    SDL_QueryTexture(tex, nullptr, nullptr, &w, &h);
+                    int w, h; SDL_QueryTexture(tex, nullptr, nullptr, &w, &h);
                     ImGui::Text("Current: %s (%dx%d)", sprite.textureId.c_str(), w, h);
                     ImGui::Image((ImTextureID)tex, ImVec2(64, 64));
-                } else {
-                    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Current texture not loaded!");
-                }
-
-                if (ImGui::Button("Browse...##SpriteTexture")) {
-                    std::cout << "Placeholder: File browser would open here." << std::endl;
-                }
+                } else ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Current texture not loaded!");
+                if (ImGui::Button("Browse...##SpriteTexture")) std::cout << "Placeholder: File browser." << std::endl;
             }
-        } else {
-            ImGui::TextDisabled("No Sprite Component");
-        }
-
-    } else {
-        ImGui::Text("No entity selected.");
-    }
+        } else ImGui::TextDisabled("No Sprite Component");
+    } else ImGui::Text("No entity selected.");
     ImGui::End();
 
-    ImGui::SetNextWindowPos(ImVec2(hierarchyWidth, displaySize.y - bottomPanelHeight), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(centerViewWidth, bottomPanelHeight), ImGuiCond_Always);
+    // Bottom panel at the bottom, full width
+    ImGui::SetNextWindowPos(ImVec2(0, displaySize.y - bottomPanelHeight), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(displaySize.x, bottomPanelHeight), ImGuiCond_Always);
     ImGui::Begin("BottomPanel", nullptr, fixedPanelFlags | ImGuiWindowFlags_NoScrollbar);
-     if (ImGui::BeginTabBar("BottomTabs")) {
+    if (ImGui::BeginTabBar("BottomTabs")) {
         if (ImGui::BeginTabItem("Project")) {
-            static std::string selectedTextureId;
-            static std::string selectedSoundId;
-            static bool previewTexture = false;
-            static bool previewSound = false;
-            static char assignTextureMsg[128] = "";
-            static char assignSoundMsg[128] = "";
-            if (ImGui::BeginTabBar("AssetsTabBar")) {
-                if (ImGui::BeginTabItem("Textures")) {
-                    assignTextureMsg[0] = '\0';
-                    for (const auto& [id, tex] : AssetManager::getInstance().getAllTextures()) {
-                        ImGui::PushID(id.c_str());
-                        if (ImGui::Selectable(id.c_str(), selectedTextureId == id)) {
-                            selectedTextureId = id;
-                            previewTexture = true;
-                        }
-                        ImGui::SameLine();
-                        if (ImGui::SmallButton("Preview")) {
-                            selectedTextureId = id;
-                            previewTexture = true;
-                        }
-                        if (selectedTextureId == id && previewTexture && tex) {
-                            ImGui::Indent();
-                            int w, h;
-                            SDL_QueryTexture(tex, nullptr, nullptr, &w, &h);
-                            ImGui::Text("%s (%dx%d)", id.c_str(), w, h);
-                            ImGui::Image((ImTextureID)tex, ImVec2(64, 64));
-                            if (selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<SpriteComponent>(selectedEntity)) {
-                                if (ImGui::Button("Assign to Selected Sprite")) {
-                                    auto& sprite = componentManager->getComponent<SpriteComponent>(selectedEntity);
-                                    sprite.textureId = id;
-                                    snprintf(assignTextureMsg, sizeof(assignTextureMsg), "Assigned '%s' to entity %u", id.c_str(), selectedEntity);
-                                }
-                                if (assignTextureMsg[0] && strstr(assignTextureMsg, id.c_str())) {
-                                     ImGui::SameLine(); ImGui::TextColored(ImVec4(0,1,0,1), "%s", assignTextureMsg);
-                                }
-                            }
-                            ImGui::Unindent();
-                        }
-                        ImGui::PopID();
-                    }
-                    ImGui::EndTabItem();
-                }
-                if (ImGui::BeginTabItem("Audio")) {
-                    assignSoundMsg[0] = '\0';
-                    for (const auto& [id, chunk] : AssetManager::getInstance().getAllSounds()) {
-                        ImGui::PushID(id.c_str());
-                        if (ImGui::Selectable(id.c_str(), selectedSoundId == id)) {
-                            selectedSoundId = id;
-                            previewSound = true;
-                        }
-                        ImGui::SameLine();
-                        if (ImGui::SmallButton("Play")) {
-                            selectedSoundId = id;
-                            previewSound = true;
-                            if (chunk) {
-                                Mix_PlayChannel(-1, chunk, 0);
-                                snprintf(assignSoundMsg, sizeof(assignSoundMsg), "Playing '%s'", id.c_str());
-                            } else {
-                                snprintf(assignSoundMsg, sizeof(assignSoundMsg), "Error: Sound chunk for '%s' is null!", id.c_str());
-                            }
-                        }
-                        if (selectedSoundId == id && assignSoundMsg[0]) {
-                             ImGui::SameLine();
-                             ImVec4 msgColor = (strstr(assignSoundMsg, "Error")) ? ImVec4(1,0,0,1) : ImVec4(0,1,0,1);
-                             ImGui::TextColored(msgColor, "%s", assignSoundMsg);
-                        }
-                        ImGui::PopID();
-                    }
-                    ImGui::EndTabItem();
-                }
-                ImGui::EndTabBar();
-            }
             ImGui::EndTabItem();
         }
-
         if (ImGui::BeginTabItem("Console")) {
-            ImGui::TextWrapped("Console Output Area (Placeholder)");
-            ImGui::Separator();
-            ImGui::Text("Log message 1");
-            ImGui::TextColored(ImVec4(1,1,0,1), "Warning message 1");
-            ImGui::TextColored(ImVec4(1,0,0,1), "Error message 1");
             ImGui::EndTabItem();
         }
         ImGui::EndTabBar();
     }
     ImGui::End();
 
-    ImGui::SetNextWindowPos(ImVec2(hierarchyWidth, 0), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(centerViewWidth, topToolbarHeight), ImGuiCond_Always);
-    ImGui::Begin("Toolbar", nullptr, fixedPanelFlags | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-
-    if (ImGui::Button("Save")) {
-        saveScene(sceneFilePath);
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Save As...")) {
-        std::cout << "Placeholder: Save As button clicked." << std::endl;
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Load")) {
-        loadScene(sceneFilePath);
-    }
-    ImGui::SameLine();
-    ImGui::PushItemWidth(120);
-    ImGui::InputText("##Filename", sceneFilePath, sizeof(sceneFilePath));
-    ImGui::PopItemWidth();
-    ImGui::SameLine();
-    if (ImGui::Button("Import...")) {
-        std::cout << "Placeholder: Import button clicked." << std::endl;
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Export...")) {
-        std::cout << "Placeholder: Export button clicked." << std::endl;
-    }
-
-    ImGui::SameLine(); ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical); ImGui::SameLine();
-
-    if (isPlaying) {
-        if (ImGui::Button("Stop")) {
-            isPlaying = false;
-            std::cout << "Stopping Play Mode. Reloading scene..." << std::endl;
-            loadScene(sceneFilePath);
-        }
-    } else {
-        if (ImGui::Button("Play")) {
-            isPlaying = true;
-            std::cout << "Starting Play Mode..." << std::endl;
-            selectedEntity = NO_ENTITY_SELECTED;
-            isDragging = false; isResizing = false; activeHandle = ResizeHandle::NONE;
-            inspectorTextureIdBuffer[0] = '\0';
-        }
-    }
-    ImGui::SameLine(); ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical); ImGui::SameLine();
-
-    ImGui::BeginDisabled(isPlaying);
-    ImGui::Checkbox("Snap", &snapToGrid);
-    ImGui::SameLine();
-    ImGui::PushItemWidth(60);
-    ImGui::DragFloat("Grid", &gridSize, 1.0f, 1.0f, 256.0f, "%.0f");
-    ImGui::PopItemWidth();
-    ImGui::EndDisabled();
-    ImGui::SameLine(); ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical); ImGui::SameLine();
-
-    ImGui::Text("Spawn:"); ImGui::SameLine();
-    ImGui::PushItemWidth(40);
-    ImGui::InputFloat("X", &spawnPosX, 0, 0, "%.0f"); ImGui::SameLine();
-    ImGui::InputFloat("Y", &spawnPosY, 0, 0, "%.0f"); ImGui::SameLine();
-    ImGui::PopItemWidth();
-    ImGui::PushItemWidth(60);
-    ImGui::InputText("TexID", spawnTextureId, IM_ARRAYSIZE(spawnTextureId)); ImGui::SameLine();
-    ImGui::PopItemWidth();
-    if (ImGui::Button("Spawn")) {
-        Entity newEntity = entityManager->createEntity();
-        TransformComponent transform;
-        transform.x = cameraX + centerViewWidth / 2.0f + spawnPosX; 
-        transform.y = cameraY + centerViewHeight / 2.0f + spawnPosY;
-        transform.width = spawnSizeW > 0 ? spawnSizeW : 32;
-        transform.height = spawnSizeH > 0 ? spawnSizeH : 32;
-        componentManager->addComponent(newEntity, transform);
-        Signature entitySignature;
-        entitySignature.set(componentManager->getComponentType<TransformComponent>());
-        std::string textureIdStr(spawnTextureId);
-        if (strlen(spawnTextureId) > 0 && AssetManager::getInstance().loadTexture(textureIdStr, textureIdStr)) {
-             componentManager->addComponent(newEntity, SpriteComponent{textureIdStr});
-             entitySignature.set(componentManager->getComponentType<SpriteComponent>());
-        } else if (strlen(spawnTextureId) > 0) {
-             std::cerr << "Spawn Warning: Texture ID '" << textureIdStr << "' not found or loadable. Sprite not added." << std::endl;
-        }
-        entityManager->setSignature(newEntity, entitySignature);
-        systemManager->entitySignatureChanged(newEntity, entitySignature);
-        std::cout << "Spawned Entity " << newEntity << " at (" << transform.x << "," << transform.y << ")" << std::endl;
-    }
-
-    ImGui::End();
+    // --- Render Dockable Views (Scene View, Game View) ---
+    // These will dock into the central space left by the fixed panels
+    ImGui::Begin("Scene View", nullptr, viewWindowFlags);
+    // Scene View content would go here (if any specific ImGui elements were needed inside it)
+    // Currently, the SDL rendering happens outside this Begin/End pair, targeting the viewport.
+    ImGui::End(); // Added missing End() for Scene View
 
     if (show_another_window) {
         ImGui::Begin("Another Window", &show_another_window);

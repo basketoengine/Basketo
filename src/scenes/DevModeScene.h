@@ -81,6 +81,7 @@ private:
     float dragStartEntityY = 0.0f;
     float gridSize = 16.0f; // Grid size for snapping
     bool snapToGrid = true; // Toggle for snapping
+    bool showGrid = true; // Added showGrid member variable
 
     // --- Play Mode State ---
     bool isPlaying = false;
