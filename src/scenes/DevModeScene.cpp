@@ -2,18 +2,40 @@
 #include "imgui.h"
 #include "../../vendor/imgui/backends/imgui_impl_sdl2.h"
 #include "../../vendor/imgui/backends/imgui_impl_sdlrenderer2.h"
+#include "tinyfiledialogs.h"
+#include <filesystem>
 #include <iostream>
 #include <set>
 #include <fstream>
 #include <string>
-#include "../../vendor/nlohmann/json.hpp" 
+#include <vector>
+#include "../../vendor/nlohmann/json.hpp"
 #include "imgui_internal.h"
 #include <SDL2/SDL_rect.h>
-#include <vector>
-#include <utility> 
+#include <utility>
 
 #include "../ecs/components/TransformComponent.h"
 #include "../ecs/components/SpriteComponent.h"
+
+// Helper function to get filename from path
+std::string getFilenameFromPath(const std::string& path) {
+    try {
+        return std::filesystem::path(path).filename().string();
+    } catch (const std::exception& e) {
+        std::cerr << "Error getting filename: " << e.what() << std::endl;
+        return "";
+    }
+}
+
+// Helper function to get filename without extension
+std::string getFilenameWithoutExtension(const std::string& filename) {
+    try {
+        return std::filesystem::path(filename).stem().string();
+    } catch (const std::exception& e) {
+        std::cerr << "Error getting stem: " << e.what() << std::endl;
+        return "";
+    }
+}
 
 DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win) : renderer(ren), window(win) {
     std::cout << "Entering Dev Mode Scene" << std::endl;
@@ -32,15 +54,9 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win) : renderer(ren), 
     systemManager->setSignature<RenderSystem>(renderSig);
 
     AssetManager& assets = AssetManager::getInstance();
-    if (!assets.loadTexture("logo", "../assets/Image/logo.png")) {
-        std::cerr << "DevModeScene Error: Failed to load default logo texture!" << std::endl;
-    }
-     if (!assets.loadTexture("player", "../assets/Image/player.png")) {
-        std::cerr << "DevModeScene Error: Failed to load default player texture!" << std::endl;
-    }
-    if (!assets.loadTexture("world", "../assets/Image/world.jpg")) {
-        std::cerr << "DevModeScene Error: Failed to load default world texture!" << std::endl;
-    }
+    assets.loadTexture("logo", "../assets/Image/logo.png");
+    assets.loadTexture("player", "../assets/Image/player.png");
+    assets.loadTexture("world", "../assets/Image/world.jpg");
 }
 
 DevModeScene::~DevModeScene() {
@@ -51,254 +67,218 @@ void DevModeScene::handleInput(SDL_Event& event) {
     ImGui_ImplSDL2_ProcessEvent(&event);
     ImGuiIO& io = ImGui::GetIO();
 
-    // Get raw mouse state relative to the main window
     int rawMouseX, rawMouseY;
     Uint32 mouseButtonState = SDL_GetMouseState(&rawMouseX, &rawMouseY);
 
-    // Calculate mouse coordinates relative to the game viewport
-    int viewportMouseX = rawMouseX - gameViewport.x;
-    int viewportMouseY = rawMouseY - gameViewport.y;
-
-    // Calculate mouse coordinates in world space
-    float worldMouseX = viewportMouseX + cameraX;
-    float worldMouseY = viewportMouseY + cameraY;
-
-    // Check if mouse is within the game viewport bounds
     bool mouseInViewport = (rawMouseX >= gameViewport.x && rawMouseX < (gameViewport.x + gameViewport.w) &&
                             rawMouseY >= gameViewport.y && rawMouseY < (gameViewport.y + gameViewport.h));
 
-    // --- Camera Panning Logic ---
+    float viewportMouseX = static_cast<float>(rawMouseX - gameViewport.x);
+    float viewportMouseY = static_cast<float>(rawMouseY - gameViewport.y);
+
+    float worldMouseX = viewportMouseX + cameraX;
+    float worldMouseY = viewportMouseY + cameraY;
+
     static bool isPanning = false;
-    static int panStartX = 0;
-    static int panStartY = 0;
-    static float panStartCameraX = 0.0f;
-    static float panStartCameraY = 0.0f;
 
     if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_MIDDLE && mouseInViewport && !io.WantCaptureMouse) {
         isPanning = true;
-        panStartX = rawMouseX;
-        panStartY = rawMouseY;
-        panStartCameraX = cameraX;
-        panStartCameraY = cameraY;
-        SDL_SetRelativeMouseMode(SDL_TRUE); // Optional: Hide cursor during pan
+        SDL_SetRelativeMouseMode(SDL_TRUE);
     }
     if (event.type == SDL_MOUSEBUTTONUP && event.button.button == SDL_BUTTON_MIDDLE) {
         if (isPanning) {
             isPanning = false;
-            SDL_SetRelativeMouseMode(SDL_FALSE); // Show cursor again
+            SDL_SetRelativeMouseMode(SDL_FALSE);
         }
     }
     if (event.type == SDL_MOUSEMOTION && isPanning) {
-        int deltaX = rawMouseX - panStartX;
-        int deltaY = rawMouseY - panStartY;
-        cameraX = panStartCameraX - deltaX; // Move camera opposite to mouse drag
-        cameraY = panStartCameraY - deltaY;
+        cameraX -= event.motion.xrel;
+        cameraY -= event.motion.yrel;
     }
-    // --- End Camera Panning ---
 
-    if (isPlaying || isPanning) { // Don't process entity interactions if playing or panning
+    if (isPlaying || isPanning) {
+        isDragging = false;
+        isResizing = false;
+        activeHandle = ResizeHandle::NONE;
         return;
     }
 
-    // Only process game viewport interactions if ImGui doesn't want the mouse AND the mouse is inside the viewport
     if (!io.WantCaptureMouse && mouseInViewport) {
         switch (event.type) {
             case SDL_MOUSEBUTTONDOWN:
                 if (event.button.button == SDL_BUTTON_LEFT) {
+                    bool clickedOnExistingSelection = false;
                     if (selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<TransformComponent>(selectedEntity)) {
                         auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
-                        // Use world-space mouse coordinates for handle checks
                         activeHandle = getHandleAtPosition(worldMouseX, worldMouseY, transform);
 
                         if (activeHandle != ResizeHandle::NONE) {
                             isResizing = true;
                             isDragging = false;
-                            dragStartMouseX = worldMouseX; // Store world coords
+                            dragStartMouseX = worldMouseX;
                             dragStartMouseY = worldMouseY;
                             dragStartEntityX = transform.x;
                             dragStartEntityY = transform.y;
                             dragStartWidth = transform.width;
                             dragStartHeight = transform.height;
-                        } else if (isMouseOverEntity(worldMouseX, worldMouseY, selectedEntity)) { // Use world coords
+                            clickedOnExistingSelection = true;
+                        } else if (isMouseOverEntity(worldMouseX, worldMouseY, selectedEntity)) {
                             isDragging = true;
                             isResizing = false;
-                            dragStartMouseX = worldMouseX; // Store world coords
+                            dragStartMouseX = worldMouseX;
                             dragStartMouseY = worldMouseY;
                             dragStartEntityX = transform.x;
                             dragStartEntityY = transform.y;
-                        } else {
-                            // Clicked outside the selected entity, try selecting a new one
-                            isDragging = false;
-                            isResizing = false;
-                            activeHandle = ResizeHandle::NONE;
-                            Entity clickedEntity = NO_ENTITY_SELECTED;
-                            const auto& activeEntities = entityManager->getActiveEntities();
-                            for (auto it = activeEntities.rbegin(); it != activeEntities.rend(); ++it) {
-                                 Entity entity = *it;
-                                 // Use world coords for selection check
-                                 if (isMouseOverEntity(worldMouseX, worldMouseY, entity)) {
-                                     clickedEntity = entity;
-                                     break;
-                                 }
-                            }
-                            selectedEntity = clickedEntity;
-                            inspectorTextureIdBuffer[0] = '\0';
+                            clickedOnExistingSelection = true;
+                        }
+                    }
 
-                            if (selectedEntity != NO_ENTITY_SELECTED && isMouseOverEntity(worldMouseX, worldMouseY, selectedEntity)) {
-                                isDragging = true;
-                                auto& newTransform = componentManager->getComponent<TransformComponent>(selectedEntity);
-                                dragStartMouseX = worldMouseX; // Store world coords
-                                dragStartMouseY = worldMouseY;
-                                dragStartEntityX = newTransform.x;
-                                dragStartEntityY = newTransform.y;
+                    if (!clickedOnExistingSelection) {
+                        isDragging = false;
+                        isResizing = false;
+                        activeHandle = ResizeHandle::NONE;
+                        Entity clickedEntity = NO_ENTITY_SELECTED;
+                        const auto& activeEntities = entityManager->getActiveEntities();
+                        for (auto it = activeEntities.rbegin(); it != activeEntities.rend(); ++it) {
+                            Entity entity = *it;
+                            if (isMouseOverEntity(worldMouseX, worldMouseY, entity)) {
+                                clickedEntity = entity;
+                                break;
                             }
                         }
-                    } else {
-                         // No entity was selected, try selecting one
-                         isDragging = false;
-                         isResizing = false;
-                         activeHandle = ResizeHandle::NONE;
-                         Entity clickedEntity = NO_ENTITY_SELECTED;
-                         const auto& activeEntities = entityManager->getActiveEntities();
-                         for (auto it = activeEntities.rbegin(); it != activeEntities.rend(); ++it) {
-                              Entity entity = *it;
-                              // Use world coords for selection check
-                              if (isMouseOverEntity(worldMouseX, worldMouseY, entity)) {
-                                  clickedEntity = entity;
-                                  break;
-                              }
-                         }
-                         selectedEntity = clickedEntity;
-                         inspectorTextureIdBuffer[0] = '\0';
 
-                         if (selectedEntity != NO_ENTITY_SELECTED && isMouseOverEntity(worldMouseX, worldMouseY, selectedEntity)) {
-                             isDragging = true;
-                             auto& newTransform = componentManager->getComponent<TransformComponent>(selectedEntity);
-                             dragStartMouseX = worldMouseX; // Store world coords
-                             dragStartMouseY = worldMouseY;
-                             dragStartEntityX = newTransform.x;
-                             dragStartEntityY = newTransform.y;
-                         }
+                        if (selectedEntity != clickedEntity) {
+                            selectedEntity = clickedEntity;
+                            inspectorTextureIdBuffer[0] = '\0';
+                        }
+
+                        if (selectedEntity != NO_ENTITY_SELECTED && isMouseOverEntity(worldMouseX, worldMouseY, selectedEntity)) {
+                            isDragging = true;
+                            auto& newTransform = componentManager->getComponent<TransformComponent>(selectedEntity);
+                            dragStartMouseX = worldMouseX;
+                            dragStartMouseY = worldMouseY;
+                            dragStartEntityX = newTransform.x;
+                            dragStartEntityY = newTransform.y;
+                        }
                     }
                 }
                 break;
 
             case SDL_MOUSEBUTTONUP:
-                 if (event.button.button == SDL_BUTTON_LEFT) {
-                     if (isDragging) {
-                         isDragging = false;
-                         if (snapToGrid && selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<TransformComponent>(selectedEntity)) {
-                             auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
-                             transform.x = std::roundf(transform.x / gridSize) * gridSize;
-                             transform.y = std::roundf(transform.y / gridSize) * gridSize;
-                         }
-                     }
-                     if (isResizing) {
-                         isResizing = false;
-                         activeHandle = ResizeHandle::NONE;
-                         if (snapToGrid && selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<TransformComponent>(selectedEntity)) {
-                             auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
-                             transform.x = std::roundf(transform.x / gridSize) * gridSize;
-                             transform.y = std::roundf(transform.y / gridSize) * gridSize;
-                             transform.width = std::max(gridSize, std::roundf(transform.width / gridSize) * gridSize);
-                             transform.height = std::max(gridSize, std::roundf(transform.height / gridSize) * gridSize);
-                         }
-                     }
-                 }
+                if (event.button.button == SDL_BUTTON_LEFT) {
+                    if (isDragging && snapToGrid && selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<TransformComponent>(selectedEntity)) {
+                        auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
+                        transform.x = std::roundf(transform.x / gridSize) * gridSize;
+                        transform.y = std::roundf(transform.y / gridSize) * gridSize;
+                    }
+                    if (isResizing && snapToGrid && selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<TransformComponent>(selectedEntity)) {
+                        auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
+                        float snappedWidth = std::max(gridSize, std::roundf(transform.width / gridSize) * gridSize);
+                        float snappedHeight = std::max(gridSize, std::roundf(transform.height / gridSize) * gridSize);
+                        float snappedX = transform.x;
+                        float snappedY = transform.y;
+
+                        if (activeHandle == ResizeHandle::TOP_LEFT || activeHandle == ResizeHandle::BOTTOM_LEFT) {
+                            snappedX = std::roundf((transform.x + transform.width - snappedWidth) / gridSize) * gridSize;
+                        } else {
+                            snappedX = std::roundf(transform.x / gridSize) * gridSize;
+                        }
+                        if (activeHandle == ResizeHandle::TOP_LEFT || activeHandle == ResizeHandle::TOP_RIGHT) {
+                            snappedY = std::roundf((transform.y + transform.height - snappedHeight) / gridSize) * gridSize;
+                        } else {
+                            snappedY = std::roundf(transform.y / gridSize) * gridSize;
+                        }
+
+                        transform.x = snappedX;
+                        transform.y = snappedY;
+                        transform.width = snappedWidth;
+                        transform.height = snappedHeight;
+                    }
+                    isDragging = false;
+                    isResizing = false;
+                    activeHandle = ResizeHandle::NONE;
+                }
                 break;
 
             case SDL_MOUSEMOTION:
-                 if (isDragging && selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<TransformComponent>(selectedEntity)) {
-                     float deltaX = worldMouseX - dragStartMouseX;
-                     float deltaY = worldMouseY - dragStartMouseY;
-                     auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
-                     float newX = dragStartEntityX + deltaX;
-                     float newY = dragStartEntityY + deltaY;
-                     if (snapToGrid) {
-                         transform.x = std::roundf(newX / gridSize) * gridSize;
-                         transform.y = std::roundf(newY / gridSize) * gridSize;
-                     } else {
-                         transform.x = newX;
-                         transform.y = newY;
-                     }
+                if (isDragging && selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<TransformComponent>(selectedEntity)) {
+                    float deltaX = worldMouseX - dragStartMouseX;
+                    float deltaY = worldMouseY - dragStartMouseY;
+                    auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
+                    transform.x = dragStartEntityX + deltaX;
+                    transform.y = dragStartEntityY + deltaY;
 
-                 } else if (isResizing && selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<TransformComponent>(selectedEntity)) {
-                     auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
-                     float deltaX = worldMouseX - dragStartMouseX;
-                     float deltaY = worldMouseY - dragStartMouseY;
+                } else if (isResizing && selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<TransformComponent>(selectedEntity)) {
+                    auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
+                    float deltaX = worldMouseX - dragStartMouseX;
+                    float deltaY = worldMouseY - dragStartMouseY;
 
-                     float newX = transform.x;
-                     float newY = transform.y;
-                     float newWidth = transform.width;
-                     float newHeight = transform.height;
+                    float newX = transform.x;
+                    float newY = transform.y;
+                    float newWidth = transform.width;
+                    float newHeight = transform.height;
 
-                     switch (activeHandle) {
-                         case ResizeHandle::TOP_LEFT:
-                             newX = dragStartEntityX + deltaX;
-                             newY = dragStartEntityY + deltaY;
-                             newWidth = dragStartWidth - deltaX;
-                             newHeight = dragStartHeight - deltaY;
-                             break;
-                         case ResizeHandle::TOP_RIGHT:
-                             newY = dragStartEntityY + deltaY;
-                             newWidth = dragStartWidth + deltaX;
-                             newHeight = dragStartHeight - deltaY;
-                             break;
-                         case ResizeHandle::BOTTOM_LEFT:
-                             newX = dragStartEntityX + deltaX;
-                             newWidth = dragStartWidth - deltaX;
-                             newHeight = dragStartHeight + deltaY;
-                             break;
-                         case ResizeHandle::BOTTOM_RIGHT:
-                             newWidth = dragStartWidth + deltaX;
-                             newHeight = dragStartHeight + deltaY;
-                             break;
-                         case ResizeHandle::NONE:
-                             break;
-                     }
+                    switch (activeHandle) {
+                        case ResizeHandle::TOP_LEFT:
+                            newX = dragStartEntityX + deltaX;
+                            newY = dragStartEntityY + deltaY;
+                            newWidth = dragStartWidth - deltaX;
+                            newHeight = dragStartHeight - deltaY;
+                            break;
+                        case ResizeHandle::TOP_RIGHT:
+                            newY = dragStartEntityY + deltaY;
+                            newWidth = dragStartWidth + deltaX;
+                            newHeight = dragStartHeight - deltaY;
+                            break;
+                        case ResizeHandle::BOTTOM_LEFT:
+                            newX = dragStartEntityX + deltaX;
+                            newWidth = dragStartWidth - deltaX;
+                            newHeight = dragStartHeight + deltaY;
+                            break;
+                        case ResizeHandle::BOTTOM_RIGHT:
+                            newWidth = dragStartWidth + deltaX;
+                            newHeight = dragStartHeight + deltaY;
+                            break;
+                        case ResizeHandle::NONE:
+                            break;
+                    }
 
-                     if (newWidth < HANDLE_SIZE) newWidth = HANDLE_SIZE;
-                     if (newHeight < HANDLE_SIZE) newHeight = HANDLE_SIZE;
+                    if (newWidth < HANDLE_SIZE) {
+                        if (activeHandle == ResizeHandle::TOP_LEFT || activeHandle == ResizeHandle::BOTTOM_LEFT) {
+                            newX = transform.x + transform.width - HANDLE_SIZE;
+                        }
+                        newWidth = HANDLE_SIZE;
+                    }
+                    if (newHeight < HANDLE_SIZE) {
+                        if (activeHandle == ResizeHandle::TOP_LEFT || activeHandle == ResizeHandle::TOP_RIGHT) {
+                            newY = transform.y + transform.height - HANDLE_SIZE;
+                        }
+                        newHeight = HANDLE_SIZE;
+                    }
 
-                     if (snapToGrid) {
-                         float snappedX = std::roundf(newX / gridSize) * gridSize;
-                         float snappedY = std::roundf(newY / gridSize) * gridSize;
-                         float snappedWidth = std::max(gridSize, std::roundf(newWidth / gridSize) * gridSize);
-                         float snappedHeight = std::max(gridSize, std::roundf(newHeight / gridSize) * gridSize);
-
-                         if (activeHandle == ResizeHandle::TOP_LEFT || activeHandle == ResizeHandle::BOTTOM_LEFT) {
-                             snappedX += (newWidth - snappedWidth);
-                         }
-                         if (activeHandle == ResizeHandle::TOP_LEFT || activeHandle == ResizeHandle::TOP_RIGHT) {
-                             snappedY += (newHeight - snappedHeight);
-                         }
-
-                         transform.x = snappedX;
-                         transform.y = snappedY;
-                         transform.width = snappedWidth;
-                         transform.height = snappedHeight;
-
-                     } else {
-                         transform.x = newX;
-                         transform.y = newY;
-                         transform.width = newWidth;
-                         transform.height = newHeight;
-                     }
-                 }
+                    transform.x = newX;
+                    transform.y = newY;
+                    transform.width = newWidth;
+                    transform.height = newHeight;
+                }
                 break;
         }
     } else {
-         if (event.type == SDL_MOUSEBUTTONUP && event.button.button == SDL_BUTTON_LEFT) {
-             isDragging = false;
-             isResizing = false;
-             activeHandle = ResizeHandle::NONE;
-         }
+        if (event.type == SDL_MOUSEBUTTONUP && event.button.button == SDL_BUTTON_LEFT) {
+            isDragging = false;
+            isResizing = false;
+            activeHandle = ResizeHandle::NONE;
+        }
+        if ((isDragging || isResizing) && event.type == SDL_MOUSEMOTION && !mouseInViewport) {
+            isDragging = false;
+            isResizing = false;
+            activeHandle = ResizeHandle::NONE;
+        }
     }
 }
 
 void DevModeScene::update(float deltaTime) {
     if (isPlaying) {
-    } else {
     }
 }
 
@@ -315,38 +295,95 @@ void DevModeScene::render() {
     const float bottomPanelHeight = displaySize.y * 0.25f;
     const float topToolbarHeight = 40.0f;
 
-    gameViewport = { (int)hierarchyWidth, (int)topToolbarHeight, (int)(displaySize.x - hierarchyWidth - inspectorWidth), (int)(displaySize.y - bottomPanelHeight - topToolbarHeight) };
+    gameViewport = {
+        static_cast<int>(hierarchyWidth),
+        static_cast<int>(topToolbarHeight),
+        static_cast<int>(displaySize.x - hierarchyWidth - inspectorWidth),
+        static_cast<int>(displaySize.y - topToolbarHeight - bottomPanelHeight)
+    };
+    if (gameViewport.w < 0) gameViewport.w = 0;
+    if (gameViewport.h < 0) gameViewport.h = 0;
 
-    const ImGuiWindowFlags fixedPanelFlags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar;
-    const ImGuiWindowFlags viewWindowFlags = ImGuiWindowFlags_None; // Define viewWindowFlags
+    ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
+
+    if (ImGui::BeginDragDropTarget()) {
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_TEXTURE_ID")) {
+            IM_ASSERT(payload->DataSize > 0);
+            const char* textureIdCStr = (const char*)payload->Data;
+            std::string textureId(textureIdCStr);
+
+            ImVec2 mousePos = ImGui::GetIO().MousePos;
+            if (mousePos.x >= gameViewport.x && mousePos.x < (gameViewport.x + gameViewport.w) &&
+                mousePos.y >= gameViewport.y && mousePos.y < (gameViewport.y + gameViewport.h)) {
+                float viewportMouseX = mousePos.x - gameViewport.x;
+                float viewportMouseY = mousePos.y - gameViewport.y;
+                float dropWorldX = viewportMouseX + cameraX;
+                float dropWorldY = viewportMouseY + cameraY;
+
+                if (snapToGrid) {
+                    dropWorldX = std::roundf(dropWorldX / gridSize) * gridSize;
+                    dropWorldY = std::roundf(dropWorldY / gridSize) * gridSize;
+                }
+
+                Entity newEntity = entityManager->createEntity();
+                TransformComponent transform;
+                transform.x = dropWorldX;
+                transform.y = dropWorldY;
+                SDL_Texture* tex = AssetManager::getInstance().getTexture(textureId);
+                if (tex) {
+                    int w, h;
+                    SDL_QueryTexture(tex, nullptr, nullptr, &w, &h);
+                    transform.width = (float)w;
+                    transform.height = (float)h;
+                } else {
+                    transform.width = 32.0f;
+                    transform.height = 32.0f;
+                }
+                componentManager->addComponent(newEntity, transform);
+                componentManager->addComponent(newEntity, SpriteComponent{textureId});
+                Signature entitySignature;
+                entitySignature.set(componentManager->getComponentType<TransformComponent>());
+                entitySignature.set(componentManager->getComponentType<SpriteComponent>());
+                entityManager->setSignature(newEntity, entitySignature);
+                systemManager->entitySignatureChanged(newEntity, entitySignature);
+
+                selectedEntity = newEntity;
+                inspectorTextureIdBuffer[0] = '\0';
+            }
+        }
+        ImGui::EndDragDropTarget();
+    }
 
     SDL_SetRenderDrawColor(renderer, (Uint8)(clear_color.x * 255), (Uint8)(clear_color.y * 255), (Uint8)(clear_color.z * 255), (Uint8)(clear_color.w * 255));
     SDL_RenderClear(renderer);
 
-    SDL_RenderSetViewport(renderer, &gameViewport);
-    renderSystem->update(renderer, componentManager.get(), cameraX, cameraY);
+    if (gameViewport.w > 0 && gameViewport.h > 0) {
+        SDL_RenderSetViewport(renderer, &gameViewport);
 
-    if (!isPlaying) {
-        if (snapToGrid) {
+        if (!isPlaying && showGrid) {
             SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255);
             float gridStartX = -fmodf(cameraX, gridSize);
             float gridStartY = -fmodf(cameraY, gridSize);
             for (float x = gridStartX; x < gameViewport.w; x += gridSize) {
-                SDL_RenderDrawLineF(renderer, x, 0, x, gameViewport.h);
+                SDL_RenderDrawLine(renderer, static_cast<int>(x), 0, static_cast<int>(x), gameViewport.h);
             }
             for (float y = gridStartY; y < gameViewport.h; y += gridSize) {
-                SDL_RenderDrawLineF(renderer, 0, y, gameViewport.w, y);
+                SDL_RenderDrawLine(renderer, 0, static_cast<int>(y), gameViewport.w, static_cast<int>(y));
             }
         }
 
-        if (selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<TransformComponent>(selectedEntity)) {
+        renderSystem->update(renderer, componentManager.get(), cameraX, cameraY);
+
+        if (!isPlaying && selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<TransformComponent>(selectedEntity)) {
             auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
+
             SDL_Rect selectionRect = {
                 static_cast<int>(transform.x - cameraX),
                 static_cast<int>(transform.y - cameraY),
                 static_cast<int>(transform.width),
                 static_cast<int>(transform.height)
             };
+
             SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255);
             SDL_RenderDrawRect(renderer, &selectionRect);
 
@@ -358,29 +395,25 @@ void DevModeScene::render() {
                 SDL_RenderFillRect(renderer, &handleRect);
             }
         }
-    }
-    SDL_RenderSetViewport(renderer, NULL);
-
-    if (show_demo_window) {
-        ImGui::ShowDemoWindow(&show_demo_window);
+        SDL_RenderSetViewport(renderer, NULL);
+    } else {
+        SDL_RenderSetViewport(renderer, NULL);
     }
 
-    ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
+    const ImGuiWindowFlags fixedPanelFlags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar;
 
-    // --- Render Fixed Panels (Toolbar, Hierarchy, Inspector, Bottom) ---
-    // Toolbar at the very top, full width
     ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(displaySize.x, topToolbarHeight), ImGuiCond_Always);
     ImGui::Begin("Toolbar", nullptr, fixedPanelFlags | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     if (ImGui::Button("Save")) saveScene(sceneFilePath);
-    ImGui::SameLine(); if (ImGui::Button("Save As...")) std::cout << "Placeholder: Save As." << std::endl;
+    ImGui::SameLine(); if (ImGui::Button("Save As...")) {}
     ImGui::SameLine(); if (ImGui::Button("Load")) loadScene(sceneFilePath);
     ImGui::SameLine(); ImGui::PushItemWidth(120); ImGui::InputText("##Filename", sceneFilePath, sizeof(sceneFilePath)); ImGui::PopItemWidth();
-    ImGui::SameLine(); if (ImGui::Button("Import...")) std::cout << "Placeholder: Import." << std::endl;
-    ImGui::SameLine(); if (ImGui::Button("Export...")) std::cout << "Placeholder: Export." << std::endl;
+    ImGui::SameLine(); if (ImGui::Button("Import...")) {}
+    ImGui::SameLine(); if (ImGui::Button("Export...")) {}
     ImGui::SameLine(); ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical); ImGui::SameLine();
     if (isPlaying) { if (ImGui::Button("Stop")) { isPlaying = false; loadScene(sceneFilePath); } }
-    else { if (ImGui::Button("Play")) { isPlaying = true; selectedEntity = NO_ENTITY_SELECTED; isDragging = false; isResizing = false; activeHandle = ResizeHandle::NONE; inspectorTextureIdBuffer[0] = '\0'; } }
+    else { if (ImGui::Button("Play")) { isPlaying = true; selectedEntity = NO_ENTITY_SELECTED; } }
     ImGui::SameLine(); ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical); ImGui::SameLine();
     ImGui::BeginDisabled(isPlaying);
     ImGui::Checkbox("Snap", &snapToGrid); ImGui::SameLine(); ImGui::PushItemWidth(60); ImGui::DragFloat("Grid", &gridSize, 1.0f, 1.0f, 256.0f, "%.0f"); ImGui::PopItemWidth();
@@ -397,13 +430,17 @@ void DevModeScene::render() {
         componentManager->addComponent(newEntity, transform);
         Signature entitySignature; entitySignature.set(componentManager->getComponentType<TransformComponent>());
         std::string textureIdStr(spawnTextureId);
-        if (strlen(spawnTextureId) > 0 && AssetManager::getInstance().loadTexture(textureIdStr, textureIdStr)) { componentManager->addComponent(newEntity, SpriteComponent{textureIdStr}); entitySignature.set(componentManager->getComponentType<SpriteComponent>()); }
-        else if (strlen(spawnTextureId) > 0) std::cerr << "Spawn Warning: Texture ID '" << textureIdStr << "' not found. Sprite not added." << std::endl;
-        entityManager->setSignature(newEntity, entitySignature); systemManager->entitySignatureChanged(newEntity, entitySignature);
+        if (strlen(spawnTextureId) > 0 && AssetManager::getInstance().getTexture(textureIdStr)) {
+            componentManager->addComponent(newEntity, SpriteComponent{textureIdStr});
+            entitySignature.set(componentManager->getComponentType<SpriteComponent>());
+        } else if (strlen(spawnTextureId) > 0) {
+            std::cerr << "Spawn Warning: Texture ID '" << textureIdStr << "' not found. Sprite not added." << std::endl;
+        }
+        entityManager->setSignature(newEntity, entitySignature);
+        systemManager->entitySignatureChanged(newEntity, entitySignature);
     }
-    ImGui::End(); // End Toolbar
+    ImGui::End();
 
-    // Hierarchy below Toolbar on the left
     ImGui::SetNextWindowPos(ImVec2(0, topToolbarHeight), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(hierarchyWidth, displaySize.y - topToolbarHeight - bottomPanelHeight), ImGuiCond_Always);
     ImGui::Begin("Hierarchy", nullptr, fixedPanelFlags);
@@ -423,7 +460,6 @@ void DevModeScene::render() {
     }
     ImGui::End();
 
-    // Inspector below Toolbar on the right
     ImGui::SetNextWindowPos(ImVec2(displaySize.x - inspectorWidth, topToolbarHeight), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(inspectorWidth, displaySize.y - topToolbarHeight - bottomPanelHeight), ImGuiCond_Always);
     ImGui::Begin("Inspector", nullptr, fixedPanelFlags);
@@ -449,11 +485,12 @@ void DevModeScene::render() {
                 }
                 ImGui::Text("Texture ID/Path:");
                 if (ImGui::InputText("##SpriteTexturePath", inspectorTextureIdBuffer, IM_ARRAYSIZE(inspectorTextureIdBuffer), ImGuiInputTextFlags_EnterReturnsTrue)) {
-                    std::string newTexturePath(inspectorTextureIdBuffer);
+                    std::string newTextureId(inspectorTextureIdBuffer);
                     AssetManager& assets = AssetManager::getInstance();
-                    if (assets.loadTexture(newTexturePath, newTexturePath)) sprite.textureId = newTexturePath;
-                    else {
-                        std::cerr << "Inspector Error: Failed to load texture: '" << newTexturePath << "'. Reverting." << std::endl;
+                    if (assets.getTexture(newTextureId) || assets.loadTexture(newTextureId, newTextureId)) {
+                        sprite.textureId = newTextureId;
+                    } else {
+                        std::cerr << "Inspector Error: Failed to find or load texture: '" << newTextureId << "'. Reverting." << std::endl;
                         strncpy(inspectorTextureIdBuffer, sprite.textureId.c_str(), IM_ARRAYSIZE(inspectorTextureIdBuffer) - 1);
                         inspectorTextureIdBuffer[IM_ARRAYSIZE(inspectorTextureIdBuffer) - 1] = '\0';
                     }
@@ -464,41 +501,121 @@ void DevModeScene::render() {
                     ImGui::Text("Current: %s (%dx%d)", sprite.textureId.c_str(), w, h);
                     ImGui::Image((ImTextureID)tex, ImVec2(64, 64));
                 } else ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Current texture not loaded!");
-                if (ImGui::Button("Browse...##SpriteTexture")) std::cout << "Placeholder: File browser." << std::endl;
+                if (ImGui::Button("Browse...##SpriteTexture")) {
+                    const char* filterPatterns[] = { "*.png", "*.jpg", "*.jpeg", "*.bmp", "*.gif", "*.tga" };
+                    const char* filePath = tinyfd_openFileDialog("Select Texture File", "", 6, filterPatterns, "Image Files", 0);
+                    if (filePath != NULL) {
+                        std::string selectedPath = filePath;
+                        std::string filename = getFilenameFromPath(selectedPath);
+                        if (!filename.empty()) {
+                            std::string assetId = getFilenameWithoutExtension(filename);
+                            std::filesystem::path destDir = std::filesystem::absolute("../assets/Image/");
+                            std::filesystem::path destPath = destDir / filename;
+
+                            try {
+                                std::filesystem::create_directories(destDir);
+                                std::filesystem::copy_file(selectedPath, destPath, std::filesystem::copy_options::overwrite_existing);
+                                std::cout << "Asset copied to: " << destPath.string() << std::endl;
+
+                                AssetManager& assets = AssetManager::getInstance();
+                                if (assets.loadTexture(assetId, destPath.string())) {
+                                    sprite.textureId = assetId;
+                                    strncpy(inspectorTextureIdBuffer, assetId.c_str(), IM_ARRAYSIZE(inspectorTextureIdBuffer) - 1);
+                                    inspectorTextureIdBuffer[IM_ARRAYSIZE(inspectorTextureIdBuffer) - 1] = '\0';
+                                    std::cout << "Texture loaded and assigned: " << assetId << std::endl;
+                                } else {
+                                    tinyfd_messageBox("Error", "Failed to load texture into AssetManager.", "ok", "error", 1);
+                                }
+                            } catch (const std::filesystem::filesystem_error& e) {
+                                std::cerr << "Filesystem Error: " << e.what() << std::endl;
+                                tinyfd_messageBox("Error", ("Failed to copy file: " + std::string(e.what())).c_str(), "ok", "error", 1);
+                            }
+                        } else {
+                            tinyfd_messageBox("Error", "Could not extract filename.", "ok", "error", 1);
+                        }
+                    }
+                }
             }
         } else ImGui::TextDisabled("No Sprite Component");
     } else ImGui::Text("No entity selected.");
     ImGui::End();
 
-    // Bottom panel at the bottom, full width
     ImGui::SetNextWindowPos(ImVec2(0, displaySize.y - bottomPanelHeight), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(displaySize.x, bottomPanelHeight), ImGuiCond_Always);
     ImGui::Begin("BottomPanel", nullptr, fixedPanelFlags | ImGuiWindowFlags_NoScrollbar);
     if (ImGui::BeginTabBar("BottomTabs")) {
         if (ImGui::BeginTabItem("Project")) {
+            if (ImGui::Button("Import Asset")) {
+                const char* filterPatterns[] = { "*.png", "*.jpg", "*.jpeg", "*.bmp", "*.gif", "*.tga" };
+                const char* filePath = tinyfd_openFileDialog("Import Asset File", "", 6, filterPatterns, "Image Files", 0);
+                if (filePath != NULL) {
+                    std::string selectedPath = filePath;
+                    std::string filename = getFilenameFromPath(selectedPath);
+                    if (!filename.empty()) {
+                        std::string assetId = getFilenameWithoutExtension(filename);
+                        std::filesystem::path destDir = std::filesystem::absolute("../assets/Image/");
+                        std::filesystem::path destPath = destDir / filename;
+                        try {
+                            std::filesystem::create_directories(destDir);
+                            std::filesystem::copy_file(selectedPath, destPath, std::filesystem::copy_options::overwrite_existing);
+                            std::cout << "Asset copied to: " << destPath.string() << std::endl;
+                            AssetManager& assets = AssetManager::getInstance();
+                            if (!assets.loadTexture(assetId, destPath.string())) {
+                                tinyfd_messageBox("Error", "Failed to load imported texture.", "ok", "error", 1);
+                            }
+                        } catch (const std::filesystem::filesystem_error& e) {
+                            std::cerr << "Filesystem Error: " << e.what() << std::endl;
+                            tinyfd_messageBox("Error", ("Failed to copy file: " + std::string(e.what())).c_str(), "ok", "error", 1);
+                        }
+                    } else {
+                        tinyfd_messageBox("Error", "Could not extract filename.", "ok", "error", 1);
+                    }
+                }
+            }
+            ImGui::Separator();
+            ImGui::Text("Available Textures:");
+            AssetManager& assets = AssetManager::getInstance();
+            const auto& textures = assets.getAllTextures();
+            ImGuiStyle& style = ImGui::GetStyle();
+            float windowVisibleX = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+            float itemWidth = 64.0f;
+            float itemSpacing = style.ItemSpacing.x;
+            int itemsPerRow = std::max(1, static_cast<int>((ImGui::GetContentRegionAvail().x + itemSpacing) / (itemWidth + itemSpacing)));
+            int currentItem = 0;
+
+            for (const auto& [id, texture] : textures) {
+                ImGui::PushID(id.c_str());
+                ImGui::BeginGroup();
+                ImGui::Image((ImTextureID)texture, ImVec2(itemWidth, itemWidth));
+                ImGui::TextWrapped("%s", id.c_str());
+                ImGui::EndGroup();
+
+                if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+                    ImGui::SetDragDropPayload("ASSET_TEXTURE_ID", id.c_str(), id.length() + 1);
+                    ImGui::Image((ImTextureID)texture, ImVec2(itemWidth, itemWidth));
+                    ImGui::Text("%s", id.c_str());
+                    ImGui::EndDragDropSource();
+                }
+
+                currentItem++;
+                if (currentItem % itemsPerRow != 0) {
+                    float lastItemX = ImGui::GetItemRectMax().x;
+                    float nextItemX = lastItemX + style.ItemSpacing.x + itemWidth;
+                    if (nextItemX < (ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x)) {
+                        ImGui::SameLine();
+                    }
+                }
+                ImGui::PopID();
+            }
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Console")) {
+            ImGui::TextWrapped("Console output placeholder...");
             ImGui::EndTabItem();
         }
         ImGui::EndTabBar();
     }
     ImGui::End();
-
-    // --- Render Dockable Views (Scene View, Game View) ---
-    // These will dock into the central space left by the fixed panels
-    ImGui::Begin("Scene View", nullptr, viewWindowFlags);
-    // Scene View content would go here (if any specific ImGui elements were needed inside it)
-    // Currently, the SDL rendering happens outside this Begin/End pair, targeting the viewport.
-    ImGui::End(); // Added missing End() for Scene View
-
-    if (show_another_window) {
-        ImGui::Begin("Another Window", &show_another_window);
-        ImGui::Text("Hello from another window!");
-        if (ImGui::Button("Close Me"))
-            show_another_window = false;
-        ImGui::End();
-    }
 
     ImGui::Render();
     ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
@@ -507,6 +624,7 @@ void DevModeScene::render() {
         SDL_Window* backup_current_window = SDL_GL_GetCurrentWindow();
         ImGui::UpdatePlatformWindows();
         ImGui::RenderPlatformWindowsDefault();
+        SDL_GL_MakeCurrent(backup_current_window, SDL_GL_GetCurrentContext());
     }
 
     SDL_RenderPresent(renderer);
@@ -532,7 +650,7 @@ void DevModeScene::saveScene(const std::string& filepath) {
         }
 
         if (!entityJson["components"].empty()) {
-             sceneJson["entities"].push_back(entityJson);
+            sceneJson["entities"].push_back(entityJson);
         }
     }
 
@@ -543,6 +661,7 @@ void DevModeScene::saveScene(const std::string& filepath) {
         std::cout << "Scene saved successfully." << std::endl;
     } else {
         std::cerr << "Error: Could not open file " << filepath << " for writing!" << std::endl;
+        tinyfd_messageBox("Save Error", ("Could not open file: " + filepath).c_str(), "ok", "error", 1);
     }
 }
 
@@ -550,6 +669,7 @@ void DevModeScene::loadScene(const std::string& filepath) {
     std::ifstream inFile(filepath);
     if (!inFile.is_open()) {
         std::cerr << "Error: Could not open file " << filepath << " for reading!" << std::endl;
+        tinyfd_messageBox("Load Error", ("Could not open file: " + filepath).c_str(), "ok", "error", 1);
         return;
     }
 
@@ -560,6 +680,7 @@ void DevModeScene::loadScene(const std::string& filepath) {
     } catch (nlohmann::json::parse_error& e) {
         std::cerr << "Error: Failed to parse scene file " << filepath << ". " << e.what() << std::endl;
         inFile.close();
+        tinyfd_messageBox("Load Error", ("Failed to parse scene file: " + filepath + "\n" + e.what()).c_str(), "ok", "error", 1);
         return;
     }
 
@@ -568,19 +689,18 @@ void DevModeScene::loadScene(const std::string& filepath) {
     std::set<Entity> entitiesToDestroy = entityManager->getActiveEntities();
     for (Entity entity : entitiesToDestroy) {
         entityManager->destroyEntity(entity);
-        componentManager->entityDestroyed(entity);
-        systemManager->entityDestroyed(entity);
     }
     if (!entityManager->getActiveEntities().empty()) {
         std::cerr << "Warning: Not all entities were destroyed during scene load cleanup!" << std::endl;
     }
-
     selectedEntity = NO_ENTITY_SELECTED;
     inspectorTextureIdBuffer[0] = '\0';
+    cameraX = 0.0f;
+    cameraY = 0.0f;
 
     if (!sceneJson.contains("entities") || !sceneJson["entities"].is_array()) {
-         std::cerr << "Error: Scene file format incorrect. Missing 'entities' array." << std::endl;
-         return;
+        std::cerr << "Error: Scene file format incorrect. Missing 'entities' array." << std::endl;
+        return;
     }
 
     const auto& entitiesJson = sceneJson["entities"];
@@ -596,8 +716,8 @@ void DevModeScene::loadScene(const std::string& filepath) {
         }
 
         Signature entitySignature;
-
         const auto& componentsJson = entityJson["components"];
+
         for (auto it = componentsJson.begin(); it != componentsJson.end(); ++it) {
             const std::string& componentType = it.key();
             const nlohmann::json& componentData = it.value();
@@ -613,22 +733,27 @@ void DevModeScene::loadScene(const std::string& filepath) {
                     from_json(componentData, comp);
 
                     if (!assets.getTexture(comp.textureId)) {
-                         std::cout << "LoadScene: Texture '" << comp.textureId << "' not pre-loaded. Attempting dynamic load..." << std::endl;
-                         if (!assets.loadTexture(comp.textureId, comp.textureId)) {
-                             std::cerr << "LoadScene Warning: Failed to dynamically load texture '" << comp.textureId
-                                       << "' needed by loaded entity " << newEntity << "." << std::endl;
-                         } else {
-                              std::cout << "LoadScene: Successfully loaded texture '" << comp.textureId << "' dynamically." << std::endl;
-                         }
+                        std::cout << "LoadScene: Texture '" << comp.textureId << "' not pre-loaded. Attempting dynamic load..." << std::endl;
+                        std::string potentialPath = "../assets/Image/" + comp.textureId + ".png";
+                        if (!assets.loadTexture(comp.textureId, potentialPath)) {
+                            potentialPath = "../assets/Image/" + comp.textureId + ".jpg";
+                            if (!assets.loadTexture(comp.textureId, potentialPath)) {
+                                std::cerr << "LoadScene Warning: Failed to dynamically load texture '" << comp.textureId
+                                          << "' needed by loaded entity " << newEntity << ". Check path/extension." << std::endl;
+                            } else {
+                                std::cout << "LoadScene: Successfully loaded texture '" << comp.textureId << "' dynamically (as .jpg)." << std::endl;
+                            }
+                        } else {
+                            std::cout << "LoadScene: Successfully loaded texture '" << comp.textureId << "' dynamically (as .png)." << std::endl;
+                        }
                     }
-
                     componentManager->addComponent(newEntity, comp);
                     entitySignature.set(componentManager->getComponentType<SpriteComponent>());
                 } else {
-                    std::cerr << "Warning: Unknown component type '" << componentType << "' encountered during loading for entity." << std::endl;
+                    std::cerr << "Warning: Unknown component type '" << componentType << "' encountered during loading." << std::endl;
                 }
             } catch (nlohmann::json::exception& e) {
-                 std::cerr << "Error parsing component '" << componentType << "' for entity. " << e.what() << std::endl;
+                std::cerr << "Error parsing component '" << componentType << "'. " << e.what() << std::endl;
             }
         }
         entityManager->setSignature(newEntity, entitySignature);
@@ -637,7 +762,7 @@ void DevModeScene::loadScene(const std::string& filepath) {
     std::cout << "Scene loaded successfully." << std::endl;
 }
 
-bool DevModeScene::isMouseOverEntity(int worldMouseX, int worldMouseY, Entity entity) {
+bool DevModeScene::isMouseOverEntity(float worldMouseX, float worldMouseY, Entity entity) {
     if (entity == NO_ENTITY_SELECTED || !componentManager->hasComponent<TransformComponent>(entity)) {
         return false;
     }
@@ -674,7 +799,7 @@ std::vector<std::pair<ResizeHandle, SDL_Rect>> DevModeScene::getResizeHandles(co
     return handles;
 }
 
-ResizeHandle DevModeScene::getHandleAtPosition(int worldMouseX, int worldMouseY, const TransformComponent& transform) {
+ResizeHandle DevModeScene::getHandleAtPosition(float worldMouseX, float worldMouseY, const TransformComponent& transform) {
     for (const auto& handlePair : getResizeHandles(transform)) {
         const SDL_Rect& rect = handlePair.second;
         if (worldMouseX >= rect.x && worldMouseX < (rect.x + rect.w) &&

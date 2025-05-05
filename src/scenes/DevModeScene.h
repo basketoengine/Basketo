@@ -4,11 +4,12 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_rect.h> // Ensure SDL_Rect is included
 #include "imgui.h"
-#include <memory> 
-#include <string> 
+#include <memory>
+#include <string>
 #include <fstream>
-#include <cmath> 
+#include <cmath>
 #include <vector>
+#include <utility> // For std::pair
 
 #include "../ecs/EntityManager.h"
 #include "../ecs/ComponentManager.h"
@@ -16,7 +17,7 @@
 #include "../ecs/components/TransformComponent.h"
 #include "../ecs/components/SpriteComponent.h"
 #include "../ecs/systems/RenderSystem.h"
-#include "../AssetManager.h" 
+#include "../AssetManager.h"
 #include "../ecs/Entity.h"
 #include "../../vendor/nlohmann/json.hpp"
 
@@ -44,7 +45,7 @@ public:
 
 private:
     SDL_Renderer* renderer;
-    SDL_Window* window; 
+    SDL_Window* window;
     SDL_Rect gameViewport; // Add member to store game viewport dimensions
 
     // --- Camera/View Offset ---
@@ -56,30 +57,27 @@ private:
     std::unique_ptr<SystemManager> systemManager;
     std::shared_ptr<RenderSystem> renderSystem;
 
-    bool show_demo_window = true;
-    bool show_another_window = false;
-    ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+    ImVec4 clear_color = ImVec4(0.18f, 0.18f, 0.18f, 1.00f); // Match background color
 
     float spawnPosX = 100.0f;
     float spawnPosY = 100.0f;
     float spawnSizeW = 32.0f;
     float spawnSizeH = 32.0f;
-    bool spawnAddSprite = false;
-    char spawnTextureId[64] = "logo"; 
+    char spawnTextureId[256] = ""; // Increased buffer size
 
-    Entity selectedEntity = NO_ENTITY_SELECTED; 
-    char inspectorTextureIdBuffer[64] = ""; 
+    Entity selectedEntity = NO_ENTITY_SELECTED;
+    char inspectorTextureIdBuffer[256] = ""; // Increased buffer size
 
     // --- Save/Load ---
     char sceneFilePath[256] = "scene.json"; // Buffer for filename input
 
     // --- Viewport Interaction State ---
     bool isDragging = false;
-    int dragStartMouseX = 0;
-    int dragStartMouseY = 0;
+    float dragStartMouseX = 0.0f; // Use float for world coords
+    float dragStartMouseY = 0.0f; // Use float for world coords
     float dragStartEntityX = 0.0f;
     float dragStartEntityY = 0.0f;
-    float gridSize = 16.0f; // Grid size for snapping
+    float gridSize = 32.0f; // Grid size for snapping
     bool snapToGrid = true; // Toggle for snapping
     bool showGrid = true; // Added showGrid member variable
 
@@ -95,9 +93,9 @@ private:
     void saveScene(const std::string& filepath);
     void loadScene(const std::string& filepath);
 
-    bool isMouseOverEntity(int mouseX, int mouseY, Entity entity);
+    bool isMouseOverEntity(float worldMouseX, float worldMouseY, Entity entity); // Use float
     // Helper function to get handle rectangles
     std::vector<std::pair<ResizeHandle, SDL_Rect>> getResizeHandles(const TransformComponent& transform);
     // Helper function to check mouse over handles
-    ResizeHandle getHandleAtPosition(int mouseX, int mouseY, const TransformComponent& transform);
+    ResizeHandle getHandleAtPosition(float worldMouseX, float worldMouseY, const TransformComponent& transform); // Use float
 };

@@ -28,6 +28,7 @@ include_directories(${SDL2_INCLUDE_DIRS})
 
 # Add ImGui include directory
 include_directories(vendor/imgui)
+include_directories(vendor/libtinyfiledialogs)
 
 set(SOURCE_FILES
     src/main.cpp
@@ -48,6 +49,7 @@ set(SOURCE_FILES
     vendor/imgui/imgui_widgets.cpp
     vendor/imgui/backends/imgui_impl_sdl2.cpp
     vendor/imgui/backends/imgui_impl_sdlrenderer2.cpp
+    vendor/libtinyfiledialogs/tinyfiledialogs.c
 )
 
 add_executable(BasketoGameEngine ${SOURCE_FILES})
