@@ -433,6 +433,7 @@ void DevModeScene::loadScene(const std::string& filepath) {
     for (Entity entity : entitiesToDestroy) {
         entityManager->destroyEntity(entity);
         componentManager->entityDestroyed(entity);
+        systemManager->entityDestroyed(entity);
     }
     if (!entityManager->getActiveEntities().empty()) {
         std::cerr << "Warning: Not all entities were destroyed during scene load cleanup!" << std::endl;
