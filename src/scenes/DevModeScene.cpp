@@ -306,54 +306,6 @@ void DevModeScene::render() {
 
     ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
 
-    if (ImGui::BeginDragDropTarget()) {
-        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_TEXTURE_ID")) {
-            IM_ASSERT(payload->DataSize > 0);
-            const char* textureIdCStr = (const char*)payload->Data;
-            std::string textureId(textureIdCStr);
-
-            ImVec2 mousePos = ImGui::GetIO().MousePos;
-            if (mousePos.x >= gameViewport.x && mousePos.x < (gameViewport.x + gameViewport.w) &&
-                mousePos.y >= gameViewport.y && mousePos.y < (gameViewport.y + gameViewport.h)) {
-                float viewportMouseX = mousePos.x - gameViewport.x;
-                float viewportMouseY = mousePos.y - gameViewport.y;
-                float dropWorldX = viewportMouseX + cameraX;
-                float dropWorldY = viewportMouseY + cameraY;
-
-                if (snapToGrid) {
-                    dropWorldX = std::roundf(dropWorldX / gridSize) * gridSize;
-                    dropWorldY = std::roundf(dropWorldY / gridSize) * gridSize;
-                }
-
-                Entity newEntity = entityManager->createEntity();
-                TransformComponent transform;
-                transform.x = dropWorldX;
-                transform.y = dropWorldY;
-                SDL_Texture* tex = AssetManager::getInstance().getTexture(textureId);
-                if (tex) {
-                    int w, h;
-                    SDL_QueryTexture(tex, nullptr, nullptr, &w, &h);
-                    transform.width = (float)w;
-                    transform.height = (float)h;
-                } else {
-                    transform.width = 32.0f;
-                    transform.height = 32.0f;
-                }
-                componentManager->addComponent(newEntity, transform);
-                componentManager->addComponent(newEntity, SpriteComponent{textureId});
-                Signature entitySignature;
-                entitySignature.set(componentManager->getComponentType<TransformComponent>());
-                entitySignature.set(componentManager->getComponentType<SpriteComponent>());
-                entityManager->setSignature(newEntity, entitySignature);
-                systemManager->entitySignatureChanged(newEntity, entitySignature);
-
-                selectedEntity = newEntity;
-                inspectorTextureIdBuffer[0] = '\0';
-            }
-        }
-        ImGui::EndDragDropTarget();
-    }
-
     SDL_SetRenderDrawColor(renderer, (Uint8)(clear_color.x * 255), (Uint8)(clear_color.y * 255), (Uint8)(clear_color.z * 255), (Uint8)(clear_color.w * 255));
     SDL_RenderClear(renderer);
 
@@ -398,6 +350,57 @@ void DevModeScene::render() {
         SDL_RenderSetViewport(renderer, NULL);
     } else {
         SDL_RenderSetViewport(renderer, NULL);
+    }
+
+    ImGui::SetCursorScreenPos(ImVec2(static_cast<float>(gameViewport.x), static_cast<float>(gameViewport.y)));
+    ImGui::InvisibleButton("##GameViewportDropTarget", ImVec2(static_cast<float>(gameViewport.w), static_cast<float>(gameViewport.h)));
+
+    if (ImGui::BeginDragDropTarget()) {
+        std::cout << "[DEBUG] Drop target active in game viewport" << std::endl;
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_TEXTURE_ID")) {
+            std::cout << "[DEBUG] Payload received in drop target" << std::endl;
+            IM_ASSERT(payload->DataSize > 0);
+            const char* textureIdCStr = (const char*)payload->Data;
+            std::string textureId(textureIdCStr);
+            std::cout << "[DEBUG] Dropped textureId: " << textureId << std::endl;
+
+            ImVec2 viewportMousePos = ImVec2(ImGui::GetMousePos().x - ImGui::GetItemRectMin().x, ImGui::GetMousePos().y - ImGui::GetItemRectMin().y);
+
+            float dropWorldX = viewportMousePos.x + cameraX;
+            float dropWorldY = viewportMousePos.y + cameraY;
+
+            if (snapToGrid) {
+                dropWorldX = std::roundf(dropWorldX / gridSize) * gridSize;
+                dropWorldY = std::roundf(dropWorldY / gridSize) * gridSize;
+            }
+
+            Entity newEntity = entityManager->createEntity();
+            std::cout << "[DEBUG] Created new entity: " << newEntity << std::endl;
+            TransformComponent transform;
+            transform.x = dropWorldX;
+            transform.y = dropWorldY;
+            SDL_Texture* tex = AssetManager::getInstance().getTexture(textureId);
+            if (tex) {
+                int w, h;
+                SDL_QueryTexture(tex, nullptr, nullptr, &w, &h);
+                transform.width = (float)w;
+                transform.height = (float)h;
+            } else {
+                transform.width = 32.0f;
+                transform.height = 32.0f;
+            }
+            componentManager->addComponent(newEntity, transform);
+            componentManager->addComponent(newEntity, SpriteComponent{textureId});
+            Signature entitySignature;
+            entitySignature.set(componentManager->getComponentType<TransformComponent>());
+            entitySignature.set(componentManager->getComponentType<SpriteComponent>());
+            entityManager->setSignature(newEntity, entitySignature);
+            systemManager->entitySignatureChanged(newEntity, entitySignature);
+
+            selectedEntity = newEntity;
+            inspectorTextureIdBuffer[0] = '\0';
+        }
+        ImGui::EndDragDropTarget();
     }
 
     const ImGuiWindowFlags fixedPanelFlags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar;
@@ -584,6 +587,7 @@ void DevModeScene::render() {
             int currentItem = 0;
 
             for (const auto& [id, texture] : textures) {
+                std::cout << "[DEBUG] Texture in loop: " << id << std::endl;
                 ImGui::PushID(id.c_str());
                 ImGui::BeginGroup();
                 ImGui::Image((ImTextureID)texture, ImVec2(itemWidth, itemWidth));
@@ -591,6 +595,7 @@ void DevModeScene::render() {
                 ImGui::EndGroup();
 
                 if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+                    std::cout << "[DEBUG] Begin drag for texture: " << id << std::endl;
                     ImGui::SetDragDropPayload("ASSET_TEXTURE_ID", id.c_str(), id.length() + 1);
                     ImGui::Image((ImTextureID)texture, ImVec2(itemWidth, itemWidth));
                     ImGui::Text("%s", id.c_str());
