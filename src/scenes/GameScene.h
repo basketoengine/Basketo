@@ -22,6 +22,12 @@ public:
 
 private:
     SDL_Renderer* renderer;
+    SDL_Window* window;
+
+    // --- Camera/View Offset ---
+    float cameraX = 0.0f;
+    float cameraY = 0.0f;
+
     Entity playerEntity;
     Entity wallEntity;
     std::unique_ptr<EntityManager> entityManager;

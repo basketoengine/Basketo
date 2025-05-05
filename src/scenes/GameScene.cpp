@@ -144,35 +144,11 @@ void GameScene::update(float deltaTime) {
 }
 
 void GameScene::render() {
-    SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
 
-    renderSystem->update(renderer, componentManager.get());
-
-    TTF_Font* font = AssetManager::getInstance().getFont("roboto_16_16");
-    if (font) {
-        SDL_Color textColor = {255, 255, 255, 255};
-        SDL_Surface* textSurface = TTF_RenderText_Solid(font, "AssetManager Test!", textColor);
-        if (textSurface) {
-            SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
-            if (textTexture) {
-                SDL_Rect textRect;
-                textRect.x = 10;
-                textRect.y = 10;
-                textRect.w = textSurface->w;
-                textRect.h = textSurface->h;
-                SDL_RenderCopy(renderer, textTexture, nullptr, &textRect);
-                SDL_DestroyTexture(textTexture);
-            } else {
-                 std::cerr << "Failed to create text texture: " << SDL_GetError() << std::endl;
-            }
-            SDL_FreeSurface(textSurface);
-        } else {
-             std::cerr << "Failed to render text surface: " << TTF_GetError() << std::endl;
-        }
-    } else {
-         std::cerr << "Could not get font roboto_16_16 for rendering." << std::endl;
-    }
+    // Pass camera coordinates to the render system
+    renderSystem->update(renderer, componentManager.get(), cameraX, cameraY);
 
     SDL_RenderPresent(renderer);
 }

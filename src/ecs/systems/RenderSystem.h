@@ -10,7 +10,8 @@
 
 class RenderSystem : public System {
 public:
-    void update(SDL_Renderer* renderer, ComponentManager* componentManager) {
+    // Modify signature to accept camera coordinates
+    void update(SDL_Renderer* renderer, ComponentManager* componentManager, float cameraX, float cameraY) {
         AssetManager& assetManager = AssetManager::getInstance();
 
         for (auto const& entity : entities) {
@@ -25,8 +26,9 @@ public:
             }
 
             SDL_Rect destRect;
-            destRect.x = static_cast<int>(transform.x);
-            destRect.y = static_cast<int>(transform.y);
+            // Adjust position based on camera offset
+            destRect.x = static_cast<int>(transform.x - cameraX);
+            destRect.y = static_cast<int>(transform.y - cameraY);
             destRect.w = static_cast<int>(transform.width);
             destRect.h = static_cast<int>(transform.height);
 

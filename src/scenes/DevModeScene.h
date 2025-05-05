@@ -2,6 +2,7 @@
 
 #include "../Scene.h"
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_rect.h> // Ensure SDL_Rect is included
 #include "imgui.h"
 #include <memory> 
 #include <string> 
@@ -44,6 +45,11 @@ public:
 private:
     SDL_Renderer* renderer;
     SDL_Window* window; 
+    SDL_Rect gameViewport; // Add member to store game viewport dimensions
+
+    // --- Camera/View Offset ---
+    float cameraX = 0.0f;
+    float cameraY = 0.0f;
 
     std::unique_ptr<EntityManager> entityManager;
     std::unique_ptr<ComponentManager> componentManager;
