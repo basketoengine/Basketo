@@ -12,7 +12,7 @@ public:
         for (auto const& entity : entities) {
             auto& velocity = componentManager->getComponent<VelocityComponent>(entity);
             auto& rigidbody = componentManager->getComponent<RigidbodyComponent>(entity);
-            if (!rigidbody.isStatic && rigidbody.affectedByGravity) {
+            if (!rigidbody.isStatic && rigidbody.useGravity) {
                 velocity.vy += gravity * rigidbody.gravityScale * deltaTime;
             }
         }

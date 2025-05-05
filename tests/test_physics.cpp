@@ -57,7 +57,7 @@ int main() {
     Entity player = entityManager->createEntity();
     TransformComponent playerTransform{100, 0, 32, 32};
     VelocityComponent playerVelocity{0, 0};
-    RigidbodyComponent playerRb{1.0f, true, false, 1.0f};
+    RigidbodyComponent playerRb{1.0f, true, false, 1.0f, 0.0f, false};
     componentManager->addComponent(player, playerTransform);
     componentManager->addComponent(player, playerVelocity);
     componentManager->addComponent(player, playerRb);
@@ -71,7 +71,7 @@ int main() {
     // Create wall (static)
     Entity wall = entityManager->createEntity();
     TransformComponent wallTransform{100, 200, 128, 32};
-    RigidbodyComponent wallRb{1.0f, false, true, 1.0f};
+    RigidbodyComponent wallRb{1.0f, false, true, 1.0f, 0.0f, false};
     componentManager->addComponent(wall, wallTransform);
     componentManager->addComponent(wall, wallRb);
     Signature wallSig;
