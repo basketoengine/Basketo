@@ -13,8 +13,9 @@
 #include <SDL2/SDL_mixer.h>
 #include <iostream>
 #include <memory>
+#include <algorithm>
 
-GameScene::GameScene(SDL_Renderer* ren) : renderer(ren) {
+GameScene::GameScene(SDL_Renderer* ren) : renderer(ren), cameraZoom(1.0f), cameraX(0.0f), cameraY(0.0f) {
     entityManager = std::make_unique<EntityManager>();
     componentManager = std::make_unique<ComponentManager>();
     systemManager = std::make_unique<SystemManager>();
@@ -128,6 +129,12 @@ void GameScene::handleInput(SDL_Event& event) {
             }
         }
     }
+
+    if (event.type == SDL_MOUSEWHEEL) {
+        if (event.wheel.y > 0) cameraZoom *= 1.1f;
+        if (event.wheel.y < 0) cameraZoom /= 1.1f;
+        cameraZoom = std::clamp(cameraZoom, 0.2f, 4.0f);
+    }
 }
 
 void GameScene::update(float deltaTime) {
@@ -151,14 +158,24 @@ void GameScene::update(float deltaTime) {
     if (playerTransform.y < 0) playerTransform.y = 0;
     if (playerTransform.x + playerTransform.width > 800) playerTransform.x = 800 - playerTransform.width;
     if (playerTransform.y + playerTransform.height > 600) playerTransform.y = 600 - playerTransform.height;
+
+    // Camera follow player (smooth)
+    float viewportW = 800.0f, viewportH = 600.0f;
+    float targetX = playerTransform.x + playerTransform.width / 2.0f - (viewportW / 2.0f) / cameraZoom;
+    float targetY = playerTransform.y + playerTransform.height / 2.0f - (viewportH / 2.0f) / cameraZoom;
+    float lerp = 0.1f;
+    cameraX += (targetX - cameraX) * lerp;
+    cameraY += (targetY - cameraY) * lerp;
 }
 
 void GameScene::render() {
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
+    SDL_RenderSetScale(renderer, cameraZoom, cameraZoom);
 
     // Pass camera coordinates to the render system
     renderSystem->update(renderer, componentManager.get(), cameraX, cameraY);
 
+    SDL_RenderSetScale(renderer, 1.0f, 1.0f);
     SDL_RenderPresent(renderer);
 }

@@ -51,6 +51,8 @@ private:
     // --- Camera/View Offset ---
     float cameraX = 0.0f;
     float cameraY = 0.0f;
+    float cameraZoom = 1.0f;
+    float cameraTargetX = 0.0f, cameraTargetY = 0.0f;
 
     std::unique_ptr<EntityManager> entityManager;
     std::unique_ptr<ComponentManager> componentManager;

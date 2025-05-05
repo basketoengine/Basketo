@@ -76,8 +76,9 @@ void DevModeScene::handleInput(SDL_Event& event) {
     float viewportMouseX = static_cast<float>(rawMouseX - gameViewport.x);
     float viewportMouseY = static_cast<float>(rawMouseY - gameViewport.y);
 
-    float worldMouseX = viewportMouseX + cameraX;
-    float worldMouseY = viewportMouseY + cameraY;
+    // FIX: account for zoom in mouse-to-world conversion
+    float worldMouseX = cameraX + (viewportMouseX / cameraZoom);
+    float worldMouseY = cameraY + (viewportMouseY / cameraZoom);
 
     static bool isPanning = false;
 
@@ -94,6 +95,12 @@ void DevModeScene::handleInput(SDL_Event& event) {
     if (event.type == SDL_MOUSEMOTION && isPanning) {
         cameraX -= event.motion.xrel;
         cameraY -= event.motion.yrel;
+    }
+
+    if (event.type == SDL_MOUSEWHEEL) {
+        if (event.wheel.y > 0) cameraZoom *= 1.1f;
+        if (event.wheel.y < 0) cameraZoom /= 1.1f;
+        cameraZoom = std::clamp(cameraZoom, 0.2f, 4.0f);
     }
 
     if (isPlaying || isPanning) {
@@ -366,45 +373,62 @@ void DevModeScene::render() {
     ImGui::End();
     // --- END GAME VIEWPORT WINDOW ---
 
-    // SDL RENDERING (unchanged)
+    // SDL RENDERING (manual transform for zoom/camera)
     SDL_SetRenderDrawColor(renderer, (Uint8)(clear_color.x * 255), (Uint8)(clear_color.y * 255), (Uint8)(clear_color.z * 255), (Uint8)(clear_color.w * 255));
     SDL_RenderClear(renderer);
-
     if (gameViewport.w > 0 && gameViewport.h > 0) {
         SDL_RenderSetViewport(renderer, &gameViewport);
 
+        // Draw grid with zoom/camera transform
         if (!isPlaying && showGrid) {
             SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255);
             float gridStartX = -fmodf(cameraX, gridSize);
             float gridStartY = -fmodf(cameraY, gridSize);
-            for (float x = gridStartX; x < gameViewport.w; x += gridSize) {
-                SDL_RenderDrawLine(renderer, static_cast<int>(x), 0, static_cast<int>(x), gameViewport.h);
+            for (float x = gridStartX; x < gameViewport.w / cameraZoom; x += gridSize) {
+                int sx = (int)((x - cameraX) * cameraZoom);
+                SDL_RenderDrawLine(renderer, sx, 0, sx, gameViewport.h);
             }
-            for (float y = gridStartY; y < gameViewport.h; y += gridSize) {
-                SDL_RenderDrawLine(renderer, 0, static_cast<int>(y), gameViewport.w, static_cast<int>(y));
+            for (float y = gridStartY; y < gameViewport.h / cameraZoom; y += gridSize) {
+                int sy = (int)((y - cameraY) * cameraZoom);
+                SDL_RenderDrawLine(renderer, 0, sy, gameViewport.w, sy);
             }
         }
 
-        renderSystem->update(renderer, componentManager.get(), cameraX, cameraY);
+        // Render all entities with manual transform
+        for (auto entity : entityManager->getActiveEntities()) {
+            if (!componentManager->hasComponent<TransformComponent>(entity) || !componentManager->hasComponent<SpriteComponent>(entity)) continue;
+            auto& transform = componentManager->getComponent<TransformComponent>(entity);
+            auto& sprite = componentManager->getComponent<SpriteComponent>(entity);
+            SDL_Texture* texture = AssetManager::getInstance().getTexture(sprite.textureId);
+            if (!texture) continue;
+            SDL_Rect destRect;
+            destRect.x = (int)((transform.x - cameraX) * cameraZoom);
+            destRect.y = (int)((transform.y - cameraY) * cameraZoom);
+            destRect.w = (int)(transform.width * cameraZoom);
+            destRect.h = (int)(transform.height * cameraZoom);
+            SDL_Rect* srcRectPtr = sprite.useSrcRect ? &sprite.srcRect : nullptr;
+            SDL_Point center = { (int)(transform.width * cameraZoom / 2), (int)(transform.height * cameraZoom / 2) };
+            SDL_RenderCopyEx(renderer, texture, srcRectPtr, &destRect, transform.rotation, &center, SDL_FLIP_NONE);
+        }
 
+        // Draw selection rectangle and handles with zoom
         if (!isPlaying && selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<TransformComponent>(selectedEntity)) {
             auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
-
             SDL_Rect selectionRect = {
-                static_cast<int>(transform.x - cameraX),
-                static_cast<int>(transform.y - cameraY),
-                static_cast<int>(transform.width),
-                static_cast<int>(transform.height)
+                (int)((transform.x - cameraX) * cameraZoom),
+                (int)((transform.y - cameraY) * cameraZoom),
+                (int)(transform.width * cameraZoom),
+                (int)(transform.height * cameraZoom)
             };
-
             SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255);
             SDL_RenderDrawRect(renderer, &selectionRect);
-
             SDL_SetRenderDrawColor(renderer, 0, 150, 255, 255);
             for (const auto& handlePair : getResizeHandles(transform)) {
                 SDL_Rect handleRect = handlePair.second;
-                handleRect.x -= static_cast<int>(cameraX);
-                handleRect.y -= static_cast<int>(cameraY);
+                handleRect.x = (int)((handleRect.x - cameraX) * cameraZoom);
+                handleRect.y = (int)((handleRect.y - cameraY) * cameraZoom);
+                handleRect.w = (int)(handleRect.w * cameraZoom);
+                handleRect.h = (int)(handleRect.h * cameraZoom);
                 SDL_RenderFillRect(renderer, &handleRect);
             }
         }
