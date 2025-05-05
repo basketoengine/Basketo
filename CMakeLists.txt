@@ -40,6 +40,7 @@ set(SOURCE_FILES
     src/scenes/MenuScene.cpp
     src/scenes/DevModeScene.cpp
     utils/utility.cpp
+    src/Physics.cpp
 
     # Add ImGui core source files
     vendor/imgui/imgui.cpp

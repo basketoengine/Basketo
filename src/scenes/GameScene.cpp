@@ -5,6 +5,9 @@
 #include "../ecs/components/TransformComponent.h"
 #include "../ecs/components/VelocityComponent.h"
 #include "../ecs/components/SpriteComponent.h"
+#include "../ecs/components/RigidbodyComponent.h"
+#include "../ecs/systems/PhysicsSystem.h"
+#include "../ecs/systems/CollisionSystem.h"
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
 #include <SDL2/SDL_mixer.h>
@@ -19,6 +22,7 @@ GameScene::GameScene(SDL_Renderer* ren) : renderer(ren) {
     componentManager->registerComponent<TransformComponent>();
     componentManager->registerComponent<VelocityComponent>();
     componentManager->registerComponent<SpriteComponent>();
+    componentManager->registerComponent<RigidbodyComponent>();
 
     renderSystem = systemManager->registerSystem<RenderSystem>();
     Signature renderSig;
@@ -31,6 +35,18 @@ GameScene::GameScene(SDL_Renderer* ren) : renderer(ren) {
     moveSig.set(componentManager->getComponentType<TransformComponent>());
     moveSig.set(componentManager->getComponentType<VelocityComponent>());
     systemManager->setSignature<MovementSystem>(moveSig);
+
+    physicsSystem = systemManager->registerSystem<PhysicsSystem>();
+    Signature physicsSig;
+    physicsSig.set(componentManager->getComponentType<VelocityComponent>());
+    physicsSig.set(componentManager->getComponentType<RigidbodyComponent>());
+    systemManager->setSignature<PhysicsSystem>(physicsSig);
+
+    collisionSystem = systemManager->registerSystem<CollisionSystem>();
+    Signature collisionSig;
+    collisionSig.set(componentManager->getComponentType<TransformComponent>());
+    collisionSig.set(componentManager->getComponentType<RigidbodyComponent>());
+    systemManager->setSignature<CollisionSystem>(collisionSig);
 
     AssetManager& assets = AssetManager::getInstance();
 
@@ -61,11 +77,13 @@ GameScene::GameScene(SDL_Renderer* ren) : renderer(ren) {
     componentManager->addComponent(playerEntity, playerTransform);
     componentManager->addComponent(playerEntity, VelocityComponent{0.0f, 0.0f});
     componentManager->addComponent(playerEntity, SpriteComponent{"player"});
+    componentManager->addComponent(playerEntity, RigidbodyComponent{1.0f, true, false, 1.0f});
 
     Signature playerSignature = entityManager->getSignature(playerEntity);
     playerSignature.set(componentManager->getComponentType<TransformComponent>());
     playerSignature.set(componentManager->getComponentType<VelocityComponent>());
     playerSignature.set(componentManager->getComponentType<SpriteComponent>());
+    playerSignature.set(componentManager->getComponentType<RigidbodyComponent>());
     entityManager->setSignature(playerEntity, playerSignature);
     systemManager->entitySignatureChanged(playerEntity, playerSignature);
 
@@ -78,10 +96,12 @@ GameScene::GameScene(SDL_Renderer* ren) : renderer(ren) {
     componentManager->addComponent(wallEntity, wallTransform);
 
     componentManager->addComponent(wallEntity, SpriteComponent{"logo"});
+    componentManager->addComponent(wallEntity, RigidbodyComponent{1.0f, false, true, 1.0f});
 
     Signature wallSignature = entityManager->getSignature(wallEntity);
     wallSignature.set(componentManager->getComponentType<TransformComponent>());
     wallSignature.set(componentManager->getComponentType<SpriteComponent>());
+    wallSignature.set(componentManager->getComponentType<RigidbodyComponent>());
     entityManager->setSignature(wallEntity, wallSignature);
     systemManager->entitySignatureChanged(wallEntity, wallSignature);
 
@@ -121,22 +141,12 @@ void GameScene::update(float deltaTime) {
     if (InputManager::getInstance().isActionPressed("MoveUp"))    playerVelocity.vy -= speed;
     if (InputManager::getInstance().isActionPressed("MoveDown"))  playerVelocity.vy += speed;
 
+    physicsSystem->update(componentManager.get(), deltaTime);
     movementSystem->update(componentManager.get(), deltaTime);
-
-    // TODO: Move collision detection to a CollisionSystem
-    auto& playerTransform = componentManager->getComponent<TransformComponent>(playerEntity);
-    auto& wallTransform = componentManager->getComponent<TransformComponent>(wallEntity);
-    SDL_Rect playerRect = { (int)playerTransform.x, (int)playerTransform.y, (int)playerTransform.width, (int)playerTransform.height };
-    SDL_Rect wallRect = { (int)wallTransform.x, (int)wallTransform.y, (int)wallTransform.width, (int)wallTransform.height };
-
-    if (SDL_HasIntersection(&playerRect, &wallRect)) {
-        playerTransform.x -= playerVelocity.vx * deltaTime;
-        playerTransform.y -= playerVelocity.vy * deltaTime;
-        playerVelocity.vx = 0;
-        playerVelocity.vy = 0;
-    }
+    collisionSystem->update(componentManager.get(), deltaTime);
 
     // TODO: Move boundary checks to MovementSystem or a BoundarySystem
+    auto& playerTransform = componentManager->getComponent<TransformComponent>(playerEntity);
     if (playerTransform.x < 0) playerTransform.x = 0;
     if (playerTransform.y < 0) playerTransform.y = 0;
     if (playerTransform.x + playerTransform.width > 800) playerTransform.x = 800 - playerTransform.width;

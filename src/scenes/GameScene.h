@@ -5,8 +5,11 @@
 #include "../ecs/SystemManager.h"
 #include "../ecs/components/TransformComponent.h"
 #include "../ecs/components/VelocityComponent.h"
+#include "../ecs/components/RigidbodyComponent.h"
 #include "../ecs/systems/RenderSystem.h"
 #include "../ecs/systems/MovementSystem.h"
+#include "../ecs/systems/PhysicsSystem.h"
+#include "../ecs/systems/CollisionSystem.h"
 #include "../ecs/Types.h"
 #include <SDL2/SDL.h>
 #include <string>
@@ -35,5 +38,7 @@ private:
     std::unique_ptr<SystemManager> systemManager;
     std::shared_ptr<MovementSystem> movementSystem;
     std::shared_ptr<RenderSystem> renderSystem;
+    std::shared_ptr<PhysicsSystem> physicsSystem;
+    std::shared_ptr<CollisionSystem> collisionSystem;
     SDL_Texture* loadTexture(const std::string& path);
 };
