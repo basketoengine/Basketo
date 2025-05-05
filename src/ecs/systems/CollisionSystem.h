@@ -21,11 +21,40 @@ public:
                 auto& rigidbodyB = componentManager->getComponent<RigidbodyComponent>(entityB);
                 SDL_Rect rectB = {(int)transformB.x, (int)transformB.y, (int)transformB.width, (int)transformB.height};
                 if (Physics::checkCollision(rectA, rectB)) {
-                    // Simple collision response: stop movement
+                    // Simple collision response: stop movement and resolve penetration
                     auto& velocityA = componentManager->getComponent<VelocityComponent>(entityA);
-                    velocityA.vx = 0;
-                    velocityA.vy = 0;
-                    // Optionally, move entityA out of collision (not implemented here)
+
+                    // Calculate overlap (simple vertical overlap for now)
+                    // Assumes collision is primarily due to falling (gravity)
+                    float overlapY = (transformA.y + transformA.height) - transformB.y;
+
+                    // Move entityA up to resolve penetration
+                    if (overlapY > 0) {
+                        transformA.y -= overlapY;
+                    }
+
+                    // Stop vertical movement upon collision with something below
+                    // Check if entityA was moving downwards
+                    if (velocityA.vy > 0) {
+                         velocityA.vy = 0;
+                    }
+
+                    // Basic horizontal collision response (stop horizontal movement)
+                    // You might need more sophisticated logic here for side collisions
+                    // Check overlap X
+                    float overlapXRight = (transformA.x + transformA.width) - transformB.x;
+                    float overlapXLeft = (transformB.x + transformB.width) - transformA.x;
+
+                    if (overlapXRight > 0 && overlapXLeft > 0) { // Check if there's horizontal overlap
+                        // Determine which side has less overlap to push out
+                        if (overlapXRight < overlapXLeft && velocityA.vx > 0) { // Collided with left side of B
+                            transformA.x -= overlapXRight;
+                            velocityA.vx = 0;
+                        } else if (overlapXLeft < overlapXRight && velocityA.vx < 0) { // Collided with right side of B
+                            transformA.x += overlapXLeft;
+                            velocityA.vx = 0;
+                        }
+                    }
                 }
             }
         }

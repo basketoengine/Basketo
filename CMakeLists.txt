@@ -53,12 +53,26 @@ set(SOURCE_FILES
     vendor/libtinyfiledialogs/tinyfiledialogs.c
 )
 
+# Define the physics test executable
+add_executable(PhysicsTest
+    tests/test_physics.cpp
+    src/Physics.cpp
+    utils/utility.cpp
+)
+
+# Define the main game executable
 add_executable(BasketoGameEngine ${SOURCE_FILES})
 
+# Link libraries for the main game
 target_link_libraries(BasketoGameEngine
     ${SDL2_LIBRARIES}
     ${SDL2_IMAGE_LIBRARIES}
     ${SDL2_TTF_LIBRARIES}
     ${SDL2_MIXER_LIBRARIES}
     ${OpenGL_LIBRARIES}
+)
+
+# Link libraries for the physics test
+target_link_libraries(PhysicsTest
+    ${SDL2_LIBRARIES}
 )
