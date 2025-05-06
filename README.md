@@ -1,8 +1,10 @@
-# Basketo-Game-Engine
+# Basketo Game Engine
 
-Welcome to the Basketo-Game-Engine - a passion project where I’m putting my best shot into creating something awesome. Whether you’re here to contribute, suggest ideas, or just watch it grow, you’re part of the journey!
+Welcome to the Basketo Engine - a passion project where I’m putting my best shot into creating something awesome. Whether you’re here to contribute, suggest ideas, or just watch it grow, you’re part of the journey!
 
-![Basketo Engine Screenshot](./readmeimg/image.png)
+## Current Progress
+
+![Basketo Engine Screenshot](readmeimgs/image.png)
 
 ## Get Involved
 
