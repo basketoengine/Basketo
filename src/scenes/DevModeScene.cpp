@@ -567,9 +567,76 @@ void DevModeScene::render() {
     ImGui::SetNextWindowPos(ImVec2(displaySize.x - inspectorWidth, topToolbarHeight), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(inspectorWidth, displaySize.y - topToolbarHeight - bottomPanelHeight), ImGuiCond_Always);
     ImGui::Begin("Inspector", nullptr, fixedPanelFlags);
-    if (selectedEntity != NO_ENTITY_SELECTED) {
+    if (selectedEntity != NO_ENTITY_SELECTED && std::find(entityManager->getActiveEntities().begin(), entityManager->getActiveEntities().end(), selectedEntity) != entityManager->getActiveEntities().end()) { // Assuming isEntityActive check is present or can be added
         ImGui::Text("Selected Entity: %u", selectedEntity);
         ImGui::Separator();
+
+        // --- ADD COMPONENT UI ---
+        ImGui::PushItemWidth(-1); // Make the combo box use full width
+        // List of component types that can be added. Expand this as you create more components.
+        const char* component_types[] = { "Transform", "Sprite", "Velocity", "Script" };
+        static int current_component_type_idx = 0; // Index for the selected component type in the combo box
+        
+        // Display the combo box (dropdown menu)
+        if (ImGui::BeginCombo("##AddComponentCombo", component_types[current_component_type_idx])) {
+            for (int n = 0; n < IM_ARRAYSIZE(component_types); n++) {
+                const bool is_selected = (current_component_type_idx == n);
+                if (ImGui::Selectable(component_types[n], is_selected))
+                    current_component_type_idx = n;
+                if (is_selected)
+                    ImGui::SetItemDefaultFocus(); // Auto-scroll to selected item
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::PopItemWidth();
+
+        // Button to add the selected component
+        if (ImGui::Button("Add Selected Component", ImVec2(-1, 0))) { // Button takes full width
+            std::string selected_component_str = component_types[current_component_type_idx];
+            Signature entitySignature = entityManager->getSignature(selectedEntity); // Get current signature
+
+            if (selected_component_str == "Transform") {
+                if (!componentManager->hasComponent<TransformComponent>(selectedEntity)) {
+                    componentManager->addComponent(selectedEntity, TransformComponent{}); // Add with default values
+                    entitySignature.set(componentManager->getComponentType<TransformComponent>());
+                    std::cout << "Added TransformComponent to Entity " << selectedEntity << std::endl;
+                } else {
+                    std::cout << "Entity " << selectedEntity << " already has TransformComponent." << std::endl;
+                }
+            } else if (selected_component_str == "Sprite") {
+                if (!componentManager->hasComponent<SpriteComponent>(selectedEntity)) {
+                    componentManager->addComponent(selectedEntity, SpriteComponent{}); // Add with default values
+                    entitySignature.set(componentManager->getComponentType<SpriteComponent>());
+                    std::cout << "Added SpriteComponent to Entity " << selectedEntity << std::endl;
+                } else {
+                    std::cout << "Entity " << selectedEntity << " already has SpriteComponent." << std::endl;
+                }
+            } else if (selected_component_str == "Velocity") {
+                if (!componentManager->hasComponent<VelocityComponent>(selectedEntity)) {
+                    componentManager->addComponent(selectedEntity, VelocityComponent{}); // Add with default values
+                    entitySignature.set(componentManager->getComponentType<VelocityComponent>());
+                    std::cout << "Added VelocityComponent to Entity " << selectedEntity << std::endl;
+                } else {
+                    std::cout << "Entity " << selectedEntity << " already has VelocityComponent." << std::endl;
+                }
+            } else if (selected_component_str == "Script") {
+                if (!componentManager->hasComponent<ScriptComponent>(selectedEntity)) {
+                    componentManager->addComponent(selectedEntity, ScriptComponent{}); // Add with default values
+                    entitySignature.set(componentManager->getComponentType<ScriptComponent>());
+                    inspectorScriptPathBuffer[0] = '\0'; // Clear buffer for new component
+                    std::cout << "Added ScriptComponent to Entity " << selectedEntity << std::endl;
+                } else {
+                    std::cout << "Entity " << selectedEntity << " already has ScriptComponent." << std::endl;
+                }
+            }
+            // Add more else if blocks here for other component types as you create them
+
+            entityManager->setSignature(selectedEntity, entitySignature); // Update the entity\'s signature in the EntityManager
+            systemManager->entitySignatureChanged(selectedEntity, entitySignature); // Notify systems about the signature change
+        }
+        ImGui::Separator(); // Separator after the Add Component UI
+
+        // Display Transform Component
         if (componentManager->hasComponent<TransformComponent>(selectedEntity)) {
             if (ImGui::CollapsingHeader("Transform Component", ImGuiTreeNodeFlags_DefaultOpen)) {
                 auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
@@ -580,6 +647,8 @@ void DevModeScene::render() {
                 ImGui::DragFloat("Rotation##Transform", &transform.rotation, 1.0f, -360.0f, 360.0f);
             }
         } else ImGui::TextDisabled("No Transform Component");
+
+        // Display Sprite Component
         if (componentManager->hasComponent<SpriteComponent>(selectedEntity)) {
             if (ImGui::CollapsingHeader("Sprite Component", ImGuiTreeNodeFlags_DefaultOpen)) {
                 auto& sprite = componentManager->getComponent<SpriteComponent>(selectedEntity);
@@ -644,6 +713,15 @@ void DevModeScene::render() {
         ImGui::Separator();
 
         // --- Script Component UI ---
+        // Display VelocityComponent if it exists
+        if (componentManager->hasComponent<VelocityComponent>(selectedEntity)) {
+            if (ImGui::CollapsingHeader("Velocity Component", ImGuiTreeNodeFlags_DefaultOpen)) {
+                auto& vel = componentManager->getComponent<VelocityComponent>(selectedEntity);
+                ImGui::DragFloat("Velocity X", &vel.vx, 0.1f);
+                ImGui::DragFloat("Velocity Y", &vel.vy, 0.1f);
+            }
+        }
+
         if (componentManager->hasComponent<ScriptComponent>(selectedEntity)) {
             if (ImGui::CollapsingHeader("Script Component", ImGuiTreeNodeFlags_DefaultOpen)) {
                 auto& scriptComp = componentManager->getComponent<ScriptComponent>(selectedEntity);
@@ -679,6 +757,11 @@ void DevModeScene::render() {
             if (ImGui::Button("Add Script Component")) {
                 componentManager->addComponent(selectedEntity, ScriptComponent{});
                 inspectorScriptPathBuffer[0] = '\0'; // Clear buffer for new component
+                // Update signature after adding ScriptComponent
+                Signature sig = entityManager->getSignature(selectedEntity);
+                sig.set(componentManager->getComponentType<ScriptComponent>());
+                entityManager->setSignature(selectedEntity, sig);
+                systemManager->entitySignatureChanged(selectedEntity, sig);
             }
         }
 
@@ -729,7 +812,7 @@ void DevModeScene::render() {
             int currentItem = 0;
 
             for (const auto& [id, texture] : textures) {
-                std::cout << "[DEBUG] Texture in loop: " << id << std::endl;
+                // std::cout << "[DEBUG] Texture in loop: " << id << std::endl;
                 ImGui::PushID(id.c_str());
                 ImGui::BeginGroup();
                 ImGui::Image((ImTextureID)texture, ImVec2(itemWidth, itemWidth));
@@ -737,7 +820,7 @@ void DevModeScene::render() {
                 ImGui::EndGroup();
 
                 if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-                    std::cout << "[DEBUG] Begin drag for texture: " << id << std::endl;
+                    // std::cout << "[DEBUG] Begin drag for texture: " << id << std::endl;
                     ImGui::SetDragDropPayload("ASSET_TEXTURE_ID", id.c_str(), id.length() + 1);
                     ImGui::Image((ImTextureID)texture, ImVec2(itemWidth, itemWidth));
                     ImGui::Text("%s", id.c_str());

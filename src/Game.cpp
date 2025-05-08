@@ -72,6 +72,17 @@ bool Game::init(const char* title, int width, int height) {
 
     AssetManager::getInstance().init(renderer);
 
+    // Initialize InputManager mappings
+    InputManager& inputManager = InputManager::getInstance();
+    inputManager.mapAction("MoveUp", SDL_SCANCODE_W);
+    inputManager.mapAction("MoveDown", SDL_SCANCODE_S);
+    inputManager.mapAction("MoveLeft", SDL_SCANCODE_A);
+    inputManager.mapAction("MoveRight", SDL_SCANCODE_D);
+    // Add other game actions here, e.g.:
+    // inputManager.mapAction("Jump", SDL_SCANCODE_SPACE);
+    // inputManager.mapAction("Fire", SDL_SCANCODE_LCTRL);
+
+
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); (void)io;

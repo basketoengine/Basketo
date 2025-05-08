@@ -143,10 +143,16 @@ void ScriptSystem::registerEntityAPI() {
     });
 
     registerFunction("SetEntityVelocity", [this](Entity entity, float vx, float vy) {
-        if (componentManager->hasComponent<VelocityComponent>(entity)) {
+        if (!componentManager->hasComponent<VelocityComponent>(entity)) {
+            std::cerr << "[LUA ERROR] SetEntityVelocity: Entity " << entity << " does not have a VelocityComponent. Cannot set velocity." << std::endl;
+            return;
+        }
+        if (componentManager->hasComponent<VelocityComponent>(entity)) { // This check is now redundant due to the one above, but harmless
             auto& velocity = componentManager->getComponent<VelocityComponent>(entity);
             velocity.vx = vx;
             velocity.vy = vy;
+            // Optional: Log that velocity was set
+            // std::cout << "[LUA DEBUG] SetEntityVelocity: Entity " << entity << " velocity set to (" << vx << ", " << vy << ")" << std::endl;
         }
     });
 
