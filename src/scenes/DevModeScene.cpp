@@ -98,9 +98,24 @@ void DevModeScene::handleInput(SDL_Event& event) {
     }
 
     if (event.type == SDL_MOUSEWHEEL) {
-        if (event.wheel.y > 0) cameraZoom *= 1.1f;
-        if (event.wheel.y < 0) cameraZoom /= 1.1f;
-        cameraZoom = std::clamp(cameraZoom, 0.2f, 4.0f);
+        if (mouseInViewport && !io.WantCaptureMouse) { // Added check for mouseInViewport and !io.WantCaptureMouse
+            float oldCameraZoom = cameraZoom;
+            float prevZoomEventWorldMouseX = cameraX + (viewportMouseX / oldCameraZoom); // World coords under mouse before this zoom
+            float prevZoomEventWorldMouseY = cameraY + (viewportMouseY / oldCameraZoom); // World coords under mouse before this zoom
+
+            if (event.wheel.y > 0) cameraZoom *= 1.1f;
+            if (event.wheel.y < 0) cameraZoom /= 1.1f;
+            cameraZoom = std::clamp(cameraZoom, 0.2f, 4.0f);
+
+            if (cameraZoom != oldCameraZoom) { // If zoom actually changed
+                // Adjust camera position to keep the point under the mouse stationary
+                // The world point (prevZoomEventWorldMouseX, prevZoomEventWorldMouseY) should remain at (viewportMouseX, viewportMouseY) on screen.
+                // So, new cameraX = prevZoomEventWorldMouseX - (viewportMouseX / newCameraZoom)
+                // And new cameraY = prevZoomEventWorldMouseY - (viewportMouseY / newCameraZoom)
+                cameraX = prevZoomEventWorldMouseX - (viewportMouseX / cameraZoom);
+                cameraY = prevZoomEventWorldMouseY - (viewportMouseY / cameraZoom);
+            }
+        }
     }
 
     if (isPlaying || isPanning) {
