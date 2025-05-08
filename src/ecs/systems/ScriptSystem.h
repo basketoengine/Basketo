@@ -4,7 +4,7 @@
 #include <unordered_map>
 #include "../System.h"
 #include "../Entity.h"
-#include "sol/sol.hpp" // Changed to standard include
+#include <sol/sol.hpp> // Changed to use angle brackets
 
 // Forward declarations
 class EntityManager;

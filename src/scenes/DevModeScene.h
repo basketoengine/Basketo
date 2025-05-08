@@ -16,10 +16,19 @@
 #include "../ecs/SystemManager.h"
 #include "../ecs/components/TransformComponent.h"
 #include "../ecs/components/SpriteComponent.h"
+#include "../ecs/components/ScriptComponent.h" // Added
 #include "../ecs/systems/RenderSystem.h"
+#include "../ecs/systems/ScriptSystem.h"
+#include "../ecs/systems/MovementSystem.h" // Added
 #include "../AssetManager.h"
 #include "../ecs/Entity.h"
 #include "../../vendor/nlohmann/json.hpp"
+
+class EntityManager;
+class ComponentManager;
+class SystemManager; // Forward declaration
+class RenderSystem; // Forward declaration
+class ScriptSystem; // Added forward declaration
 
 const Entity NO_ENTITY_SELECTED = MAX_ENTITIES;
 const int HANDLE_SIZE = 8; // Size of the resize handles
@@ -55,9 +64,12 @@ private:
     float cameraTargetX = 0.0f, cameraTargetY = 0.0f;
 
     std::unique_ptr<EntityManager> entityManager;
-    std::unique_ptr<ComponentManager> componentManager;
+    std::unique_ptr<ComponentManager> componentManager; // Changed from ComponentManager*
+    std::shared_ptr<ScriptSystem> scriptSystem; // Added for access to ScriptSystem
     std::unique_ptr<SystemManager> systemManager;
     std::shared_ptr<RenderSystem> renderSystem;
+    std::shared_ptr<MovementSystem> movementSystem; // Added
+    AssetManager& assetManager; // Ensure this is a reference
 
     ImVec4 clear_color = ImVec4(0.18f, 0.18f, 0.18f, 1.00f); // Match background color
 
@@ -68,7 +80,8 @@ private:
     char spawnTextureId[256] = ""; // Increased buffer size
 
     Entity selectedEntity = NO_ENTITY_SELECTED;
-    char inspectorTextureIdBuffer[256] = ""; // Increased buffer size
+    char inspectorTextureIdBuffer[256] = "";
+    char inspectorScriptPathBuffer[256] = ""; // Added for ScriptComponent path
 
     // --- Save/Load ---
     char sceneFilePath[256] = "scene.json"; // Buffer for filename input

@@ -8,6 +8,15 @@ find_package(SDL2 REQUIRED)
 
 find_package(PkgConfig REQUIRED)
 
+# Provide a hint for Lua 5.4 include directory
+set(LUA_INCLUDE_DIR /usr/include/lua5.4 CACHE PATH "Path to Lua 5.4 include directory")
+
+# Find Lua development libraries (e.g., for Lua 5.4)
+find_package(Lua 5.4 REQUIRED)
+
+# Add Sol2 subdirectory
+add_subdirectory(vendor/sol2)
+
 pkg_check_modules(SDL2_IMAGE REQUIRED SDL2_image)
 include_directories(${SDL2_IMAGE_INCLUDE_DIRS})
 link_directories(${SDL2_IMAGE_LIBRARY_DIRS})
@@ -51,6 +60,7 @@ set(SOURCE_FILES
     vendor/imgui/backends/imgui_impl_sdl2.cpp
     vendor/imgui/backends/imgui_impl_sdlrenderer2.cpp
     vendor/libtinyfiledialogs/tinyfiledialogs.c
+    src/ecs/systems/ScriptSystem.cpp
 )
 
 # Define the physics test executable
@@ -63,13 +73,21 @@ add_executable(PhysicsTest
 # Define the main game executable
 add_executable(BasketoGameEngine ${SOURCE_FILES})
 
+# Add Lua include directory to BasketoGameEngine
+if(LUA_FOUND)
+    target_include_directories(BasketoGameEngine PUBLIC ${LUA_INCLUDE_DIR})
+endif()
+
 # Link libraries for the main game
 target_link_libraries(BasketoGameEngine
+    PRIVATE # Default for libraries unless their headers are in public API
     ${SDL2_LIBRARIES}
     ${SDL2_IMAGE_LIBRARIES}
     ${SDL2_TTF_LIBRARIES}
     ${SDL2_MIXER_LIBRARIES}
     ${OpenGL_LIBRARIES}
+    ${LUA_LIBRARIES} # Add Lua libraries
+    PUBLIC sol2 # sol2 is an interface library, its include dirs need to be propagated
 )
 
 # Link libraries for the physics test

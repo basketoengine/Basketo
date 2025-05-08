@@ -21,9 +21,8 @@ GameScene::GameScene(SDL_Renderer* ren) : renderer(ren), cameraZoom(1.0f), camer
     systemManager = std::make_unique<SystemManager>();
 
     componentManager->registerComponent<TransformComponent>();
-    componentManager->registerComponent<VelocityComponent>();
     componentManager->registerComponent<SpriteComponent>();
-    componentManager->registerComponent<RigidbodyComponent>();
+    componentManager->registerComponent<VelocityComponent>();
 
     renderSystem = systemManager->registerSystem<RenderSystem>();
     Signature renderSig;

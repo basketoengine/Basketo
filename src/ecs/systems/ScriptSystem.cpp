@@ -22,14 +22,13 @@ bool ScriptSystem::init() {
 }
 
 void ScriptSystem::update(float deltaTime) {
-    for (auto const& entity : entities) { // 'entities' is from the base System class
+    // Iterate over all entities that have a ScriptComponent
+    for (auto entity : entityManager->getActiveEntities()) {
         if (componentManager->hasComponent<ScriptComponent>(entity)) {
-            // Call the Lua update function for this entity
-            sol::protected_function_result result = callScriptFunction(entity, "update", entity, deltaTime);
-            if (!result.valid()) {
-                sol::error err = result;
-                std::cerr << "ScriptSystem Error: Failed to run update function for entity " << entity 
-                          << ": " << err.what() << std::endl;
+            auto& scriptComp = componentManager->getComponent<ScriptComponent>(entity);
+            // Ensure script is loaded (usually on Play or script load)
+            if (!scriptComp.scriptPath.empty()) {
+                callScriptFunction(entity, "update", entity, deltaTime);
             }
         }
     }
@@ -95,9 +94,7 @@ void ScriptSystem::registerCoreAPI() {
             if (keyName == "D") return InputManager::getInstance().isActionPressed("MoveRight");
             // Add more key mappings as needed
             return false; 
-        },
-        "isMouseButtonPressed", &InputManager::isMouseButtonPressed,
-        "getMousePosition", &InputManager::getMousePosition
+        }
     );
     // Make InputManager accessible globally via a function or a pre-created instance
     lua["Input"] = &InputManager::getInstance(); 

@@ -16,6 +16,12 @@
 
 #include "../ecs/components/TransformComponent.h"
 #include "../ecs/components/SpriteComponent.h"
+#include "../ecs/components/ScriptComponent.h"
+#include "../ecs/components/VelocityComponent.h"
+#include "../ecs/systems/RenderSystem.h"
+#include "../ecs/systems/ScriptSystem.h" // Added
+#include "../ecs/systems/MovementSystem.h" // Added
+#include "../AssetManager.h"
 
 // Helper function to get filename from path
 std::string getFilenameFromPath(const std::string& path) {
@@ -37,7 +43,11 @@ std::string getFilenameWithoutExtension(const std::string& filename) {
     }
 }
 
-DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win) : renderer(ren), window(win) {
+DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win) 
+    : renderer(ren), 
+      window(win),
+      assetManager(AssetManager::getInstance()) // Initialize assetManager reference
+{
     std::cout << "Entering Dev Mode Scene" << std::endl;
 
     entityManager = std::make_unique<EntityManager>();
@@ -46,12 +56,25 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win) : renderer(ren), 
 
     componentManager->registerComponent<TransformComponent>();
     componentManager->registerComponent<SpriteComponent>();
+    componentManager->registerComponent<VelocityComponent>();
+    componentManager->registerComponent<ScriptComponent>(); // Ensure ScriptComponent is also registered
 
     renderSystem = systemManager->registerSystem<RenderSystem>();
     Signature renderSig;
     renderSig.set(componentManager->getComponentType<TransformComponent>());
     renderSig.set(componentManager->getComponentType<SpriteComponent>());
     systemManager->setSignature<RenderSystem>(renderSig);
+
+    // Register ScriptSystem
+    scriptSystem = systemManager->registerSystem<ScriptSystem>(entityManager.get(), componentManager.get());
+    scriptSystem->init(); // Initialize Lua state and core API
+
+    // Register MovementSystem
+    movementSystem = systemManager->registerSystem<MovementSystem>();
+    Signature moveSig;
+    moveSig.set(componentManager->getComponentType<TransformComponent>());
+    moveSig.set(componentManager->getComponentType<VelocityComponent>());
+    systemManager->setSignature<MovementSystem>(moveSig);
 
     AssetManager& assets = AssetManager::getInstance();
     assets.loadTexture("logo", "../assets/Image/logo.png");
@@ -301,6 +324,14 @@ void DevModeScene::handleInput(SDL_Event& event) {
 
 void DevModeScene::update(float deltaTime) {
     if (isPlaying) {
+        // Update ScriptSystem
+        if (scriptSystem) {
+            scriptSystem->update(deltaTime);
+        }
+        // Update MovementSystem
+        if (movementSystem) {
+            movementSystem->update(componentManager.get(), deltaTime);
+        }
     }
 }
 
@@ -464,8 +495,29 @@ void DevModeScene::render() {
     ImGui::SameLine(); if (ImGui::Button("Import...")) {}
     ImGui::SameLine(); if (ImGui::Button("Export...")) {}
     ImGui::SameLine(); ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical); ImGui::SameLine();
-    if (isPlaying) { if (ImGui::Button("Stop")) { isPlaying = false; loadScene(sceneFilePath); } }
-    else { if (ImGui::Button("Play")) { isPlaying = true; selectedEntity = NO_ENTITY_SELECTED; } }
+    if (isPlaying) {
+        if (ImGui::Button("Stop")) {
+            isPlaying = false;
+            // Script re-initialization will be handled by the next "Play" press
+            // No need to iterate and set a non-existent 'initialized' flag
+            loadScene(sceneFilePath); // Reload scene to reset state
+        }
+    } else {
+        if (ImGui::Button("Play")) {
+            isPlaying = true;
+            selectedEntity = NO_ENTITY_SELECTED;
+            // Initialize scripts for entities that have them
+            for (auto entity : entityManager->getActiveEntities()) {
+                if (componentManager->hasComponent<ScriptComponent>(entity)) {
+                    auto& scriptComp = componentManager->getComponent<ScriptComponent>(entity);
+                    if (!scriptComp.scriptPath.empty()) {
+                        scriptSystem->loadScript(entity, scriptComp.scriptPath); // loadScript now also calls init
+                        // scriptComp.initialized = true; // Removed, 'initialized' no longer a member
+                    }
+                }
+            }
+        }
+    }
     ImGui::SameLine(); ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical); ImGui::SameLine();
     ImGui::BeginDisabled(isPlaying);
     ImGui::Checkbox("Snap", &snapToGrid); ImGui::SameLine(); ImGui::PushItemWidth(60); ImGui::DragFloat("Grid", &gridSize, 1.0f, 1.0f, 256.0f, "%.0f"); ImGui::PopItemWidth();
@@ -589,6 +641,47 @@ void DevModeScene::render() {
                 }
             }
         } else ImGui::TextDisabled("No Sprite Component");
+        ImGui::Separator();
+
+        // --- Script Component UI ---
+        if (componentManager->hasComponent<ScriptComponent>(selectedEntity)) {
+            if (ImGui::CollapsingHeader("Script Component", ImGuiTreeNodeFlags_DefaultOpen)) {
+                auto& scriptComp = componentManager->getComponent<ScriptComponent>(selectedEntity);
+                if (inspectorScriptPathBuffer[0] == '\0' || scriptComp.scriptPath != inspectorScriptPathBuffer) {
+                    strncpy(inspectorScriptPathBuffer, scriptComp.scriptPath.c_str(), IM_ARRAYSIZE(inspectorScriptPathBuffer) - 1);
+                    inspectorScriptPathBuffer[IM_ARRAYSIZE(inspectorScriptPathBuffer) - 1] = '\0';
+                }
+                ImGui::Text("Script Path:");
+                if (ImGui::InputText("##ScriptPath", inspectorScriptPathBuffer, IM_ARRAYSIZE(inspectorScriptPathBuffer), ImGuiInputTextFlags_EnterReturnsTrue)) {
+                    scriptComp.scriptPath = inspectorScriptPathBuffer;
+                    // No need to immediately reload/reinit in editor, will be handled on Play or explicit reload
+                }
+                if (ImGui::Button("Browse...##ScriptPath")) {
+                    const char* filterPatterns[] = { "*.lua" };
+                    const char* filePath = tinyfd_openFileDialog("Select Lua Script", "../assets/scripts/", 1, filterPatterns, "Lua Scripts", 0);
+                    if (filePath != NULL) {
+                        std::filesystem::path selectedPath = filePath;
+                        // Make path relative to executable or a known assets directory if possible
+                        // For now, storing the path as selected, assuming it's accessible.
+                        // A more robust solution would be to copy to project assets and use relative path.
+                        scriptComp.scriptPath = selectedPath.string(); 
+                        strncpy(inspectorScriptPathBuffer, scriptComp.scriptPath.c_str(), IM_ARRAYSIZE(inspectorScriptPathBuffer) - 1);
+                        inspectorScriptPathBuffer[IM_ARRAYSIZE(inspectorScriptPathBuffer) - 1] = '\0';
+                    }
+                }
+                // ImGui::Text("Initialized: %s", scriptComp.initialized ? "true" : "false"); // Removed, 'initialized' no longer a member
+                 if (ImGui::Button("Remove Script Component")) {
+                    componentManager->removeComponent<ScriptComponent>(selectedEntity);
+                    inspectorScriptPathBuffer[0] = '\0';
+                }
+            }
+        } else {
+            if (ImGui::Button("Add Script Component")) {
+                componentManager->addComponent(selectedEntity, ScriptComponent{});
+                inspectorScriptPathBuffer[0] = '\0'; // Clear buffer for new component
+            }
+        }
+
     } else ImGui::Text("No entity selected.");
     ImGui::End();
 
@@ -742,6 +835,9 @@ void DevModeScene::saveScene(const std::string& filepath) {
         if (componentManager->hasComponent<SpriteComponent>(entity)) {
             entityJson["components"]["SpriteComponent"] = componentManager->getComponent<SpriteComponent>(entity);
         }
+        if (componentManager->hasComponent<ScriptComponent>(entity)) { // Added for saving
+            entityJson["components"]["ScriptComponent"] = componentManager->getComponent<ScriptComponent>(entity); // Should use to_json
+        }
 
         if (!entityJson["components"].empty()) {
             sceneJson["entities"].push_back(entityJson);
@@ -843,6 +939,13 @@ void DevModeScene::loadScene(const std::string& filepath) {
                     }
                     componentManager->addComponent(newEntity, comp);
                     entitySignature.set(componentManager->getComponentType<SpriteComponent>());
+                } else if (componentType == "ScriptComponent") { // Added for loading
+                    ScriptComponent comp;
+                    // from_json is defined in ScriptComponent.h and should be found by ADL
+                    from_json(componentData, comp); 
+                    // comp.initialized = false; // Removed, 'initialized' no longer a member
+                    componentManager->addComponent(newEntity, comp);
+                    entitySignature.set(componentManager->getComponentType<ScriptComponent>());
                 } else {
                     std::cerr << "Warning: Unknown component type '" << componentType << "' encountered during loading." << std::endl;
                 }
