@@ -2,38 +2,37 @@
 
 #include "../Scene.h"
 #include <SDL2/SDL.h>
-#include <SDL2/SDL_rect.h> // Ensure SDL_Rect is included
+#include <SDL2/SDL_rect.h> 
 #include "imgui.h"
 #include <memory>
 #include <string>
 #include <fstream>
 #include <cmath>
 #include <vector>
-#include <utility> // For std::pair
+#include <utility>
 
 #include "../ecs/EntityManager.h"
 #include "../ecs/ComponentManager.h"
 #include "../ecs/SystemManager.h"
 #include "../ecs/components/TransformComponent.h"
 #include "../ecs/components/SpriteComponent.h"
-#include "../ecs/components/ScriptComponent.h" // Added
+#include "../ecs/components/ScriptComponent.h" 
 #include "../ecs/systems/RenderSystem.h"
 #include "../ecs/systems/ScriptSystem.h"
-#include "../ecs/systems/MovementSystem.h" // Added
+#include "../ecs/systems/MovementSystem.h"
 #include "../AssetManager.h"
 #include "../ecs/Entity.h"
 #include "../../vendor/nlohmann/json.hpp"
 
 class EntityManager;
 class ComponentManager;
-class SystemManager; // Forward declaration
-class RenderSystem; // Forward declaration
-class ScriptSystem; // Added forward declaration
+class SystemManager; 
+class RenderSystem; 
+class ScriptSystem;
 
 const Entity NO_ENTITY_SELECTED = MAX_ENTITIES;
-const int HANDLE_SIZE = 8; // Size of the resize handles
+const int HANDLE_SIZE = 8; 
 
-// Enum to identify which handle is being interacted with
 enum class ResizeHandle {
     NONE,
     TOP_LEFT,
@@ -48,14 +47,14 @@ public:
     DevModeScene(SDL_Renderer* ren, SDL_Window* win);
     ~DevModeScene() override;
 
-    void handleInput(SDL_Event& event) override; // Modify to accept event
+    void handleInput(SDL_Event& event) override; 
     void update(float deltaTime) override;
     void render() override;
 
 private:
     SDL_Renderer* renderer;
     SDL_Window* window;
-    SDL_Rect gameViewport; // Add member to store game viewport dimensions
+    SDL_Rect gameViewport; 
 
     // --- Camera/View Offset ---
     float cameraX = 0.0f;
@@ -64,37 +63,37 @@ private:
     float cameraTargetX = 0.0f, cameraTargetY = 0.0f;
 
     std::unique_ptr<EntityManager> entityManager;
-    std::unique_ptr<ComponentManager> componentManager; // Changed from ComponentManager*
-    std::shared_ptr<ScriptSystem> scriptSystem; // Added for access to ScriptSystem
+    std::unique_ptr<ComponentManager> componentManager; 
+    std::shared_ptr<ScriptSystem> scriptSystem; 
     std::unique_ptr<SystemManager> systemManager;
     std::shared_ptr<RenderSystem> renderSystem;
-    std::shared_ptr<MovementSystem> movementSystem; // Added
-    AssetManager& assetManager; // Ensure this is a reference
+    std::shared_ptr<MovementSystem> movementSystem;
+    AssetManager& assetManager;
 
-    ImVec4 clear_color = ImVec4(0.18f, 0.18f, 0.18f, 1.00f); // Match background color
+    ImVec4 clear_color = ImVec4(0.18f, 0.18f, 0.18f, 1.00f); 
 
     float spawnPosX = 100.0f;
     float spawnPosY = 100.0f;
     float spawnSizeW = 32.0f;
     float spawnSizeH = 32.0f;
-    char spawnTextureId[256] = ""; // Increased buffer size
+    char spawnTextureId[256] = "";
 
     Entity selectedEntity = NO_ENTITY_SELECTED;
     char inspectorTextureIdBuffer[256] = "";
-    char inspectorScriptPathBuffer[256] = ""; // Added for ScriptComponent path
+    char inspectorScriptPathBuffer[256] = ""; 
 
     // --- Save/Load ---
-    char sceneFilePath[256] = "scene.json"; // Buffer for filename input
+    char sceneFilePath[256] = "scene.json";
 
     // --- Viewport Interaction State ---
     bool isDragging = false;
-    float dragStartMouseX = 0.0f; // Use float for world coords
-    float dragStartMouseY = 0.0f; // Use float for world coords
+    float dragStartMouseX = 0.0f; 
+    float dragStartMouseY = 0.0f; 
     float dragStartEntityX = 0.0f;
     float dragStartEntityY = 0.0f;
-    float gridSize = 32.0f; // Grid size for snapping
-    bool snapToGrid = true; // Toggle for snapping
-    bool showGrid = true; // Added showGrid member variable
+    float gridSize = 32.0f; 
+    bool snapToGrid = true; 
+    bool showGrid = true; 
 
     // --- Play Mode State ---
     bool isPlaying = false;
@@ -108,9 +107,9 @@ private:
     void saveScene(const std::string& filepath);
     void loadScene(const std::string& filepath);
 
-    bool isMouseOverEntity(float worldMouseX, float worldMouseY, Entity entity); // Use float
-    // Helper function to get handle rectangles
+    bool isMouseOverEntity(float worldMouseX, float worldMouseY, Entity entity); 
+    
     std::vector<std::pair<ResizeHandle, SDL_Rect>> getResizeHandles(const TransformComponent& transform);
-    // Helper function to check mouse over handles
+    
     ResizeHandle getHandleAtPosition(float worldMouseX, float worldMouseY, const TransformComponent& transform); // Use float
 };

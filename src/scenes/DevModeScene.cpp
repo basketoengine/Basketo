@@ -23,8 +23,8 @@
 #include "../ecs/systems/ScriptSystem.h"
 #include "../ecs/systems/MovementSystem.h"
 #include "../AssetManager.h"
-#include "../utils/FileUtils.h" // Add this include
-#include "../utils/EditorHelpers.h" // Ensure this is also included if not already
+#include "../utils/FileUtils.h" 
+#include "../utils/EditorHelpers.h" 
 
 DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win) 
     : renderer(ren), 
