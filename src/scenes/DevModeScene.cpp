@@ -13,40 +13,23 @@
 #include "imgui_internal.h"
 #include <SDL2/SDL_rect.h>
 #include <utility>
+#include <algorithm>
 
 #include "../ecs/components/TransformComponent.h"
 #include "../ecs/components/SpriteComponent.h"
 #include "../ecs/components/ScriptComponent.h"
 #include "../ecs/components/VelocityComponent.h"
 #include "../ecs/systems/RenderSystem.h"
-#include "../ecs/systems/ScriptSystem.h" // Added
-#include "../ecs/systems/MovementSystem.h" // Added
+#include "../ecs/systems/ScriptSystem.h"
+#include "../ecs/systems/MovementSystem.h"
 #include "../AssetManager.h"
-
-// Helper function to get filename from path
-std::string getFilenameFromPath(const std::string& path) {
-    try {
-        return std::filesystem::path(path).filename().string();
-    } catch (const std::exception& e) {
-        std::cerr << "Error getting filename: " << e.what() << std::endl;
-        return "";
-    }
-}
-
-// Helper function to get filename without extension
-std::string getFilenameWithoutExtension(const std::string& filename) {
-    try {
-        return std::filesystem::path(filename).stem().string();
-    } catch (const std::exception& e) {
-        std::cerr << "Error getting stem: " << e.what() << std::endl;
-        return "";
-    }
-}
+#include "../utils/FileUtils.h" // Add this include
+#include "../utils/EditorHelpers.h" // Ensure this is also included if not already
 
 DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win) 
     : renderer(ren), 
       window(win),
-      assetManager(AssetManager::getInstance()) // Initialize assetManager reference
+      assetManager(AssetManager::getInstance()) 
 {
     std::cout << "Entering Dev Mode Scene" << std::endl;
 
@@ -57,7 +40,7 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     componentManager->registerComponent<TransformComponent>();
     componentManager->registerComponent<SpriteComponent>();
     componentManager->registerComponent<VelocityComponent>();
-    componentManager->registerComponent<ScriptComponent>(); // Ensure ScriptComponent is also registered
+    componentManager->registerComponent<ScriptComponent>(); 
 
     renderSystem = systemManager->registerSystem<RenderSystem>();
     Signature renderSig;
@@ -65,11 +48,9 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     renderSig.set(componentManager->getComponentType<SpriteComponent>());
     systemManager->setSignature<RenderSystem>(renderSig);
 
-    // Register ScriptSystem
     scriptSystem = systemManager->registerSystem<ScriptSystem>(entityManager.get(), componentManager.get());
-    scriptSystem->init(); // Initialize Lua state and core API
+    scriptSystem->init(); 
 
-    // Register MovementSystem
     movementSystem = systemManager->registerSystem<MovementSystem>();
     Signature moveSig;
     moveSig.set(componentManager->getComponentType<TransformComponent>());
@@ -99,7 +80,6 @@ void DevModeScene::handleInput(SDL_Event& event) {
     float viewportMouseX = static_cast<float>(rawMouseX - gameViewport.x);
     float viewportMouseY = static_cast<float>(rawMouseY - gameViewport.y);
 
-    // FIX: account for zoom in mouse-to-world conversion
     float worldMouseX = cameraX + (viewportMouseX / cameraZoom);
     float worldMouseY = cameraY + (viewportMouseY / cameraZoom);
 
@@ -121,20 +101,16 @@ void DevModeScene::handleInput(SDL_Event& event) {
     }
 
     if (event.type == SDL_MOUSEWHEEL) {
-        if (mouseInViewport && !io.WantCaptureMouse) { // Added check for mouseInViewport and !io.WantCaptureMouse
+        if (mouseInViewport && !io.WantCaptureMouse) {
             float oldCameraZoom = cameraZoom;
-            float prevZoomEventWorldMouseX = cameraX + (viewportMouseX / oldCameraZoom); // World coords under mouse before this zoom
-            float prevZoomEventWorldMouseY = cameraY + (viewportMouseY / oldCameraZoom); // World coords under mouse before this zoom
+            float prevZoomEventWorldMouseX = cameraX + (viewportMouseX / oldCameraZoom); 
+            float prevZoomEventWorldMouseY = cameraY + (viewportMouseY / oldCameraZoom);
 
             if (event.wheel.y > 0) cameraZoom *= 1.1f;
             if (event.wheel.y < 0) cameraZoom /= 1.1f;
             cameraZoom = std::clamp(cameraZoom, 0.2f, 4.0f);
 
-            if (cameraZoom != oldCameraZoom) { // If zoom actually changed
-                // Adjust camera position to keep the point under the mouse stationary
-                // The world point (prevZoomEventWorldMouseX, prevZoomEventWorldMouseY) should remain at (viewportMouseX, viewportMouseY) on screen.
-                // So, new cameraX = prevZoomEventWorldMouseX - (viewportMouseX / newCameraZoom)
-                // And new cameraY = prevZoomEventWorldMouseY - (viewportMouseY / newCameraZoom)
+            if (cameraZoom != oldCameraZoom) {
                 cameraX = prevZoomEventWorldMouseX - (viewportMouseX / cameraZoom);
                 cameraY = prevZoomEventWorldMouseY - (viewportMouseY / cameraZoom);
             }
@@ -152,58 +128,77 @@ void DevModeScene::handleInput(SDL_Event& event) {
         switch (event.type) {
             case SDL_MOUSEBUTTONDOWN:
                 if (event.button.button == SDL_BUTTON_LEFT) {
-                    bool clickedOnExistingSelection = false;
+                    ResizeHandle handleClicked = ResizeHandle::NONE;
                     if (selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<TransformComponent>(selectedEntity)) {
-                        auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
-                        activeHandle = getHandleAtPosition(worldMouseX, worldMouseY, transform);
-
-                        if (activeHandle != ResizeHandle::NONE) {
-                            isResizing = true;
-                            isDragging = false;
-                            dragStartMouseX = worldMouseX;
-                            dragStartMouseY = worldMouseY;
-                            dragStartEntityX = transform.x;
-                            dragStartEntityY = transform.y;
-                            dragStartWidth = transform.width;
-                            dragStartHeight = transform.height;
-                            clickedOnExistingSelection = true;
-                        } else if (isMouseOverEntity(worldMouseX, worldMouseY, selectedEntity)) {
-                            isDragging = true;
-                            isResizing = false;
-                            dragStartMouseX = worldMouseX;
-                            dragStartMouseY = worldMouseY;
-                            dragStartEntityX = transform.x;
-                            dragStartEntityY = transform.y;
-                            clickedOnExistingSelection = true;
-                        }
+                        handleClicked = getHandleAtPosition(worldMouseX, worldMouseY, componentManager->getComponent<TransformComponent>(selectedEntity));
                     }
 
-                    if (!clickedOnExistingSelection) {
+                    if (handleClicked != ResizeHandle::NONE) {
+                        isResizing = true;
                         isDragging = false;
+                        auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
+                        dragStartMouseX = worldMouseX;
+                        dragStartMouseY = worldMouseY;
+                        dragStartEntityX = transform.x;
+                        dragStartEntityY = transform.y;
+                        dragStartWidth = transform.width;
+                        dragStartHeight = transform.height;
+                        activeHandle = handleClicked;
+                    } else {
                         isResizing = false;
                         activeHandle = ResizeHandle::NONE;
-                        Entity clickedEntity = NO_ENTITY_SELECTED;
+
+                        std::vector<Entity> potentialSelections;
                         const auto& activeEntities = entityManager->getActiveEntities();
-                        for (auto it = activeEntities.rbegin(); it != activeEntities.rend(); ++it) {
-                            Entity entity = *it;
-                            if (isMouseOverEntity(worldMouseX, worldMouseY, entity)) {
-                                clickedEntity = entity;
-                                break;
+                        for (Entity entity : activeEntities) {
+                            if (componentManager->hasComponent<TransformComponent>(entity)) {
+                                if (isMouseOverEntity(worldMouseX, worldMouseY, entity)) {
+                                    potentialSelections.push_back(entity);
+                                }
                             }
                         }
 
-                        if (selectedEntity != clickedEntity) {
-                            selectedEntity = clickedEntity;
-                            inspectorTextureIdBuffer[0] = '\0';
+                        Entity topMostCandidate = NO_ENTITY_SELECTED;
+                        if (!potentialSelections.empty()) {
+                            if (potentialSelections.size() == 1) {
+                                topMostCandidate = potentialSelections[0];
+                            } else {
+                                std::sort(potentialSelections.begin(), potentialSelections.end(),
+                                    [&](Entity a, Entity b) {
+                                        auto& transformA = componentManager->getComponent<TransformComponent>(a);
+                                        auto& transformB = componentManager->getComponent<TransformComponent>(b);
+                                        if (transformA.z_index != transformB.z_index) {
+                                            return transformA.z_index > transformB.z_index;
+                                        }
+                                        float areaA = transformA.width * transformA.height;
+                                        float areaB = transformB.width * transformB.height;
+                                        if (areaA != areaB) {
+                                            return areaA < areaB;
+                                        }
+                                        return a < b;
+                                    }
+                                );
+                                topMostCandidate = potentialSelections[0];
+                            }
                         }
 
-                        if (selectedEntity != NO_ENTITY_SELECTED && isMouseOverEntity(worldMouseX, worldMouseY, selectedEntity)) {
+                        if (topMostCandidate != NO_ENTITY_SELECTED) {
+                            if (selectedEntity != topMostCandidate) {
+                                selectedEntity = topMostCandidate;
+                                inspectorTextureIdBuffer[0] = '\0';
+                                inspectorScriptPathBuffer[0] = '\0';
+                            }
                             isDragging = true;
-                            auto& newTransform = componentManager->getComponent<TransformComponent>(selectedEntity);
+                            auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
                             dragStartMouseX = worldMouseX;
                             dragStartMouseY = worldMouseY;
-                            dragStartEntityX = newTransform.x;
-                            dragStartEntityY = newTransform.y;
+                            dragStartEntityX = transform.x;
+                            dragStartEntityY = transform.y;
+                        } else {
+                            selectedEntity = NO_ENTITY_SELECTED;
+                            inspectorTextureIdBuffer[0] = '\0';
+                            inspectorScriptPathBuffer[0] = '\0';
+                            isDragging = false;
                         }
                     }
                 }
@@ -324,11 +319,9 @@ void DevModeScene::handleInput(SDL_Event& event) {
 
 void DevModeScene::update(float deltaTime) {
     if (isPlaying) {
-        // Update ScriptSystem
         if (scriptSystem) {
             scriptSystem->update(deltaTime);
         }
-        // Update MovementSystem
         if (movementSystem) {
             movementSystem->update(componentManager.get(), deltaTime);
         }
@@ -440,9 +433,30 @@ void DevModeScene::render() {
             }
         }
 
-        // Render all entities with manual transform
-        for (auto entity : entityManager->getActiveEntities()) {
-            if (!componentManager->hasComponent<TransformComponent>(entity) || !componentManager->hasComponent<SpriteComponent>(entity)) continue;
+        std::vector<Entity> entitiesToRender;
+        if (entityManager) { 
+            for (auto entity : entityManager->getActiveEntities()) {
+                if (componentManager && componentManager->hasComponent<TransformComponent>(entity) && componentManager->hasComponent<SpriteComponent>(entity)) {
+                    entitiesToRender.push_back(entity);
+                }
+            }
+        }
+
+        // Sort entities by z_index (assuming z_index exists in TransformComponent)
+        // This sort will be fully effective once TransformComponent.h has z_index
+        std::sort(entitiesToRender.begin(), entitiesToRender.end(),
+            [&](Entity a, Entity b) {
+                // This check should ideally not be needed if entitiesToRender only contains valid entities with TransformComponent
+                if (!componentManager || !componentManager->hasComponent<TransformComponent>(a) || !componentManager->hasComponent<TransformComponent>(b)) {
+                    return false; 
+                }
+                auto& transformA = componentManager->getComponent<TransformComponent>(a);
+                auto& transformB = componentManager->getComponent<TransformComponent>(b);
+                return transformA.z_index < transformB.z_index; // Enabled Z-index sorting
+            }
+        );
+        
+        for (auto entity : entitiesToRender) {
             auto& transform = componentManager->getComponent<TransformComponent>(entity);
             auto& sprite = componentManager->getComponent<SpriteComponent>(entity);
             SDL_Texture* texture = AssetManager::getInstance().getTexture(sprite.textureId);
@@ -457,7 +471,6 @@ void DevModeScene::render() {
             SDL_RenderCopyEx(renderer, texture, srcRectPtr, &destRect, transform.rotation, &center, SDL_FLIP_NONE);
         }
 
-        // Draw selection rectangle and handles with zoom
         if (!isPlaying && selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<TransformComponent>(selectedEntity)) {
             auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
             SDL_Rect selectionRect = {
@@ -498,21 +511,17 @@ void DevModeScene::render() {
     if (isPlaying) {
         if (ImGui::Button("Stop")) {
             isPlaying = false;
-            // Script re-initialization will be handled by the next "Play" press
-            // No need to iterate and set a non-existent 'initialized' flag
-            loadScene(sceneFilePath); // Reload scene to reset state
+            loadScene(sceneFilePath);
         }
     } else {
         if (ImGui::Button("Play")) {
             isPlaying = true;
             selectedEntity = NO_ENTITY_SELECTED;
-            // Initialize scripts for entities that have them
             for (auto entity : entityManager->getActiveEntities()) {
                 if (componentManager->hasComponent<ScriptComponent>(entity)) {
                     auto& scriptComp = componentManager->getComponent<ScriptComponent>(entity);
                     if (!scriptComp.scriptPath.empty()) {
-                        scriptSystem->loadScript(entity, scriptComp.scriptPath); // loadScript now also calls init
-                        // scriptComp.initialized = true; // Removed, 'initialized' no longer a member
+                        scriptSystem->loadScript(entity, scriptComp.scriptPath);
                     }
                 }
             }
@@ -556,11 +565,13 @@ void DevModeScene::render() {
         if (ImGui::Selectable(label.c_str(), selectedEntity == entity)) {
             selectedEntity = entity;
             inspectorTextureIdBuffer[0] = '\0';
+            inspectorScriptPathBuffer[0] = '\0'; // Added this line as it was missing and likely intended
         }
     }
     if (ImGui::Button("Deselect")) {
         selectedEntity = NO_ENTITY_SELECTED;
         inspectorTextureIdBuffer[0] = '\0';
+        inspectorScriptPathBuffer[0] = '\0'; // Added this line as it was missing and likely intended
     }
     ImGui::End();
 
@@ -572,11 +583,10 @@ void DevModeScene::render() {
         ImGui::Separator();
 
         // --- ADD COMPONENT UI ---
-        ImGui::PushItemWidth(-1); // Make the combo box use full width
-        // List of component types that can be added. Expand this as you create more components.
+        ImGui::PushItemWidth(-1);
         const char* component_types[] = { "Transform", "Sprite", "Velocity", "Script" };
-        static int current_component_type_idx = 0; // Index for the selected component type in the combo box
-        
+        static int current_component_type_idx = 0; 
+
         // Display the combo box (dropdown menu)
         if (ImGui::BeginCombo("##AddComponentCombo", component_types[current_component_type_idx])) {
             for (int n = 0; n < IM_ARRAYSIZE(component_types); n++) {
@@ -584,20 +594,19 @@ void DevModeScene::render() {
                 if (ImGui::Selectable(component_types[n], is_selected))
                     current_component_type_idx = n;
                 if (is_selected)
-                    ImGui::SetItemDefaultFocus(); // Auto-scroll to selected item
+                    ImGui::SetItemDefaultFocus();
             }
             ImGui::EndCombo();
         }
         ImGui::PopItemWidth();
 
-        // Button to add the selected component
-        if (ImGui::Button("Add Selected Component", ImVec2(-1, 0))) { // Button takes full width
+        if (ImGui::Button("Add Selected Component", ImVec2(-1, 0))) {
             std::string selected_component_str = component_types[current_component_type_idx];
-            Signature entitySignature = entityManager->getSignature(selectedEntity); // Get current signature
+            Signature entitySignature = entityManager->getSignature(selectedEntity);
 
             if (selected_component_str == "Transform") {
                 if (!componentManager->hasComponent<TransformComponent>(selectedEntity)) {
-                    componentManager->addComponent(selectedEntity, TransformComponent{}); // Add with default values
+                    componentManager->addComponent(selectedEntity, TransformComponent{});
                     entitySignature.set(componentManager->getComponentType<TransformComponent>());
                     std::cout << "Added TransformComponent to Entity " << selectedEntity << std::endl;
                 } else {
@@ -605,7 +614,7 @@ void DevModeScene::render() {
                 }
             } else if (selected_component_str == "Sprite") {
                 if (!componentManager->hasComponent<SpriteComponent>(selectedEntity)) {
-                    componentManager->addComponent(selectedEntity, SpriteComponent{}); // Add with default values
+                    componentManager->addComponent(selectedEntity, SpriteComponent{});
                     entitySignature.set(componentManager->getComponentType<SpriteComponent>());
                     std::cout << "Added SpriteComponent to Entity " << selectedEntity << std::endl;
                 } else {
@@ -613,28 +622,43 @@ void DevModeScene::render() {
                 }
             } else if (selected_component_str == "Velocity") {
                 if (!componentManager->hasComponent<VelocityComponent>(selectedEntity)) {
-                    componentManager->addComponent(selectedEntity, VelocityComponent{}); // Add with default values
+                    componentManager->addComponent(selectedEntity, VelocityComponent{}); 
                     entitySignature.set(componentManager->getComponentType<VelocityComponent>());
                     std::cout << "Added VelocityComponent to Entity " << selectedEntity << std::endl;
                 } else {
                     std::cout << "Entity " << selectedEntity << " already has VelocityComponent." << std::endl;
                 }
             } else if (selected_component_str == "Script") {
-                if (!componentManager->hasComponent<ScriptComponent>(selectedEntity)) {
-                    componentManager->addComponent(selectedEntity, ScriptComponent{}); // Add with default values
+                if (addComponentIfMissing<ScriptComponent>(componentManager.get(), selectedEntity)) {
                     entitySignature.set(componentManager->getComponentType<ScriptComponent>());
-                    inspectorScriptPathBuffer[0] = '\0'; // Clear buffer for new component
+                    inspectorScriptPathBuffer[0] = '\0';
                     std::cout << "Added ScriptComponent to Entity " << selectedEntity << std::endl;
                 } else {
                     std::cout << "Entity " << selectedEntity << " already has ScriptComponent." << std::endl;
                 }
             }
-            // Add more else if blocks here for other component types as you create them
 
-            entityManager->setSignature(selectedEntity, entitySignature); // Update the entity\'s signature in the EntityManager
-            systemManager->entitySignatureChanged(selectedEntity, entitySignature); // Notify systems about the signature change
+            entityManager->setSignature(selectedEntity, entitySignature);
+            systemManager->entitySignatureChanged(selectedEntity, entitySignature);
         }
-        ImGui::Separator(); // Separator after the Add Component UI
+        ImGui::Separator();
+
+        // --- DELETE ENTITY BUTTON ---
+        if (selectedEntity != NO_ENTITY_SELECTED) {
+            ImGui::Spacing();
+            if (ImGui::Button("Delete Entity", ImVec2(-1, 0))) {
+                Entity entityToDelete = selectedEntity;
+                selectedEntity = NO_ENTITY_SELECTED;
+                inspectorTextureIdBuffer[0] = '\0';
+                inspectorScriptPathBuffer[0] = '\0';
+
+                entityManager->destroyEntity(entityToDelete);
+                
+                std::cout << "Deleted Entity " << entityToDelete << std::endl;
+            }
+            ImGui::Separator();
+        }
+
 
         // Display Transform Component
         if (componentManager->hasComponent<TransformComponent>(selectedEntity)) {
@@ -645,6 +669,7 @@ void DevModeScene::render() {
                 ImGui::DragFloat("Width##Transform", &transform.width, 1.0f, HANDLE_SIZE);
                 ImGui::DragFloat("Height##Transform", &transform.height, 1.0f, HANDLE_SIZE);
                 ImGui::DragFloat("Rotation##Transform", &transform.rotation, 1.0f, -360.0f, 360.0f);
+                ImGui::DragInt("Z-Index##Transform", &transform.z_index);
             }
         } else ImGui::TextDisabled("No Transform Component");
 
@@ -713,7 +738,6 @@ void DevModeScene::render() {
         ImGui::Separator();
 
         // --- Script Component UI ---
-        // Display VelocityComponent if it exists
         if (componentManager->hasComponent<VelocityComponent>(selectedEntity)) {
             if (ImGui::CollapsingHeader("Velocity Component", ImGuiTreeNodeFlags_DefaultOpen)) {
                 auto& vel = componentManager->getComponent<VelocityComponent>(selectedEntity);
@@ -726,28 +750,22 @@ void DevModeScene::render() {
             if (ImGui::CollapsingHeader("Script Component", ImGuiTreeNodeFlags_DefaultOpen)) {
                 auto& scriptComp = componentManager->getComponent<ScriptComponent>(selectedEntity);
                 if (inspectorScriptPathBuffer[0] == '\0' || scriptComp.scriptPath != inspectorScriptPathBuffer) {
-                    strncpy(inspectorScriptPathBuffer, scriptComp.scriptPath.c_str(), IM_ARRAYSIZE(inspectorScriptPathBuffer) - 1);
-                    inspectorScriptPathBuffer[IM_ARRAYSIZE(inspectorScriptPathBuffer) - 1] = '\0';
+                    copyToBuffer(scriptComp.scriptPath, inspectorScriptPathBuffer, IM_ARRAYSIZE(inspectorScriptPathBuffer));
                 }
                 ImGui::Text("Script Path:");
                 if (ImGui::InputText("##ScriptPath", inspectorScriptPathBuffer, IM_ARRAYSIZE(inspectorScriptPathBuffer), ImGuiInputTextFlags_EnterReturnsTrue)) {
                     scriptComp.scriptPath = inspectorScriptPathBuffer;
-                    // No need to immediately reload/reinit in editor, will be handled on Play or explicit reload
                 }
                 if (ImGui::Button("Browse...##ScriptPath")) {
                     const char* filterPatterns[] = { "*.lua" };
                     const char* filePath = tinyfd_openFileDialog("Select Lua Script", "../assets/scripts/", 1, filterPatterns, "Lua Scripts", 0);
                     if (filePath != NULL) {
                         std::filesystem::path selectedPath = filePath;
-                        // Make path relative to executable or a known assets directory if possible
-                        // For now, storing the path as selected, assuming it's accessible.
-                        // A more robust solution would be to copy to project assets and use relative path.
                         scriptComp.scriptPath = selectedPath.string(); 
                         strncpy(inspectorScriptPathBuffer, scriptComp.scriptPath.c_str(), IM_ARRAYSIZE(inspectorScriptPathBuffer) - 1);
                         inspectorScriptPathBuffer[IM_ARRAYSIZE(inspectorScriptPathBuffer) - 1] = '\0';
                     }
                 }
-                // ImGui::Text("Initialized: %s", scriptComp.initialized ? "true" : "false"); // Removed, 'initialized' no longer a member
                  if (ImGui::Button("Remove Script Component")) {
                     componentManager->removeComponent<ScriptComponent>(selectedEntity);
                     inspectorScriptPathBuffer[0] = '\0';
@@ -755,13 +773,13 @@ void DevModeScene::render() {
             }
         } else {
             if (ImGui::Button("Add Script Component")) {
-                componentManager->addComponent(selectedEntity, ScriptComponent{});
-                inspectorScriptPathBuffer[0] = '\0'; // Clear buffer for new component
-                // Update signature after adding ScriptComponent
-                Signature sig = entityManager->getSignature(selectedEntity);
-                sig.set(componentManager->getComponentType<ScriptComponent>());
-                entityManager->setSignature(selectedEntity, sig);
-                systemManager->entitySignatureChanged(selectedEntity, sig);
+                if (addComponentIfMissing<ScriptComponent>(componentManager.get(), selectedEntity)) {
+                     inspectorScriptPathBuffer[0] = '\0';
+                     Signature sig = entityManager->getSignature(selectedEntity);
+                     sig.set(componentManager->getComponentType<ScriptComponent>());
+                     entityManager->setSignature(selectedEntity, sig);
+                     systemManager->entitySignatureChanged(selectedEntity, sig);
+                }
             }
         }
 
@@ -968,6 +986,7 @@ void DevModeScene::loadScene(const std::string& filepath) {
     }
     selectedEntity = NO_ENTITY_SELECTED;
     inspectorTextureIdBuffer[0] = '\0';
+    inspectorScriptPathBuffer[0] = '\0'; // Added this line as it was missing and likely intended
     cameraX = 0.0f;
     cameraY = 0.0f;
 

@@ -9,12 +9,10 @@
 
 class SystemManager {
 public:
-    template<typename T, typename... Args> // MODIFIED to accept arguments
-    std::shared_ptr<T> registerSystem(Args&&... args) { // MODIFIED to accept arguments
+    template<typename T, typename... Args>  
+    std::shared_ptr<T> registerSystem(Args&&... args) {
         const char* typeName = typeid(T).name();
-        // Consider adding a check here to see if the system is already registered
-        // and return the existing one or handle as an error, if appropriate.
-        auto system = std::make_shared<T>(std::forward<Args>(args)...); // MODIFIED to forward arguments
+        auto system = std::make_shared<T>(std::forward<Args>(args)...);
         systems.insert({typeName, system});
         return system;
     }
@@ -37,11 +35,10 @@ public:
             auto const& type = pair.first;
             auto const& system = pair.second;
             
-            auto sig_it = signatures.find(type); // Check if signature exists
+            auto sig_it = signatures.find(type);
             if (sig_it != signatures.end()) {
                 auto const& systemSignature = sig_it->second;
 
-                // If entity signature contains all components required by the system's signature
                 if ((entitySignature & systemSignature) == systemSignature) {
                     system->entities.insert(entity);
                 } else {

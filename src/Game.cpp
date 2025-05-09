@@ -72,7 +72,6 @@ bool Game::init(const char* title, int width, int height) {
 
     AssetManager::getInstance().init(renderer);
 
-    // Initialize InputManager mappings
     InputManager& inputManager = InputManager::getInstance();
     inputManager.mapAction("MoveUp", SDL_SCANCODE_W);
     inputManager.mapAction("MoveDown", SDL_SCANCODE_S);
@@ -97,30 +96,30 @@ bool Game::init(const char* title, int width, int height) {
         style.Colors[ImGuiCol_WindowBg].w = 1.0f;
     }
 
-    ImGui::StyleColorsDark(); // Start with Dark theme
+    ImGui::StyleColorsDark();
 
     // --- Customizations Start ---
-    // Make background and panels gray
-    style.Colors[ImGuiCol_WindowBg] = ImVec4(0.18f, 0.18f, 0.18f, 1.00f); // Main background
-    style.Colors[ImGuiCol_ChildBg] = ImVec4(0.18f, 0.18f, 0.18f, 1.00f); // Background of child windows
-    style.Colors[ImGuiCol_PopupBg] = ImVec4(0.15f, 0.15f, 0.15f, 0.94f); // Popup background
+    // Make background and panels gray you can change it
+    style.Colors[ImGuiCol_WindowBg] = ImVec4(0.18f, 0.18f, 0.18f, 1.00f);
+    style.Colors[ImGuiCol_ChildBg] = ImVec4(0.18f, 0.18f, 0.18f, 1.00f); 
+    style.Colors[ImGuiCol_PopupBg] = ImVec4(0.15f, 0.15f, 0.15f, 0.94f); 
 
     // Make text less white (light gray)
     style.Colors[ImGuiCol_Text] = ImVec4(0.85f, 0.85f, 0.85f, 1.00f);
     style.Colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
 
     // Adjust other elements for gray theme
-    style.Colors[ImGuiCol_FrameBg] = ImVec4(0.25f, 0.25f, 0.25f, 0.54f); // Background of checkboxes, sliders, text input
+    style.Colors[ImGuiCol_FrameBg] = ImVec4(0.25f, 0.25f, 0.25f, 0.54f); 
     style.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.30f, 0.30f, 0.30f, 0.40f);
     style.Colors[ImGuiCol_FrameBgActive] = ImVec4(0.35f, 0.35f, 0.35f, 0.67f);
 
-    style.Colors[ImGuiCol_TitleBg] = ImVec4(0.12f, 0.12f, 0.12f, 1.00f); // Window title background (collapsed)
-    style.Colors[ImGuiCol_TitleBgActive] = ImVec4(0.20f, 0.20f, 0.20f, 1.00f); // Window title background (active)
+    style.Colors[ImGuiCol_TitleBg] = ImVec4(0.12f, 0.12f, 0.12f, 1.00f); 
+    style.Colors[ImGuiCol_TitleBgActive] = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
     style.Colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.12f, 0.12f, 0.12f, 0.75f);
 
     style.Colors[ImGuiCol_MenuBarBg] = ImVec4(0.16f, 0.16f, 0.16f, 1.00f);
 
-    style.Colors[ImGuiCol_Header] = ImVec4(0.30f, 0.30f, 0.30f, 0.31f); // Collapsing header
+    style.Colors[ImGuiCol_Header] = ImVec4(0.30f, 0.30f, 0.30f, 0.31f);
     style.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.35f, 0.35f, 0.35f, 0.80f);
     style.Colors[ImGuiCol_HeaderActive] = ImVec4(0.40f, 0.40f, 0.40f, 1.00f);
 
@@ -134,8 +133,8 @@ bool Game::init(const char* title, int width, int height) {
     style.Colors[ImGuiCol_TabUnfocused] = ImVec4(0.15f, 0.15f, 0.15f, 0.97f);
     style.Colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
 
-    style.Colors[ImGuiCol_DockingPreview] = ImVec4(0.40f, 0.40f, 0.40f, 0.70f); // Color of docking preview overlay
-    style.Colors[ImGuiCol_DockingEmptyBg] = ImVec4(0.15f, 0.15f, 0.15f, 1.00f); // Background of empty dock space
+    style.Colors[ImGuiCol_DockingPreview] = ImVec4(0.40f, 0.40f, 0.40f, 0.70f); 
+    style.Colors[ImGuiCol_DockingEmptyBg] = ImVec4(0.15f, 0.15f, 0.15f, 1.00f); 
 
     style.WindowBorderSize = 0.0f;
     style.FrameBorderSize = 0.0f;
@@ -147,7 +146,6 @@ bool Game::init(const char* title, int width, int height) {
     style.TabRounding = 2.0f;
     style.ScrollbarRounding = 2.0f;
     style.PopupRounding = 2.0f;
-    // --- Customizations End ---
 
     ImGui_ImplSDL2_InitForSDLRenderer(window, renderer);
     ImGui_ImplSDLRenderer2_Init(renderer);

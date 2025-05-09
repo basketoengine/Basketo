@@ -61,6 +61,8 @@ set(SOURCE_FILES
     vendor/imgui/backends/imgui_impl_sdlrenderer2.cpp
     vendor/libtinyfiledialogs/tinyfiledialogs.c
     src/ecs/systems/ScriptSystem.cpp
+    src/utils/EditorUtils.cpp
+    src/utils/FileUtils.cpp
 )
 
 # Define the physics test executable

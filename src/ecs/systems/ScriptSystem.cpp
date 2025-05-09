@@ -1,10 +1,10 @@
 #include "ScriptSystem.h"
 #include "../EntityManager.h"
 #include "../ComponentManager.h"
-#include "../components/TransformComponent.h" // Example component
+#include "../components/TransformComponent.h"
 #include "../components/ScriptComponent.h"
 #include "../components/VelocityComponent.h"
-#include "../../InputManager.h" // For input functions
+#include "../../InputManager.h" 
 #include <iostream>
 #include <fstream>
 
@@ -22,11 +22,9 @@ bool ScriptSystem::init() {
 }
 
 void ScriptSystem::update(float deltaTime) {
-    // Iterate over all entities that have a ScriptComponent
     for (auto entity : entityManager->getActiveEntities()) {
         if (componentManager->hasComponent<ScriptComponent>(entity)) {
             auto& scriptComp = componentManager->getComponent<ScriptComponent>(entity);
-            // Ensure script is loaded (usually on Play or script load)
             if (!scriptComp.scriptPath.empty()) {
                 callScriptFunction(entity, "update", entity, deltaTime);
             }
