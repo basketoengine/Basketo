@@ -7,7 +7,7 @@
 
 class PhysicsSystem : public System {
 public:
-    float gravity = 980.0f; // pixels per second squared
+    float gravity = 980.0f;
     void update(ComponentManager* componentManager, float deltaTime) {
         for (auto const& entity : entities) {
             auto& velocity = componentManager->getComponent<VelocityComponent>(entity);

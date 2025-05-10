@@ -414,10 +414,10 @@ void DevModeScene::render() {
     ImGuiIO& io = ImGui::GetIO();
     ImVec2 displaySize = io.DisplaySize;
 
-    const float hierarchyWidth = displaySize.x * 0.18f;
-    const float inspectorWidth = displaySize.x * 0.22f;
-    const float bottomPanelHeight = displaySize.y * 0.25f;
-    const float topToolbarHeight = 40.0f;
+    const float hierarchyWidth = displaySize.x * hierarchyWidthRatio;
+    const float inspectorWidth = displaySize.x * inspectorWidthRatio;
+    const float bottomPanelHeight = displaySize.y * bottomPanelHeightRatio;
+    // const float topToolbarHeight = 40.0f; // Already a member
 
     gameViewport = {
         static_cast<int>(hierarchyWidth),
@@ -494,16 +494,25 @@ void DevModeScene::render() {
         SDL_RenderSetViewport(renderer, &gameViewport);
 
         if (!isPlaying && showGrid) {
-            SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255);
-            float gridStartX = -fmodf(cameraX, gridSize);
-            float gridStartY = -fmodf(cameraY, gridSize);
-            for (float x = gridStartX; x < gameViewport.w / cameraZoom; x += gridSize) {
-                int sx = (int)((x - cameraX) * cameraZoom);
-                SDL_RenderDrawLine(renderer, sx, 0, sx, gameViewport.h);
+            SDL_SetRenderDrawColor(renderer, 70, 70, 80, 255); // Darker grid lines
+
+            // Calculate the visible world coordinates
+            float worldViewLeft = cameraX;
+            float worldViewTop = cameraY;
+            float worldViewRight = cameraX + gameViewport.w / cameraZoom;
+            float worldViewBottom = cameraY + gameViewport.h / cameraZoom;
+
+            // Adjust start points to align with the grid
+            float gridStartX = std::floor(worldViewLeft / gridSize) * gridSize;
+            float gridStartY = std::floor(worldViewTop / gridSize) * gridSize;
+
+            for (float x = gridStartX; x < worldViewRight; x += gridSize) {
+                int screenX = static_cast<int>((x - cameraX) * cameraZoom);
+                SDL_RenderDrawLine(renderer, screenX, 0, screenX, gameViewport.h);
             }
-            for (float y = gridStartY; y < gameViewport.h / cameraZoom; y += gridSize) {
-                int sy = (int)((y - cameraY) * cameraZoom);
-                SDL_RenderDrawLine(renderer, 0, sy, gameViewport.w, sy);
+            for (float y = gridStartY; y < worldViewBottom; y += gridSize) {
+                int screenY = static_cast<int>((y - cameraY) * cameraZoom);
+                SDL_RenderDrawLine(renderer, 0, screenY, gameViewport.w, screenY);
             }
         }
 

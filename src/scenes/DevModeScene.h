@@ -70,7 +70,12 @@ private:
     std::shared_ptr<MovementSystem> movementSystem;
     AssetManager& assetManager;
 
-    ImVec4 clear_color = ImVec4(0.18f, 0.18f, 0.18f, 1.00f); 
+    // --- UI State & Colors ---
+    float hierarchyWidthRatio = 0.18f;
+    float inspectorWidthRatio = 0.22f;
+    float bottomPanelHeightRatio = 0.25f;
+    float topToolbarHeight = 40.0f;
+    ImVec4 clear_color = ImVec4(0.27f, 0.51f, 0.71f, 1.00f);
 
     float spawnPosX = 100.0f;
     float spawnPosY = 100.0f;
