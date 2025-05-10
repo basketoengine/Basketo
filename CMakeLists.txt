@@ -8,13 +8,10 @@ find_package(SDL2 REQUIRED)
 
 find_package(PkgConfig REQUIRED)
 
-# Provide a hint for Lua 5.4 include directory
 set(LUA_INCLUDE_DIR /usr/include/lua5.4 CACHE PATH "Path to Lua 5.4 include directory")
 
-# Find Lua development libraries (e.g., for Lua 5.4)
 find_package(Lua 5.4 REQUIRED)
 
-# Add Sol2 subdirectory
 add_subdirectory(vendor/sol2)
 
 pkg_check_modules(SDL2_IMAGE REQUIRED SDL2_image)
@@ -29,13 +26,11 @@ pkg_check_modules(SDL2_MIXER REQUIRED SDL2_mixer)
 include_directories(${SDL2_MIXER_INCLUDE_DIRS})
 link_directories(${SDL2_MIXER_LIBRARY_DIRS})
 
-# Add OpenGL (needed by some ImGui backends or for future use)
 find_package(OpenGL REQUIRED)
 include_directories(${OpenGL_INCLUDE_DIRS})
 
 include_directories(${SDL2_INCLUDE_DIRS})
 
-# Add ImGui include directory
 include_directories(vendor/imgui)
 include_directories(vendor/libtinyfiledialogs)
 
@@ -48,10 +43,12 @@ set(SOURCE_FILES
     src/scenes/GameScene.cpp
     src/scenes/MenuScene.cpp
     src/scenes/DevModeScene.cpp
+    src/scenes/DevModeInputHandler.cpp
+    src/scenes/DevModeSceneSerializer.cpp
+    src/scenes/InspectorPanel.cpp
     utils/utility.cpp
     src/Physics.cpp
 
-    # Add ImGui core source files
     vendor/imgui/imgui.cpp
     vendor/imgui/imgui_demo.cpp
     vendor/imgui/imgui_draw.cpp
@@ -65,34 +62,29 @@ set(SOURCE_FILES
     src/utils/FileUtils.cpp
 )
 
-# Define the physics test executable
 add_executable(PhysicsTest
     tests/test_physics.cpp
     src/Physics.cpp
     utils/utility.cpp
 )
 
-# Define the main game executable
 add_executable(BasketoGameEngine ${SOURCE_FILES})
 
-# Add Lua include directory to BasketoGameEngine
 if(LUA_FOUND)
     target_include_directories(BasketoGameEngine PUBLIC ${LUA_INCLUDE_DIR})
 endif()
 
-# Link libraries for the main game
 target_link_libraries(BasketoGameEngine
-    PRIVATE # Default for libraries unless their headers are in public API
+    PRIVATE 
     ${SDL2_LIBRARIES}
     ${SDL2_IMAGE_LIBRARIES}
     ${SDL2_TTF_LIBRARIES}
     ${SDL2_MIXER_LIBRARIES}
     ${OpenGL_LIBRARIES}
-    ${LUA_LIBRARIES} # Add Lua libraries
-    PUBLIC sol2 # sol2 is an interface library, its include dirs need to be propagated
+    ${LUA_LIBRARIES}
+    PUBLIC sol2 
 )
 
-# Link libraries for the physics test
 target_link_libraries(PhysicsTest
     ${SDL2_LIBRARIES}
 )

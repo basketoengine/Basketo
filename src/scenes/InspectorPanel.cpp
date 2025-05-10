@@ -1,0 +1,303 @@
+\
+#include "InspectorPanel.h"
+#include "DevModeScene.h" 
+#include "imgui.h"
+#include "../../vendor/imgui/backends/imgui_impl_sdl2.h"
+#include "../../vendor/imgui/backends/imgui_impl_sdlrenderer2.h"
+#include "../ecs/components/TransformComponent.h"
+#include "../ecs/components/SpriteComponent.h"
+#include "../ecs/components/VelocityComponent.h"
+#include "../ecs/components/ScriptComponent.h"
+#include "../ecs/components/ColliderComponent.h"
+#include "../AssetManager.h"
+#include "../utils/FileUtils.h" 
+#include "../utils/EditorHelpers.h" 
+#include "tinyfiledialogs.h"
+#include <filesystem> 
+#include <iostream> 
+#include <string> 
+#include <vector> 
+#include <algorithm> 
+
+namespace EditorUI {
+
+void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
+    ImVec2 displaySize = io.DisplaySize;
+    const float inspectorWidth = displaySize.x * scene.inspectorWidthRatio;
+    const float bottomPanelHeight = displaySize.y * scene.bottomPanelHeightRatio;
+    const ImGuiWindowFlags fixedPanelFlags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar;
+
+    ImGui::SetNextWindowPos(ImVec2(displaySize.x - inspectorWidth, scene.topToolbarHeight), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(inspectorWidth, displaySize.y - scene.topToolbarHeight - bottomPanelHeight), ImGuiCond_Always);
+    ImGui::Begin("Inspector", nullptr, fixedPanelFlags);
+
+    if (scene.selectedEntity != NO_ENTITY_SELECTED && std::find(scene.entityManager->getActiveEntities().begin(), scene.entityManager->getActiveEntities().end(), scene.selectedEntity) != scene.entityManager->getActiveEntities().end()) {
+        ImGui::Text("Selected Entity: %u", scene.selectedEntity);
+        ImGui::Separator();
+
+        ImGui::PushItemWidth(-1);
+        const char* component_types[] = { "Transform", "Sprite", "Velocity", "Script", "Collider" };
+        static int current_component_type_idx = 0;
+
+        if (ImGui::BeginCombo("##AddComponentCombo", component_types[current_component_type_idx])) {
+            for (int n = 0; n < IM_ARRAYSIZE(component_types); n++) {
+                const bool is_selected = (current_component_type_idx == n);
+                if (ImGui::Selectable(component_types[n], is_selected))
+                    current_component_type_idx = n;
+                if (is_selected)
+                    ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::PopItemWidth();
+
+        if (ImGui::Button("Add Selected Component", ImVec2(-1, 0))) {
+            std::string selected_component_str = component_types[current_component_type_idx];
+            Signature entitySignature = scene.entityManager->getSignature(scene.selectedEntity);
+
+            if (selected_component_str == "Transform") {
+                if (!scene.componentManager->hasComponent<TransformComponent>(scene.selectedEntity)) {
+                    scene.componentManager->addComponent(scene.selectedEntity, TransformComponent{});
+                    entitySignature.set(scene.componentManager->getComponentType<TransformComponent>());
+                    std::cout << "Added TransformComponent to Entity " << scene.selectedEntity << std::endl;
+                } else {
+                    std::cout << "Entity " << scene.selectedEntity << " already has TransformComponent." << std::endl;
+                }
+            } else if (selected_component_str == "Sprite") {
+                if (!scene.componentManager->hasComponent<SpriteComponent>(scene.selectedEntity)) {
+                    scene.componentManager->addComponent(scene.selectedEntity, SpriteComponent{});
+                    entitySignature.set(scene.componentManager->getComponentType<SpriteComponent>());
+                    std::cout << "Added SpriteComponent to Entity " << scene.selectedEntity << std::endl;
+                } else {
+                    std::cout << "Entity " << scene.selectedEntity << " already has SpriteComponent." << std::endl;
+                }
+            } else if (selected_component_str == "Velocity") {
+                if (!scene.componentManager->hasComponent<VelocityComponent>(scene.selectedEntity)) {
+                    scene.componentManager->addComponent(scene.selectedEntity, VelocityComponent{});
+                    entitySignature.set(scene.componentManager->getComponentType<VelocityComponent>());
+                    std::cout << "Added VelocityComponent to Entity " << scene.selectedEntity << std::endl;
+                } else {
+                    std::cout << "Entity " << scene.selectedEntity << " already has VelocityComponent." << std::endl;
+                }
+            } else if (selected_component_str == "Script") {
+                if (addComponentIfMissing<ScriptComponent>(scene.componentManager.get(), scene.selectedEntity)) {
+                    entitySignature.set(scene.componentManager->getComponentType<ScriptComponent>());
+                    scene.inspectorScriptPathBuffer[0] = '\0';
+                    std::cout << "Added ScriptComponent to Entity " << scene.selectedEntity << std::endl;
+                } else {
+                    std::cout << "Entity " << scene.selectedEntity << " already has ScriptComponent." << std::endl;
+                }
+            } else if (selected_component_str == "Collider") {
+                if (addComponentIfMissing<ColliderComponent>(scene.componentManager.get(), scene.selectedEntity)) {
+                    entitySignature.set(scene.componentManager->getComponentType<ColliderComponent>());
+                    std::cout << "Added ColliderComponent to Entity " << scene.selectedEntity << std::endl;
+                } else {
+                    std::cout << "Entity " << scene.selectedEntity << " already has ColliderComponent." << std::endl;
+                }
+            }
+
+            scene.entityManager->setSignature(scene.selectedEntity, entitySignature);
+            scene.systemManager->entitySignatureChanged(scene.selectedEntity, entitySignature);
+        }
+        ImGui::Separator();
+
+        if (scene.selectedEntity != NO_ENTITY_SELECTED) {
+            ImGui::Spacing();
+            if (ImGui::Button("Delete Entity", ImVec2(-1, 0))) {
+                Entity entityToDelete = scene.selectedEntity;
+                scene.selectedEntity = NO_ENTITY_SELECTED;
+                scene.inspectorTextureIdBuffer[0] = '\0';
+                scene.inspectorScriptPathBuffer[0] = '\0';
+
+                scene.entityManager->destroyEntity(entityToDelete);
+                std::cout << "Deleted Entity " << entityToDelete << std::endl;
+            }
+            ImGui::Separator();
+        }
+
+        if (scene.componentManager->hasComponent<TransformComponent>(scene.selectedEntity)) {
+            if (ImGui::CollapsingHeader("Transform Component", ImGuiTreeNodeFlags_DefaultOpen)) {
+                auto& transform = scene.componentManager->getComponent<TransformComponent>(scene.selectedEntity);
+                ImGui::DragFloat("Position X##Transform", &transform.x, 1.0f);
+                ImGui::DragFloat("Position Y##Transform", &transform.y, 1.0f);
+                ImGui::DragFloat("Width##Transform", &transform.width, 1.0f, HANDLE_SIZE);
+                ImGui::DragFloat("Height##Transform", &transform.height, 1.0f, HANDLE_SIZE);
+                ImGui::DragFloat("Rotation##Transform", &transform.rotation, 1.0f, -360.0f, 360.0f);
+                ImGui::DragInt("Z-Index##Transform", &transform.z_index);
+            }
+        } else ImGui::TextDisabled("No Transform Component");
+
+        if (scene.componentManager->hasComponent<SpriteComponent>(scene.selectedEntity)) {
+            if (ImGui::CollapsingHeader("Sprite Component", ImGuiTreeNodeFlags_DefaultOpen)) {
+                auto& sprite = scene.componentManager->getComponent<SpriteComponent>(scene.selectedEntity);
+                if (scene.inspectorTextureIdBuffer[0] == '\0' || sprite.textureId != scene.inspectorTextureIdBuffer) {
+                    strncpy(scene.inspectorTextureIdBuffer, sprite.textureId.c_str(), IM_ARRAYSIZE(scene.inspectorTextureIdBuffer) - 1);
+                    scene.inspectorTextureIdBuffer[IM_ARRAYSIZE(scene.inspectorTextureIdBuffer) - 1] = '\0';
+                }
+                ImGui::Text("Texture ID/Path:");
+                if (ImGui::InputText("##SpriteTexturePath", scene.inspectorTextureIdBuffer, IM_ARRAYSIZE(scene.inspectorTextureIdBuffer), ImGuiInputTextFlags_EnterReturnsTrue)) {
+                    std::string newTextureId(scene.inspectorTextureIdBuffer);
+                    AssetManager& assets = AssetManager::getInstance();
+                    if (assets.getTexture(newTextureId) || assets.loadTexture(newTextureId, newTextureId)) {
+                        sprite.textureId = newTextureId;
+                    } else {
+                        std::cerr << "Inspector Error: Failed to find or load texture: '" << newTextureId << "'. Reverting." << std::endl;
+                        strncpy(scene.inspectorTextureIdBuffer, sprite.textureId.c_str(), IM_ARRAYSIZE(scene.inspectorTextureIdBuffer) - 1);
+                        scene.inspectorTextureIdBuffer[IM_ARRAYSIZE(scene.inspectorTextureIdBuffer) - 1] = '\0';
+                    }
+                }
+                SDL_Texture* tex = AssetManager::getInstance().getTexture(sprite.textureId);
+                if (tex) {
+                    int w, h; SDL_QueryTexture(tex, nullptr, nullptr, &w, &h);
+                    ImGui::Text("Current: %s (%dx%d)", sprite.textureId.c_str(), w, h);
+                    ImGui::Image((ImTextureID)tex, ImVec2(64, 64));
+                } else ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Current texture not loaded!");
+                if (ImGui::Button("Browse...##SpriteTexture")) {
+                    const char* filterPatterns[] = { "*.png", "*.jpg", "*.jpeg", "*.bmp", "*.gif", "*.tga" };
+                    const char* filePath = tinyfd_openFileDialog("Select Texture File", "", 6, filterPatterns, "Image Files", 0);
+                    if (filePath != NULL) {
+                        std::string selectedPath = filePath;
+                        std::string filename = getFilenameFromPath(selectedPath);
+                        if (!filename.empty()) {
+                            std::string assetId = getFilenameWithoutExtension(filename);
+                            std::filesystem::path destDir = std::filesystem::absolute("../assets/Image/");
+                            std::filesystem::path destPath = destDir / filename;
+
+                            try {
+                                std::filesystem::create_directories(destDir);
+                                std::filesystem::copy_file(selectedPath, destPath, std::filesystem::copy_options::overwrite_existing);
+                                std::cout << "Asset copied to: " << destPath.string() << std::endl;
+
+                                AssetManager& assets = AssetManager::getInstance();
+                                if (assets.loadTexture(assetId, destPath.string())) {
+                                    sprite.textureId = assetId;
+                                    strncpy(scene.inspectorTextureIdBuffer, assetId.c_str(), IM_ARRAYSIZE(scene.inspectorTextureIdBuffer) - 1);
+                                    scene.inspectorTextureIdBuffer[IM_ARRAYSIZE(scene.inspectorTextureIdBuffer) - 1] = '\0';
+                                    std::cout << "Texture loaded and assigned: " << assetId << std::endl;
+                                } else {
+                                    tinyfd_messageBox("Error", "Failed to load texture into AssetManager.", "ok", "error", 1);
+                                }
+                            } catch (const std::filesystem::filesystem_error& e) {
+                                std::cerr << "Filesystem Error: " << e.what() << std::endl;
+                                tinyfd_messageBox("Error", ("Failed to copy file: " + std::string(e.what())).c_str(), "ok", "error", 1);
+                            }
+                        } else {
+                            tinyfd_messageBox("Error", "Could not extract filename.", "ok", "error", 1);
+                        }
+                    }
+                }
+            }
+        } else ImGui::TextDisabled("No Sprite Component");
+        ImGui::Separator();
+
+        if (scene.componentManager->hasComponent<VelocityComponent>(scene.selectedEntity)) {
+            if (ImGui::CollapsingHeader("Velocity Component", ImGuiTreeNodeFlags_DefaultOpen)) {
+                auto& vel = scene.componentManager->getComponent<VelocityComponent>(scene.selectedEntity);
+                ImGui::DragFloat("Velocity X", &vel.vx, 0.1f);
+                ImGui::DragFloat("Velocity Y", &vel.vy, 0.1f);
+            }
+        }
+
+        if (scene.componentManager->hasComponent<ScriptComponent>(scene.selectedEntity)) {
+            if (ImGui::CollapsingHeader("Script Component", ImGuiTreeNodeFlags_DefaultOpen)) {
+                auto& scriptComp = scene.componentManager->getComponent<ScriptComponent>(scene.selectedEntity);
+                if (scene.inspectorScriptPathBuffer[0] == '\0' || scriptComp.scriptPath != scene.inspectorScriptPathBuffer) {
+                    copyToBuffer(scriptComp.scriptPath, scene.inspectorScriptPathBuffer, IM_ARRAYSIZE(scene.inspectorScriptPathBuffer));
+                }
+                ImGui::Text("Script Path:");
+                if (ImGui::InputText("##ScriptPath", scene.inspectorScriptPathBuffer, IM_ARRAYSIZE(scene.inspectorScriptPathBuffer), ImGuiInputTextFlags_EnterReturnsTrue)) {
+                    scriptComp.scriptPath = scene.inspectorScriptPathBuffer;
+                }
+                if (ImGui::Button("Browse...##ScriptPath")) {
+                    const char* filterPatterns[] = { "*.lua" };
+                    const char* filePath = tinyfd_openFileDialog("Select Lua Script", "../assets/scripts/", 1, filterPatterns, "Lua Scripts", 0);
+                    if (filePath != NULL) {
+                        std::filesystem::path selectedPath = filePath;
+                        scriptComp.scriptPath = selectedPath.string();
+                        strncpy(scene.inspectorScriptPathBuffer, scriptComp.scriptPath.c_str(), IM_ARRAYSIZE(scene.inspectorScriptPathBuffer) - 1);
+                        scene.inspectorScriptPathBuffer[IM_ARRAYSIZE(scene.inspectorScriptPathBuffer) - 1] = '\0';
+                    }
+                }
+                 if (ImGui::Button("Remove Script Component")) {
+                    scene.componentManager->removeComponent<ScriptComponent>(scene.selectedEntity);
+                    scene.inspectorScriptPathBuffer[0] = '\0';
+                }
+            }
+        } else {
+            if (ImGui::Button("Add Script Component")) {
+                if (addComponentIfMissing<ScriptComponent>(scene.componentManager.get(), scene.selectedEntity)) {
+                     scene.inspectorScriptPathBuffer[0] = '\0';
+                     Signature sig = scene.entityManager->getSignature(scene.selectedEntity);
+                     sig.set(scene.componentManager->getComponentType<ScriptComponent>());
+                     scene.entityManager->setSignature(scene.selectedEntity, sig);
+                     scene.systemManager->entitySignatureChanged(scene.selectedEntity, sig);
+                }
+            }
+        }
+        ImGui::Separator();
+
+        if (scene.componentManager->hasComponent<ColliderComponent>(scene.selectedEntity)) {
+            if (ImGui::CollapsingHeader("Collider Component", ImGuiTreeNodeFlags_DefaultOpen)) {
+                auto& collider = scene.componentManager->getComponent<ColliderComponent>(scene.selectedEntity);
+                ImGui::DragFloat("Offset X##Collider", &collider.offsetX, 0.1f);
+                ImGui::DragFloat("Offset Y##Collider", &collider.offsetY, 0.1f);
+                ImGui::DragFloat("Width##Collider", &collider.width, 1.0f, 1.0f);
+                ImGui::DragFloat("Height##Collider", &collider.height, 1.0f, 1.0f);
+                ImGui::Checkbox("Is Trigger##Collider", &collider.isTrigger);
+
+                ImGui::Separator();
+                ImGui::Text("Polygon Vertices:");
+                int removeIndex = -1;
+                for (size_t i = 0; i < collider.vertices.size(); ++i) {
+                    ImGui::PushID(static_cast<int>(i));
+                    ImGui::DragFloat2("Vertex", &collider.vertices[i].x, 0.5f);
+                    ImGui::SameLine();
+                    if (ImGui::Button("Remove##Vertex")) {
+                        removeIndex = static_cast<int>(i);
+                    }
+                    ImGui::PopID();
+                }
+                if (removeIndex >= 0 && removeIndex < (int)collider.vertices.size()) {
+                    collider.vertices.erase(collider.vertices.begin() + removeIndex);
+                }
+                if (ImGui::Button("Add Vertex")) {
+                    collider.vertices.push_back({0.0f, 0.0f});
+                }
+                if (ImGui::Button("Clear Vertices")) {
+                    collider.vertices.clear();
+                }
+
+                if (ImGui::Button("Remove Collider Component")) {
+                    scene.componentManager->removeComponent<ColliderComponent>(scene.selectedEntity);
+                    Signature sig = scene.entityManager->getSignature(scene.selectedEntity);
+                    sig.reset(scene.componentManager->getComponentType<ColliderComponent>());
+                    scene.entityManager->setSignature(scene.selectedEntity, sig);
+                    scene.systemManager->entitySignatureChanged(scene.selectedEntity, sig);
+                }
+
+                if (ImGui::Checkbox("Edit Collider in Scene", &scene.isEditingCollider)) {
+                    if (!scene.isEditingCollider) {
+                        scene.isDraggingVertex = false;
+                        scene.editingVertexIndex = -1;
+                    }
+                }
+                ImGui::Text("(Click to add, drag to move vertices)");
+            }
+        } else {
+            if (ImGui::Button("Add Collider Component##Inspector")) {
+                if (addComponentIfMissing<ColliderComponent>(scene.componentManager.get(), scene.selectedEntity)) {
+                     Signature sig = scene.entityManager->getSignature(scene.selectedEntity);
+                     sig.set(scene.componentManager->getComponentType<ColliderComponent>());
+                     scene.entityManager->setSignature(scene.selectedEntity, sig);
+                     scene.systemManager->entitySignatureChanged(scene.selectedEntity, sig);
+                }
+            }
+        }
+
+    } else {
+        ImGui::Text("No entity selected.");
+    }
+    ImGui::End();
+}
+
+} 

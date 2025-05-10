@@ -151,14 +151,12 @@ void GameScene::update(float deltaTime) {
     movementSystem->update(componentManager.get(), deltaTime);
     collisionSystem->update(componentManager.get(), deltaTime);
 
-    // TODO: Move boundary checks to MovementSystem or a BoundarySystem
     auto& playerTransform = componentManager->getComponent<TransformComponent>(playerEntity);
     if (playerTransform.x < 0) playerTransform.x = 0;
     if (playerTransform.y < 0) playerTransform.y = 0;
     if (playerTransform.x + playerTransform.width > 800) playerTransform.x = 800 - playerTransform.width;
     if (playerTransform.y + playerTransform.height > 600) playerTransform.y = 600 - playerTransform.height;
 
-    // Camera follow player (smooth)
     float viewportW = 800.0f, viewportH = 600.0f;
     float targetX = playerTransform.x + playerTransform.width / 2.0f - (viewportW / 2.0f) / cameraZoom;
     float targetY = playerTransform.y + playerTransform.height / 2.0f - (viewportH / 2.0f) / cameraZoom;
@@ -172,7 +170,6 @@ void GameScene::render() {
     SDL_RenderClear(renderer);
     SDL_RenderSetScale(renderer, cameraZoom, cameraZoom);
 
-    // Pass camera coordinates to the render system
     renderSystem->update(renderer, componentManager.get(), cameraX, cameraY);
 
     SDL_RenderSetScale(renderer, 1.0f, 1.0f);

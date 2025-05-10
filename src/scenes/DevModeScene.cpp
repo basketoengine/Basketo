@@ -26,13 +26,9 @@
 #include "../AssetManager.h"
 #include "../utils/FileUtils.h" 
 #include "../utils/EditorHelpers.h" 
-
-static bool isEditingCollider = false;
-static int editingVertexIndex = -1;
-static bool isDraggingVertex = false;
-
-// Forward declaration for edge helper
-static std::tuple<int, int, float, float, float> getClosestEdgeToPoint(const std::vector<ColliderVertex>& vertices, float px, float py, const TransformComponent& transform, const ColliderComponent& collider);
+#include "DevModeInputHandler.h"
+#include "DevModeSceneSerializer.h" 
+#include "InspectorPanel.h" 
 
 DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win) 
     : renderer(ren), 
@@ -77,322 +73,7 @@ DevModeScene::~DevModeScene() {
 }
 
 void DevModeScene::handleInput(SDL_Event& event) {
-    ImGui_ImplSDL2_ProcessEvent(&event);
-    ImGuiIO& io = ImGui::GetIO();
-
-    int rawMouseX, rawMouseY;
-    Uint32 mouseButtonState = SDL_GetMouseState(&rawMouseX, &rawMouseY);
-
-    bool mouseInViewport = (rawMouseX >= gameViewport.x && rawMouseX < (gameViewport.x + gameViewport.w) &&
-                            rawMouseY >= gameViewport.y && rawMouseY < (gameViewport.y + gameViewport.h));
-
-    float viewportMouseX = static_cast<float>(rawMouseX - gameViewport.x);
-    float viewportMouseY = static_cast<float>(rawMouseY - gameViewport.y);
-
-    float worldMouseX = cameraX + (viewportMouseX / cameraZoom);
-    float worldMouseY = cameraY + (viewportMouseY / cameraZoom);
-
-    static bool isPanning = false;
-
-    if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_MIDDLE && mouseInViewport && !io.WantCaptureMouse) {
-        isPanning = true;
-        SDL_SetRelativeMouseMode(SDL_TRUE);
-    }
-    if (event.type == SDL_MOUSEBUTTONUP && event.button.button == SDL_BUTTON_MIDDLE) {
-        if (isPanning) {
-            isPanning = false;
-            SDL_SetRelativeMouseMode(SDL_FALSE);
-        }
-    }
-    if (event.type == SDL_MOUSEMOTION && isPanning) {
-        cameraX -= event.motion.xrel;
-        cameraY -= event.motion.yrel;
-    }
-
-    if (event.type == SDL_MOUSEWHEEL) {
-        if (mouseInViewport && !io.WantCaptureMouse) {
-            float oldCameraZoom = cameraZoom;
-            float prevZoomEventWorldMouseX = cameraX + (viewportMouseX / oldCameraZoom); 
-            float prevZoomEventWorldMouseY = cameraY + (viewportMouseY / oldCameraZoom);
-
-            if (event.wheel.y > 0) cameraZoom *= 1.1f;
-            if (event.wheel.y < 0) cameraZoom /= 1.1f;
-            cameraZoom = std::clamp(cameraZoom, 0.2f, 4.0f);
-
-            if (cameraZoom != oldCameraZoom) {
-                cameraX = prevZoomEventWorldMouseX - (viewportMouseX / cameraZoom);
-                cameraY = prevZoomEventWorldMouseY - (viewportMouseY / cameraZoom);
-            }
-        }
-    }
-
-    if (isPlaying || isPanning) {
-        isDragging = false;
-        isResizing = false;
-        activeHandle = ResizeHandle::NONE;
-        return;
-    }
-
-    if (!io.WantCaptureMouse && mouseInViewport) {
-        switch (event.type) {
-            case SDL_MOUSEBUTTONDOWN:
-                if (event.button.button == SDL_BUTTON_LEFT) {
-                    ResizeHandle handleClicked = ResizeHandle::NONE;
-                    if (selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<TransformComponent>(selectedEntity)) {
-                        handleClicked = getHandleAtPosition(worldMouseX, worldMouseY, componentManager->getComponent<TransformComponent>(selectedEntity));
-                    }
-
-                    if (handleClicked != ResizeHandle::NONE) {
-                        isResizing = true;
-                        isDragging = false;
-                        auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
-                        dragStartMouseX = worldMouseX;
-                        dragStartMouseY = worldMouseY;
-                        dragStartEntityX = transform.x;
-                        dragStartEntityY = transform.y;
-                        dragStartWidth = transform.width;
-                        dragStartHeight = transform.height;
-                        activeHandle = handleClicked;
-                    } else {
-                        isResizing = false;
-                        activeHandle = ResizeHandle::NONE;
-
-                        std::vector<Entity> potentialSelections;
-                        const auto& activeEntities = entityManager->getActiveEntities();
-                        for (Entity entity : activeEntities) {
-                            if (componentManager->hasComponent<TransformComponent>(entity)) {
-                                if (isMouseOverEntity(worldMouseX, worldMouseY, entity)) {
-                                    potentialSelections.push_back(entity);
-                                }
-                            }
-                        }
-
-                        Entity topMostCandidate = NO_ENTITY_SELECTED;
-                        if (!potentialSelections.empty()) {
-                            if (potentialSelections.size() == 1) {
-                                topMostCandidate = potentialSelections[0];
-                            } else {
-                                std::sort(potentialSelections.begin(), potentialSelections.end(),
-                                    [&](Entity a, Entity b) {
-                                        auto& transformA = componentManager->getComponent<TransformComponent>(a);
-                                        auto& transformB = componentManager->getComponent<TransformComponent>(b);
-                                        if (transformA.z_index != transformB.z_index) {
-                                            return transformA.z_index > transformB.z_index;
-                                        }
-                                        float areaA = transformA.width * transformA.height;
-                                        float areaB = transformB.width * transformB.height;
-                                        if (areaA != areaB) {
-                                            return areaA < areaB;
-                                        }
-                                        return a < b;
-                                    }
-                                );
-                                topMostCandidate = potentialSelections[0];
-                            }
-                        }
-
-                        if (topMostCandidate != NO_ENTITY_SELECTED) {
-                            if (selectedEntity != topMostCandidate) {
-                                selectedEntity = topMostCandidate;
-                                inspectorTextureIdBuffer[0] = '\0';
-                                inspectorScriptPathBuffer[0] = '\0';
-                            }
-                            isDragging = true;
-                            auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
-                            dragStartMouseX = worldMouseX;
-                            dragStartMouseY = worldMouseY;
-                            dragStartEntityX = transform.x;
-                            dragStartEntityY = transform.y;
-                        } else {
-                            selectedEntity = NO_ENTITY_SELECTED;
-                            inspectorTextureIdBuffer[0] = '\0';
-                            inspectorScriptPathBuffer[0] = '\0';
-                            isDragging = false;
-                        }
-                    }
-                }
-                break;
-
-            case SDL_MOUSEBUTTONUP:
-                if (event.button.button == SDL_BUTTON_LEFT) {
-                    if (isDragging && snapToGrid && selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<TransformComponent>(selectedEntity)) {
-                        auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
-                        transform.x = std::roundf(transform.x / gridSize) * gridSize;
-                        transform.y = std::roundf(transform.y / gridSize) * gridSize;
-                    }
-                    if (isResizing && snapToGrid && selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<TransformComponent>(selectedEntity)) {
-                        auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
-                        float snappedWidth = std::max(gridSize, std::roundf(transform.width / gridSize) * gridSize);
-                        float snappedHeight = std::max(gridSize, std::roundf(transform.height / gridSize) * gridSize);
-                        float snappedX = transform.x;
-                        float snappedY = transform.y;
-
-                        if (activeHandle == ResizeHandle::TOP_LEFT || activeHandle == ResizeHandle::BOTTOM_LEFT) {
-                            snappedX = std::roundf((transform.x + transform.width - snappedWidth) / gridSize) * gridSize;
-                        } else {
-                            snappedX = std::roundf(transform.x / gridSize) * gridSize;
-                        }
-                        if (activeHandle == ResizeHandle::TOP_LEFT || activeHandle == ResizeHandle::TOP_RIGHT) {
-                            snappedY = std::roundf((transform.y + transform.height - snappedHeight) / gridSize) * gridSize;
-                        } else {
-                            snappedY = std::roundf(transform.y / gridSize) * gridSize;
-                        }
-
-                        transform.x = snappedX;
-                        transform.y = snappedY;
-                        transform.width = snappedWidth;
-                        transform.height = snappedHeight;
-                    }
-                    isDragging = false;
-                    isResizing = false;
-                    activeHandle = ResizeHandle::NONE;
-                }
-                break;
-
-            case SDL_MOUSEMOTION:
-                if (isDragging && selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<TransformComponent>(selectedEntity)) {
-                    float deltaX = worldMouseX - dragStartMouseX;
-                    float deltaY = worldMouseY - dragStartMouseY;
-                    auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
-                    transform.x = dragStartEntityX + deltaX;
-                    transform.y = dragStartEntityY + deltaY;
-
-                } else if (isResizing && selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<TransformComponent>(selectedEntity)) {
-                    auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
-                    float deltaX = worldMouseX - dragStartMouseX;
-                    float deltaY = worldMouseY - dragStartMouseY;
-
-                    float newX = transform.x;
-                    float newY = transform.y;
-                    float newWidth = transform.width;
-                    float newHeight = transform.height;
-
-                    switch (activeHandle) {
-                        case ResizeHandle::TOP_LEFT:
-                            newX = dragStartEntityX + deltaX;
-                            newY = dragStartEntityY + deltaY;
-                            newWidth = dragStartWidth - deltaX;
-                            newHeight = dragStartHeight - deltaY;
-                            break;
-                        case ResizeHandle::TOP_RIGHT:
-                            newY = dragStartEntityY + deltaY;
-                            newWidth = dragStartWidth + deltaX;
-                            newHeight = dragStartHeight - deltaY;
-                            break;
-                        case ResizeHandle::BOTTOM_LEFT:
-                            newX = dragStartEntityX + deltaX;
-                            newWidth = dragStartWidth - deltaX;
-                            newHeight = dragStartHeight + deltaY;
-                            break;
-                        case ResizeHandle::BOTTOM_RIGHT:
-                            newWidth = dragStartWidth + deltaX;
-                            newHeight = dragStartHeight + deltaY;
-                            break;
-                        case ResizeHandle::NONE:
-                            break;
-                    }
-
-                    if (newWidth < HANDLE_SIZE) {
-                        if (activeHandle == ResizeHandle::TOP_LEFT || activeHandle == ResizeHandle::BOTTOM_LEFT) {
-                            newX = transform.x + transform.width - HANDLE_SIZE;
-                        }
-                        newWidth = HANDLE_SIZE;
-                    }
-                    if (newHeight < HANDLE_SIZE) {
-                        if (activeHandle == ResizeHandle::TOP_LEFT || activeHandle == ResizeHandle::TOP_RIGHT) {
-                            newY = transform.y + transform.height - HANDLE_SIZE;
-                        }
-                        newHeight = HANDLE_SIZE;
-                    }
-
-                    transform.x = newX;
-                    transform.y = newY;
-                    transform.width = newWidth;
-                    transform.height = newHeight;
-                }
-                break;
-        }
-    } else {
-        if (event.type == SDL_MOUSEBUTTONUP && event.button.button == SDL_BUTTON_LEFT) {
-            isDragging = false;
-            isResizing = false;
-            activeHandle = ResizeHandle::NONE;
-        }
-        if ((isDragging || isResizing) && event.type == SDL_MOUSEMOTION && !mouseInViewport) {
-            isDragging = false;
-            isResizing = false;
-            activeHandle = ResizeHandle::NONE;
-        }
-    }
-
-    if (isEditingCollider && selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<ColliderComponent>(selectedEntity) && componentManager->hasComponent<TransformComponent>(selectedEntity)) {
-        auto& collider = componentManager->getComponent<ColliderComponent>(selectedEntity);
-        auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
-        static int hoveredEdgeA = -1, hoveredEdgeB = -1;
-        static float hoveredEdgeX = 0, hoveredEdgeY = 0;
-        static bool hoveringEdge = false;
-        hoveringEdge = false;
-        if (collider.vertices.size() >= 2) {
-            auto [a, b, dist, cx, cy] = getClosestEdgeToPoint(collider.vertices, worldMouseX, worldMouseY, transform, collider);
-            if (dist < 12.0f / cameraZoom) {
-                hoveredEdgeA = a; hoveredEdgeB = b; hoveredEdgeX = cx; hoveredEdgeY = cy; hoveringEdge = true;
-            }
-        }
-        switch (event.type) {
-            case SDL_MOUSEBUTTONDOWN:
-                if (event.button.button == SDL_BUTTON_LEFT && mouseInViewport) {
-                    float minDist = 12.0f / cameraZoom;
-                    editingVertexIndex = -1;
-                    // Check for vertex drag
-                    for (size_t i = 0; i < collider.vertices.size(); ++i) {
-                        float vx = transform.x + collider.offsetX + collider.vertices[i].x;
-                        float vy = transform.y + collider.offsetY + collider.vertices[i].y;
-                        float dx = worldMouseX - vx;
-                        float dy = worldMouseY - vy;
-                        if (dx * dx + dy * dy < minDist * minDist) {
-                            editingVertexIndex = (int)i;
-                            isDraggingVertex = true;
-                            break;
-                        }
-                    }
-                    // If not on a vertex, check for edge insert
-                    if (editingVertexIndex == -1 && hoveringEdge && hoveredEdgeA != -1 && hoveredEdgeB != -1) {
-                        ColliderVertex newVert;
-                        newVert.x = hoveredEdgeX - (transform.x + collider.offsetX);
-                        newVert.y = hoveredEdgeY - (transform.y + collider.offsetY);
-                        collider.vertices.insert(collider.vertices.begin() + hoveredEdgeB, newVert);
-                        editingVertexIndex = hoveredEdgeB;
-                        isDraggingVertex = true;
-                    } else if (editingVertexIndex == -1) {
-                        // Add at cursor if not near edge or vertex
-                        ColliderVertex newVert;
-                        newVert.x = worldMouseX - (transform.x + collider.offsetX);
-                        newVert.y = worldMouseY - (transform.y + collider.offsetY);
-                        collider.vertices.push_back(newVert);
-                        editingVertexIndex = (int)collider.vertices.size() - 1;
-                        isDraggingVertex = true;
-                    }
-                }
-                break;
-            case SDL_MOUSEBUTTONUP:
-                if (event.button.button == SDL_BUTTON_LEFT) {
-                    isDraggingVertex = false;
-                    editingVertexIndex = -1;
-                }
-                break;
-            case SDL_MOUSEMOTION:
-                if (isDraggingVertex && editingVertexIndex >= 0) {
-                    collider.vertices[editingVertexIndex].x = worldMouseX - (transform.x + collider.offsetX);
-                    collider.vertices[editingVertexIndex].y = worldMouseY - (transform.y + collider.offsetY);
-                }
-                break;
-        }
-        // Prevent entity movement/resizing while editing collider
-        isDragging = false;
-        isResizing = false;
-        activeHandle = ResizeHandle::NONE;
-        return;
-    }
+    handleDevModeInput(*this, event);
 }
 
 void DevModeScene::update(float deltaTime) {
@@ -417,7 +98,6 @@ void DevModeScene::render() {
     const float hierarchyWidth = displaySize.x * hierarchyWidthRatio;
     const float inspectorWidth = displaySize.x * inspectorWidthRatio;
     const float bottomPanelHeight = displaySize.y * bottomPanelHeightRatio;
-    // const float topToolbarHeight = 40.0f; // Already a member
 
     gameViewport = {
         static_cast<int>(hierarchyWidth),
@@ -430,7 +110,6 @@ void DevModeScene::render() {
 
     ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
 
-    // --- GAME VIEWPORT WINDOW ---
     ImGui::SetNextWindowPos(ImVec2(static_cast<float>(gameViewport.x), static_cast<float>(gameViewport.y)), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(static_cast<float>(gameViewport.w), static_cast<float>(gameViewport.h)), ImGuiCond_Always);
     ImGuiWindowFlags viewportFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoBackground;
@@ -494,15 +173,13 @@ void DevModeScene::render() {
         SDL_RenderSetViewport(renderer, &gameViewport);
 
         if (!isPlaying && showGrid) {
-            SDL_SetRenderDrawColor(renderer, 70, 70, 80, 255); // Darker grid lines
+            SDL_SetRenderDrawColor(renderer, 70, 70, 80, 255); 
 
-            // Calculate the visible world coordinates
             float worldViewLeft = cameraX;
             float worldViewTop = cameraY;
             float worldViewRight = cameraX + gameViewport.w / cameraZoom;
             float worldViewBottom = cameraY + gameViewport.h / cameraZoom;
 
-            // Adjust start points to align with the grid
             float gridStartX = std::floor(worldViewLeft / gridSize) * gridSize;
             float gridStartY = std::floor(worldViewTop / gridSize) * gridSize;
 
@@ -558,7 +235,6 @@ void DevModeScene::render() {
                         auto& transform = componentManager->getComponent<TransformComponent>(entity);
                         auto& collider = componentManager->getComponent<ColliderComponent>(entity);
                         if (!collider.vertices.empty()) {
-                            // Draw polygon collider
                             for (size_t i = 0; i < collider.vertices.size(); ++i) {
                                 size_t j = (i + 1) % collider.vertices.size();
                                 float x1 = (transform.x + collider.offsetX + collider.vertices[i].x - cameraX) * cameraZoom;
@@ -612,9 +288,9 @@ void DevModeScene::render() {
     ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(displaySize.x, topToolbarHeight), ImGuiCond_Always);
     ImGui::Begin("Toolbar", nullptr, fixedPanelFlags | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    if (ImGui::Button("Save")) saveScene(sceneFilePath);
-    ImGui::SameLine(); if (ImGui::Button("Save As...")) {}
-    ImGui::SameLine(); if (ImGui::Button("Load")) loadScene(sceneFilePath);
+    if (ImGui::Button("Save")) saveDevModeScene(*this, sceneFilePath); 
+    ImGui::SameLine(); if (ImGui::Button("Save As...")) { /* TODO */ }
+    ImGui::SameLine(); if (ImGui::Button("Load")) loadDevModeScene(*this, sceneFilePath); 
     ImGui::SameLine(); ImGui::PushItemWidth(120); ImGui::InputText("##Filename", sceneFilePath, sizeof(sceneFilePath)); ImGui::PopItemWidth();
     ImGui::SameLine(); if (ImGui::Button("Import...")) {}
     ImGui::SameLine(); if (ImGui::Button("Export...")) {}
@@ -622,7 +298,7 @@ void DevModeScene::render() {
     if (isPlaying) {
         if (ImGui::Button("Stop")) {
             isPlaying = false;
-            loadScene(sceneFilePath);
+            loadDevModeScene(*this, sceneFilePath);
         }
     } else {
         if (ImGui::Button("Play")) {
@@ -686,276 +362,7 @@ void DevModeScene::render() {
     }
     ImGui::End();
 
-    ImGui::SetNextWindowPos(ImVec2(displaySize.x - inspectorWidth, topToolbarHeight), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(inspectorWidth, displaySize.y - topToolbarHeight - bottomPanelHeight), ImGuiCond_Always);
-    ImGui::Begin("Inspector", nullptr, fixedPanelFlags);
-    if (selectedEntity != NO_ENTITY_SELECTED && std::find(entityManager->getActiveEntities().begin(), entityManager->getActiveEntities().end(), selectedEntity) != entityManager->getActiveEntities().end()) { 
-        ImGui::Text("Selected Entity: %u", selectedEntity);
-        ImGui::Separator();
-
-        ImGui::PushItemWidth(-1);
-        const char* component_types[] = { "Transform", "Sprite", "Velocity", "Script", "Collider" };
-        static int current_component_type_idx = 0; 
-
-        if (ImGui::BeginCombo("##AddComponentCombo", component_types[current_component_type_idx])) {
-            for (int n = 0; n < IM_ARRAYSIZE(component_types); n++) {
-                const bool is_selected = (current_component_type_idx == n);
-                if (ImGui::Selectable(component_types[n], is_selected))
-                    current_component_type_idx = n;
-                if (is_selected)
-                    ImGui::SetItemDefaultFocus();
-            }
-            ImGui::EndCombo();
-        }
-        ImGui::PopItemWidth();
-
-        if (ImGui::Button("Add Selected Component", ImVec2(-1, 0))) {
-            std::string selected_component_str = component_types[current_component_type_idx];
-            Signature entitySignature = entityManager->getSignature(selectedEntity);
-
-            if (selected_component_str == "Transform") {
-                if (!componentManager->hasComponent<TransformComponent>(selectedEntity)) {
-                    componentManager->addComponent(selectedEntity, TransformComponent{});
-                    entitySignature.set(componentManager->getComponentType<TransformComponent>());
-                    std::cout << "Added TransformComponent to Entity " << selectedEntity << std::endl;
-                } else {
-                    std::cout << "Entity " << selectedEntity << " already has TransformComponent." << std::endl;
-                }
-            } else if (selected_component_str == "Sprite") {
-                if (!componentManager->hasComponent<SpriteComponent>(selectedEntity)) {
-                    componentManager->addComponent(selectedEntity, SpriteComponent{});
-                    entitySignature.set(componentManager->getComponentType<SpriteComponent>());
-                    std::cout << "Added SpriteComponent to Entity " << selectedEntity << std::endl;
-                } else {
-                    std::cout << "Entity " << selectedEntity << " already has SpriteComponent." << std::endl;
-                }
-            } else if (selected_component_str == "Velocity") {
-                if (!componentManager->hasComponent<VelocityComponent>(selectedEntity)) {
-                    componentManager->addComponent(selectedEntity, VelocityComponent{}); 
-                    entitySignature.set(componentManager->getComponentType<VelocityComponent>());
-                    std::cout << "Added VelocityComponent to Entity " << selectedEntity << std::endl;
-                } else {
-                    std::cout << "Entity " << selectedEntity << " already has VelocityComponent." << std::endl;
-                }
-            } else if (selected_component_str == "Script") {
-                if (addComponentIfMissing<ScriptComponent>(componentManager.get(), selectedEntity)) {
-                    entitySignature.set(componentManager->getComponentType<ScriptComponent>());
-                    inspectorScriptPathBuffer[0] = '\0';
-                    std::cout << "Added ScriptComponent to Entity " << selectedEntity << std::endl;
-                } else {
-                    std::cout << "Entity " << selectedEntity << " already has ScriptComponent." << std::endl;
-                }
-            } else if (selected_component_str == "Collider") {
-                if (addComponentIfMissing<ColliderComponent>(componentManager.get(), selectedEntity)) {
-                    entitySignature.set(componentManager->getComponentType<ColliderComponent>());
-                    std::cout << "Added ColliderComponent to Entity " << selectedEntity << std::endl;
-                } else {
-                    std::cout << "Entity " << selectedEntity << " already has ColliderComponent." << std::endl;
-                }
-            }
-
-            entityManager->setSignature(selectedEntity, entitySignature);
-            systemManager->entitySignatureChanged(selectedEntity, entitySignature);
-        }
-        ImGui::Separator();
-
-        if (selectedEntity != NO_ENTITY_SELECTED) {
-            ImGui::Spacing();
-            if (ImGui::Button("Delete Entity", ImVec2(-1, 0))) {
-                Entity entityToDelete = selectedEntity;
-                selectedEntity = NO_ENTITY_SELECTED;
-                inspectorTextureIdBuffer[0] = '\0';
-                inspectorScriptPathBuffer[0] = '\0';
-
-                entityManager->destroyEntity(entityToDelete);
-                
-                std::cout << "Deleted Entity " << entityToDelete << std::endl;
-            }
-            ImGui::Separator();
-        }
-
-
-        if (componentManager->hasComponent<TransformComponent>(selectedEntity)) {
-            if (ImGui::CollapsingHeader("Transform Component", ImGuiTreeNodeFlags_DefaultOpen)) {
-                auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
-                ImGui::DragFloat("Position X##Transform", &transform.x, 1.0f);
-                ImGui::DragFloat("Position Y##Transform", &transform.y, 1.0f);
-                ImGui::DragFloat("Width##Transform", &transform.width, 1.0f, HANDLE_SIZE);
-                ImGui::DragFloat("Height##Transform", &transform.height, 1.0f, HANDLE_SIZE);
-                ImGui::DragFloat("Rotation##Transform", &transform.rotation, 1.0f, -360.0f, 360.0f);
-                ImGui::DragInt("Z-Index##Transform", &transform.z_index);
-            }
-        } else ImGui::TextDisabled("No Transform Component");
-
-        if (componentManager->hasComponent<SpriteComponent>(selectedEntity)) {
-            if (ImGui::CollapsingHeader("Sprite Component", ImGuiTreeNodeFlags_DefaultOpen)) {
-                auto& sprite = componentManager->getComponent<SpriteComponent>(selectedEntity);
-                if (inspectorTextureIdBuffer[0] == '\0' || sprite.textureId != inspectorTextureIdBuffer) {
-                    strncpy(inspectorTextureIdBuffer, sprite.textureId.c_str(), IM_ARRAYSIZE(inspectorTextureIdBuffer) - 1);
-                    inspectorTextureIdBuffer[IM_ARRAYSIZE(inspectorTextureIdBuffer) - 1] = '\0';
-                }
-                ImGui::Text("Texture ID/Path:");
-                if (ImGui::InputText("##SpriteTexturePath", inspectorTextureIdBuffer, IM_ARRAYSIZE(inspectorTextureIdBuffer), ImGuiInputTextFlags_EnterReturnsTrue)) {
-                    std::string newTextureId(inspectorTextureIdBuffer);
-                    AssetManager& assets = AssetManager::getInstance();
-                    if (assets.getTexture(newTextureId) || assets.loadTexture(newTextureId, newTextureId)) {
-                        sprite.textureId = newTextureId;
-                    } else {
-                        std::cerr << "Inspector Error: Failed to find or load texture: '" << newTextureId << "'. Reverting." << std::endl;
-                        strncpy(inspectorTextureIdBuffer, sprite.textureId.c_str(), IM_ARRAYSIZE(inspectorTextureIdBuffer) - 1);
-                        inspectorTextureIdBuffer[IM_ARRAYSIZE(inspectorTextureIdBuffer) - 1] = '\0';
-                    }
-                }
-                SDL_Texture* tex = AssetManager::getInstance().getTexture(sprite.textureId);
-                if (tex) {
-                    int w, h; SDL_QueryTexture(tex, nullptr, nullptr, &w, &h);
-                    ImGui::Text("Current: %s (%dx%d)", sprite.textureId.c_str(), w, h);
-                    ImGui::Image((ImTextureID)tex, ImVec2(64, 64));
-                } else ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Current texture not loaded!");
-                if (ImGui::Button("Browse...##SpriteTexture")) {
-                    const char* filterPatterns[] = { "*.png", "*.jpg", "*.jpeg", "*.bmp", "*.gif", "*.tga" };
-                    const char* filePath = tinyfd_openFileDialog("Select Texture File", "", 6, filterPatterns, "Image Files", 0);
-                    if (filePath != NULL) {
-                        std::string selectedPath = filePath;
-                        std::string filename = getFilenameFromPath(selectedPath);
-                        if (!filename.empty()) {
-                            std::string assetId = getFilenameWithoutExtension(filename);
-                            std::filesystem::path destDir = std::filesystem::absolute("../assets/Image/");
-                            std::filesystem::path destPath = destDir / filename;
-
-                            try {
-                                std::filesystem::create_directories(destDir);
-                                std::filesystem::copy_file(selectedPath, destPath, std::filesystem::copy_options::overwrite_existing);
-                                std::cout << "Asset copied to: " << destPath.string() << std::endl;
-
-                                AssetManager& assets = AssetManager::getInstance();
-                                if (assets.loadTexture(assetId, destPath.string())) {
-                                    sprite.textureId = assetId;
-                                    strncpy(inspectorTextureIdBuffer, assetId.c_str(), IM_ARRAYSIZE(inspectorTextureIdBuffer) - 1);
-                                    inspectorTextureIdBuffer[IM_ARRAYSIZE(inspectorTextureIdBuffer) - 1] = '\0';
-                                    std::cout << "Texture loaded and assigned: " << assetId << std::endl;
-                                } else {
-                                    tinyfd_messageBox("Error", "Failed to load texture into AssetManager.", "ok", "error", 1);
-                                }
-                            } catch (const std::filesystem::filesystem_error& e) {
-                                std::cerr << "Filesystem Error: " << e.what() << std::endl;
-                                tinyfd_messageBox("Error", ("Failed to copy file: " + std::string(e.what())).c_str(), "ok", "error", 1);
-                            }
-                        } else {
-                            tinyfd_messageBox("Error", "Could not extract filename.", "ok", "error", 1);
-                        }
-                    }
-                }
-            }
-        } else ImGui::TextDisabled("No Sprite Component");
-        ImGui::Separator();
-
-        if (componentManager->hasComponent<VelocityComponent>(selectedEntity)) {
-            if (ImGui::CollapsingHeader("Velocity Component", ImGuiTreeNodeFlags_DefaultOpen)) {
-                auto& vel = componentManager->getComponent<VelocityComponent>(selectedEntity);
-                ImGui::DragFloat("Velocity X", &vel.vx, 0.1f);
-                ImGui::DragFloat("Velocity Y", &vel.vy, 0.1f);
-            }
-        }
-
-        if (componentManager->hasComponent<ScriptComponent>(selectedEntity)) {
-            if (ImGui::CollapsingHeader("Script Component", ImGuiTreeNodeFlags_DefaultOpen)) {
-                auto& scriptComp = componentManager->getComponent<ScriptComponent>(selectedEntity);
-                if (inspectorScriptPathBuffer[0] == '\0' || scriptComp.scriptPath != inspectorScriptPathBuffer) {
-                    copyToBuffer(scriptComp.scriptPath, inspectorScriptPathBuffer, IM_ARRAYSIZE(inspectorScriptPathBuffer));
-                }
-                ImGui::Text("Script Path:");
-                if (ImGui::InputText("##ScriptPath", inspectorScriptPathBuffer, IM_ARRAYSIZE(inspectorScriptPathBuffer), ImGuiInputTextFlags_EnterReturnsTrue)) {
-                    scriptComp.scriptPath = inspectorScriptPathBuffer;
-                }
-                if (ImGui::Button("Browse...##ScriptPath")) {
-                    const char* filterPatterns[] = { "*.lua" };
-                    const char* filePath = tinyfd_openFileDialog("Select Lua Script", "../assets/scripts/", 1, filterPatterns, "Lua Scripts", 0);
-                    if (filePath != NULL) {
-                        std::filesystem::path selectedPath = filePath;
-                        scriptComp.scriptPath = selectedPath.string(); 
-                        strncpy(inspectorScriptPathBuffer, scriptComp.scriptPath.c_str(), IM_ARRAYSIZE(inspectorScriptPathBuffer) - 1);
-                        inspectorScriptPathBuffer[IM_ARRAYSIZE(inspectorScriptPathBuffer) - 1] = '\0';
-                    }
-                }
-                 if (ImGui::Button("Remove Script Component")) {
-                    componentManager->removeComponent<ScriptComponent>(selectedEntity);
-                    inspectorScriptPathBuffer[0] = '\0';
-                }
-            }
-        } else {
-            if (ImGui::Button("Add Script Component")) {
-                if (addComponentIfMissing<ScriptComponent>(componentManager.get(), selectedEntity)) {
-                     inspectorScriptPathBuffer[0] = '\0';
-                     Signature sig = entityManager->getSignature(selectedEntity);
-                     sig.set(componentManager->getComponentType<ScriptComponent>());
-                     entityManager->setSignature(selectedEntity, sig);
-                     systemManager->entitySignatureChanged(selectedEntity, sig);
-                }
-            }
-        }
-        ImGui::Separator();
-
-        if (componentManager->hasComponent<ColliderComponent>(selectedEntity)) {
-            if (ImGui::CollapsingHeader("Collider Component", ImGuiTreeNodeFlags_DefaultOpen)) {
-                auto& collider = componentManager->getComponent<ColliderComponent>(selectedEntity);
-                ImGui::DragFloat("Offset X##Collider", &collider.offsetX, 0.1f);
-                ImGui::DragFloat("Offset Y##Collider", &collider.offsetY, 0.1f);
-                ImGui::DragFloat("Width##Collider", &collider.width, 1.0f, 1.0f);
-                ImGui::DragFloat("Height##Collider", &collider.height, 1.0f, 1.0f); 
-                ImGui::Checkbox("Is Trigger##Collider", &collider.isTrigger);
-
-                ImGui::Separator();
-                ImGui::Text("Polygon Vertices:");
-                int removeIndex = -1;
-                for (size_t i = 0; i < collider.vertices.size(); ++i) {
-                    ImGui::PushID(static_cast<int>(i));
-                    ImGui::DragFloat2("Vertex", &collider.vertices[i].x, 0.5f);
-                    ImGui::SameLine();
-                    if (ImGui::Button("Remove##Vertex")) {
-                        removeIndex = static_cast<int>(i);
-                    }
-                    ImGui::PopID();
-                }
-                if (removeIndex >= 0 && removeIndex < (int)collider.vertices.size()) {
-                    collider.vertices.erase(collider.vertices.begin() + removeIndex);
-                }
-                if (ImGui::Button("Add Vertex")) {
-                    collider.vertices.push_back({0.0f, 0.0f});
-                }
-                if (ImGui::Button("Clear Vertices")) {
-                    collider.vertices.clear();
-                }
-
-                if (ImGui::Button("Remove Collider Component")) {
-                    componentManager->removeComponent<ColliderComponent>(selectedEntity);
-                    Signature sig = entityManager->getSignature(selectedEntity);
-                    sig.reset(componentManager->getComponentType<ColliderComponent>());
-                    entityManager->setSignature(selectedEntity, sig);
-                    systemManager->entitySignatureChanged(selectedEntity, sig);
-                }
-
-                if (ImGui::Checkbox("Edit Collider in Scene", &isEditingCollider)) {
-                    if (!isEditingCollider) {
-                        isDraggingVertex = false;
-                        editingVertexIndex = -1;
-                    }
-                }
-                ImGui::Text("(Click to add, drag to move vertices)");
-            }
-        } else {
-            if (ImGui::Button("Add Collider Component##Inspector")) {
-                if (addComponentIfMissing<ColliderComponent>(componentManager.get(), selectedEntity)) {
-                     Signature sig = entityManager->getSignature(selectedEntity);
-                     sig.set(componentManager->getComponentType<ColliderComponent>());
-                     entityManager->setSignature(selectedEntity, sig);
-                     systemManager->entitySignatureChanged(selectedEntity, sig);
-                }
-            }
-        }
-
-    } else ImGui::Text("No entity selected.");
-    ImGui::End();
+    EditorUI::renderInspectorPanel(*this, io); 
 
     ImGui::SetNextWindowPos(ImVec2(0, displaySize.y - bottomPanelHeight), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(displaySize.x, bottomPanelHeight), ImGuiCond_Always);
@@ -1083,167 +490,6 @@ void DevModeScene::render() {
     SDL_RenderPresent(renderer);
 }
 
-void DevModeScene::saveScene(const std::string& filepath) {
-    nlohmann::json sceneJson;
-    sceneJson["entities"] = nlohmann::json::array();
-
-    std::cout << "Saving scene to " << filepath << "..." << std::endl;
-
-    const auto& activeEntities = entityManager->getActiveEntities();
-    for (Entity entity : activeEntities) {
-        nlohmann::json entityJson;
-        entityJson["id_saved"] = entity;
-        entityJson["components"] = nlohmann::json::object();
-
-        if (componentManager->hasComponent<TransformComponent>(entity)) {
-            entityJson["components"]["TransformComponent"] = componentManager->getComponent<TransformComponent>(entity);
-        }
-        if (componentManager->hasComponent<SpriteComponent>(entity)) {
-            entityJson["components"]["SpriteComponent"] = componentManager->getComponent<SpriteComponent>(entity);
-        }
-        if (componentManager->hasComponent<ScriptComponent>(entity)) { 
-            entityJson["components"]["ScriptComponent"] = componentManager->getComponent<ScriptComponent>(entity); 
-        }
-        if (componentManager->hasComponent<VelocityComponent>(entity)) { 
-             entityJson["components"]["VelocityComponent"] = componentManager->getComponent<VelocityComponent>(entity);
-        }
-        if (componentManager->hasComponent<ColliderComponent>(entity)) {
-            entityJson["components"]["ColliderComponent"] = componentManager->getComponent<ColliderComponent>(entity);
-        }
-
-
-        if (!entityJson["components"].empty()) {
-            sceneJson["entities"].push_back(entityJson);
-        }
-    }
-
-    std::ofstream outFile(filepath);
-    if (outFile.is_open()) {
-        outFile << sceneJson.dump(4);
-        outFile.close();
-        std::cout << "Scene saved successfully." << std::endl;
-    } else {
-        std::cerr << "Error: Could not open file " << filepath << " for writing!" << std::endl;
-        tinyfd_messageBox("Save Error", ("Could not open file: " + filepath).c_str(), "ok", "error", 1);
-    }
-}
-
-void DevModeScene::loadScene(const std::string& filepath) {
-    std::ifstream inFile(filepath);
-    if (!inFile.is_open()) {
-        std::cerr << "Error: Could not open file " << filepath << " for reading!" << std::endl;
-        tinyfd_messageBox("Load Error", ("Could not open file: " + filepath).c_str(), "ok", "error", 1);
-        return;
-    }
-
-    nlohmann::json sceneJson;
-    try {
-        inFile >> sceneJson;
-        inFile.close();
-    } catch (nlohmann::json::parse_error& e) {
-        std::cerr << "Error: Failed to parse scene file " << filepath << ". " << e.what() << std::endl;
-        inFile.close();
-        tinyfd_messageBox("Load Error", ("Failed to parse scene file: " + filepath + "\n" + e.what()).c_str(), "ok", "error", 1);
-        return;
-    }
-
-    std::cout << "Loading scene from " << filepath << "..." << std::endl;
-
-    std::set<Entity> entitiesToDestroy = entityManager->getActiveEntities();
-    for (Entity entity : entitiesToDestroy) {
-        entityManager->destroyEntity(entity);
-    }
-    if (!entityManager->getActiveEntities().empty()) {
-        std::cerr << "Warning: Not all entities were destroyed during scene load cleanup!" << std::endl;
-    }
-    selectedEntity = NO_ENTITY_SELECTED;
-    inspectorTextureIdBuffer[0] = '\0';
-    inspectorScriptPathBuffer[0] = '\0';
-    cameraX = 0.0f;
-    cameraY = 0.0f;
-
-    if (!sceneJson.contains("entities") || !sceneJson["entities"].is_array()) {
-        std::cerr << "Error: Scene file format incorrect. Missing 'entities' array." << std::endl;
-        return;
-    }
-
-    const auto& entitiesJson = sceneJson["entities"];
-    AssetManager& assets = AssetManager::getInstance();
-
-    for (const auto& entityJson : entitiesJson) {
-        Entity newEntity = entityManager->createEntity();
-
-        if (!entityJson.contains("components") || !entityJson["components"].is_object()) {
-            std::cerr << "Warning: Entity definition missing 'components' object. Skipping." << std::endl;
-            entityManager->destroyEntity(newEntity);
-            continue;
-        }
-
-        Signature entitySignature;
-        const auto& componentsJson = entityJson["components"];
-
-        for (auto it = componentsJson.begin(); it != componentsJson.end(); ++it) {
-            const std::string& componentType = it.key();
-            const nlohmann::json& componentData = it.value();
-
-            try {
-                if (componentType == "TransformComponent") {
-                    TransformComponent comp;
-                    from_json(componentData, comp);
-                    componentManager->addComponent(newEntity, comp);
-                    entitySignature.set(componentManager->getComponentType<TransformComponent>());
-                } else if (componentType == "SpriteComponent") {
-                    SpriteComponent comp;
-                    from_json(componentData, comp);
-
-                    if (!assets.getTexture(comp.textureId)) {
-                        std::cout << "LoadScene: Texture '" << comp.textureId << "' not pre-loaded. Attempting dynamic load..." << std::endl;
-                        std::string potentialPath = "../assets/Image/" + comp.textureId + ".png";
-                        if (!assets.loadTexture(comp.textureId, potentialPath)) {
-                            potentialPath = "../assets/Image/" + comp.textureId + ".jpg";
-                            if (!assets.loadTexture(comp.textureId, potentialPath)) {
-                                std::cerr << "LoadScene Warning: Failed to dynamically load texture '" << comp.textureId
-                                          << "' needed by loaded entity " << newEntity << ". Check path/extension." << std::endl;
-                            } else {
-                                std::cout << "LoadScene: Successfully loaded texture '" << comp.textureId << "' dynamically (as .jpg)." << std::endl;
-                            }
-                        } else {
-                            std::cout << "LoadScene: Successfully loaded texture '" << comp.textureId << "' dynamically (as .png)." << std::endl;
-                        }
-                    }
-                    componentManager->addComponent(newEntity, comp);
-                    entitySignature.set(componentManager->getComponentType<SpriteComponent>());
-                } else if (componentType == "VelocityComponent") {
-                    VelocityComponent comp;
-                    from_json(componentData, comp);
-                    componentManager->addComponent(newEntity, comp);
-                    entitySignature.set(componentManager->getComponentType<VelocityComponent>());
-                } else if (componentType == "ScriptComponent") { 
-                    ScriptComponent comp;
-                    from_json(componentData, comp); 
-                    componentManager->addComponent(newEntity, comp);
-                    entitySignature.set(componentManager->getComponentType<ScriptComponent>());
-                } else if (componentType == "ColliderComponent") {
-                    ColliderComponent comp;
-                    from_json(componentData, comp);
-                    componentManager->addComponent(newEntity, comp);
-                    entitySignature.set(componentManager->getComponentType<ColliderComponent>());
-                } else {
-                    std::cerr << "Warning: Unknown component type '" << componentType << "' encountered during loading." << std::endl;
-                }
-            } catch (nlohmann::json::exception& e) {
-                std::cerr << "Error parsing component '" << componentType << "'. " << e.what() << std::endl;
-            }
-        }
-        entityManager->setSignature(newEntity, entitySignature);
-        // systemManager->entitySignatureChanged(newEntity, entitySignature); // This might be implicitly handled or done after all components
-    }
-    // It might be better to call entitySignatureChanged for all entities once after loading all of them
-    // or ensure it's correctly handled within the loop if systems need immediate updates.
-    // For now, assuming the existing structure handles system updates appropriately.
-    std::cout << "Scene loaded successfully." << std::endl;
-}
-
 bool DevModeScene::isMouseOverEntity(float worldMouseX, float worldMouseY, Entity entity) {
     if (entity == NO_ENTITY_SELECTED || !componentManager->hasComponent<TransformComponent>(entity)) {
         return false;
@@ -1290,35 +536,4 @@ ResizeHandle DevModeScene::getHandleAtPosition(float worldMouseX, float worldMou
         }
     }
     return ResizeHandle::NONE;
-}
-
-// Helper: Find closest edge to mouse, return (indexA, indexB, distance, closestPoint)
-static std::tuple<int, int, float, float, float> getClosestEdgeToPoint(const std::vector<ColliderVertex>& vertices, float px, float py, const TransformComponent& transform, const ColliderComponent& collider) {
-    int closestA = -1, closestB = -1;
-    float minDist = 1e9f;
-    float closestX = 0, closestY = 0;
-    if (vertices.size() < 2) return {-1, -1, minDist, 0, 0};
-    for (size_t i = 0; i < vertices.size(); ++i) {
-        size_t j = (i + 1) % vertices.size();
-        float ax = transform.x + collider.offsetX + vertices[i].x;
-        float ay = transform.y + collider.offsetY + vertices[i].y;
-        float bx = transform.x + collider.offsetX + vertices[j].x;
-        float by = transform.y + collider.offsetY + vertices[j].y;
-        // Project point onto segment
-        float dx = bx - ax, dy = by - ay;
-        float len2 = dx*dx + dy*dy;
-        float t = len2 > 0 ? ((px-ax)*dx + (py-ay)*dy) / len2 : 0;
-        t = std::clamp(t, 0.0f, 1.0f);
-        float projX = ax + t*dx;
-        float projY = ay + t*dy;
-        float dist2 = (projX-px)*(projX-px) + (projY-py)*(projY-py);
-        if (dist2 < minDist) {
-            minDist = dist2;
-            closestA = (int)i;
-            closestB = (int)j;
-            closestX = projX;
-            closestY = projY;
-        }
-    }
-    return {closestA, closestB, std::sqrt(minDist), closestX, closestY};
 }

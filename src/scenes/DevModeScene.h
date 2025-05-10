@@ -23,6 +23,9 @@
 #include "../AssetManager.h"
 #include "../ecs/Entity.h"
 #include "../../vendor/nlohmann/json.hpp"
+#include "DevModeInputHandler.h"
+#include "DevModeSceneSerializer.h" 
+#include "InspectorPanel.h" 
 
 class EntityManager;
 class ComponentManager;
@@ -39,7 +42,6 @@ enum class ResizeHandle {
     TOP_RIGHT,
     BOTTOM_LEFT,
     BOTTOM_RIGHT,
-    // Potentially add side handles later: TOP, BOTTOM, LEFT, RIGHT
 };
 
 class DevModeScene : public Scene {
@@ -51,12 +53,13 @@ public:
     void update(float deltaTime) override;
     void render() override;
 
-private:
+public:
+    friend void handleDevModeInput(DevModeScene& scene, SDL_Event& event);
+
     SDL_Renderer* renderer;
     SDL_Window* window;
     SDL_Rect gameViewport; 
 
-    // --- Camera/View Offset ---
     float cameraX = 0.0f;
     float cameraY = 0.0f;
     float cameraZoom = 1.0f;
@@ -70,7 +73,6 @@ private:
     std::shared_ptr<MovementSystem> movementSystem;
     AssetManager& assetManager;
 
-    // --- UI State & Colors ---
     float hierarchyWidthRatio = 0.18f;
     float inspectorWidthRatio = 0.22f;
     float bottomPanelHeightRatio = 0.25f;
@@ -87,10 +89,8 @@ private:
     char inspectorTextureIdBuffer[256] = "";
     char inspectorScriptPathBuffer[256] = ""; 
 
-    // --- Save/Load ---
     char sceneFilePath[256] = "scene.json";
 
-    // --- Viewport Interaction State ---
     bool isDragging = false;
     float dragStartMouseX = 0.0f; 
     float dragStartMouseY = 0.0f; 
@@ -100,17 +100,16 @@ private:
     bool snapToGrid = true; 
     bool showGrid = true; 
 
-    // --- Play Mode State ---
     bool isPlaying = false;
 
-    // --- Editor Interaction State ---
     bool isResizing = false;
     ResizeHandle activeHandle = ResizeHandle::NONE;
     float dragStartWidth = 0.0f;
     float dragStartHeight = 0.0f;
 
-    void saveScene(const std::string& filepath);
-    void loadScene(const std::string& filepath);
+    bool isEditingCollider = false;
+    int editingVertexIndex = -1;
+    bool isDraggingVertex = false;
 
     bool isMouseOverEntity(float worldMouseX, float worldMouseY, Entity entity); 
     
