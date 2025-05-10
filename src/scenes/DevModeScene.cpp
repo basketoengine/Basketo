@@ -29,6 +29,7 @@
 #include "DevModeInputHandler.h"
 #include "DevModeSceneSerializer.h" 
 #include "InspectorPanel.h" 
+#include <stack> // Added for iterative directory traversal
 
 DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win) 
     : renderer(ren), 
@@ -63,9 +64,48 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     systemManager->setSignature<MovementSystem>(moveSig);
 
     AssetManager& assets = AssetManager::getInstance();
-    assets.loadTexture("logo", "../assets/Image/logo.png");
-    assets.loadTexture("player", "../assets/Image/player.png");
-    assets.loadTexture("world", "../assets/Image/world.jpg");
+    std::string texturePath = "../assets/Textures/";
+    if (std::filesystem::exists(texturePath)) {
+        for (const auto& entry : std::filesystem::directory_iterator(texturePath)) {
+            if (entry.is_regular_file()) {
+                std::string path = entry.path().string();
+                std::string id = entry.path().stem().string();
+                if (!assets.loadTexture(id, path)) {
+                    std::cerr << "DevModeScene Error: Failed to load texture: " << path << std::endl;
+                }
+            }
+        }
+    }
+
+    std::string audioPath = "../assets/Audio/";
+    if (std::filesystem::exists(audioPath)) {
+        for (const auto& entry : std::filesystem::directory_iterator(audioPath)) {
+            if (entry.is_regular_file()) {
+                std::string path = entry.path().string();
+                std::string id = entry.path().stem().string();
+                if (!assets.loadSound(id, path)) {
+                    std::cerr << "DevModeScene Error: Failed to load sound: " << path << std::endl;
+                }
+            }
+        }
+    }
+
+    std::string fontBasePath = "../assets/Fonts/";
+    if (std::filesystem::exists(fontBasePath)) {
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(fontBasePath)) {
+            if (entry.is_regular_file()) {
+                std::string path = entry.path().string();
+                std::string filename = entry.path().filename().string();
+                std::string idBase = entry.path().stem().string();
+                std::string extension = entry.path().extension().string();
+                if (extension == ".ttf" || extension == ".otf") {
+                    if (!assets.loadFont(idBase + "_16", path, 16)) {
+                        std::cerr << "DevModeScene Error: Failed to load font: " << path << std::endl;
+                    }
+                }
+            }
+        }
+    }
 }
 
 DevModeScene::~DevModeScene() {
@@ -370,22 +410,48 @@ void DevModeScene::render() {
     if (ImGui::BeginTabBar("BottomTabs")) {
         if (ImGui::BeginTabItem("Project")) {
             if (ImGui::Button("Import Asset")) {
-                const char* filterPatterns[] = { "*.png", "*.jpg", "*.jpeg", "*.bmp", "*.gif", "*.tga" };
-                const char* filePath = tinyfd_openFileDialog("Import Asset File", "", 6, filterPatterns, "Image Files", 0);
+                const char* filterPatterns[] = { "*.png", "*.jpg", "*.jpeg", "*.bmp", "*.gif", "*.tga", "*.mp3", "*.wav", "*.ogg", "*.flac", "*.ttf", "*.otf", "*.lua", "*.json" }; // Added more patterns
+                const char* filePath = tinyfd_openFileDialog("Import Asset File", "", 14, filterPatterns, "Asset Files", 0); // Adjusted count
                 if (filePath != NULL) {
                     std::string selectedPath = filePath;
-                    std::string filename = getFilenameFromPath(selectedPath);
+                    std::filesystem::path p = selectedPath;
+                    std::string filename = p.filename().string();
                     if (!filename.empty()) {
-                        std::string assetId = getFilenameWithoutExtension(filename);
-                        std::filesystem::path destDir = std::filesystem::absolute("../assets/Image/");
+                        std::string assetId = p.stem().string();
+                        std::filesystem::path destDir;
+                        std::string ext = p.extension().string();
+                        if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp" || ext == ".gif" || ext == ".tga") {
+                            destDir = std::filesystem::absolute("../assets/Textures/");
+                        } else if (ext == ".mp3" || ext == ".wav" || ext == ".ogg" || ext == ".flac") {
+                            destDir = std::filesystem::absolute("../assets/Audio/");
+                        } else if (ext == ".ttf" || ext == ".otf") {
+                            destDir = std::filesystem::absolute("../assets/Fonts/");
+                        } else if (ext == ".lua") {
+                            destDir = std::filesystem::absolute("../assets/Scripts/");
+                        } else if (ext == ".json") { 
+                            destDir = std::filesystem::absolute("../assets/Scenes/");
+                        }
+                         else {
+                            destDir = std::filesystem::absolute("../assets/"); 
+                        }
                         std::filesystem::path destPath = destDir / filename;
                         try {
                             std::filesystem::create_directories(destDir);
                             std::filesystem::copy_file(selectedPath, destPath, std::filesystem::copy_options::overwrite_existing);
                             std::cout << "Asset copied to: " << destPath.string() << std::endl;
                             AssetManager& assets = AssetManager::getInstance();
-                            if (!assets.loadTexture(assetId, destPath.string())) {
-                                tinyfd_messageBox("Error", "Failed to load imported texture.", "ok", "error", 1);
+                            if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp" || ext == ".gif" || ext == ".tga") {
+                                if (!assets.loadTexture(assetId, destPath.string())) {
+                                    tinyfd_messageBox("Error", "Failed to load imported texture.", "ok", "error", 1);
+                                }
+                            } else if (ext == ".mp3" || ext == ".wav" || ext == ".ogg" || ext == ".flac") {
+                                if (!assets.loadSound(assetId, destPath.string())) {
+                                    tinyfd_messageBox("Error", "Failed to load imported sound.", "ok", "error", 1);
+                                }
+                            } else if (ext == ".ttf" || ext == ".otf") {
+                                 if (!assets.loadFont(assetId + "_16", destPath.string(), 16)) { 
+                                    tinyfd_messageBox("Error", "Failed to load imported font.", "ok", "error", 1);
+                                }
                             }
                         } catch (const std::filesystem::filesystem_error& e) {
                             std::cerr << "Filesystem Error: " << e.what() << std::endl;
@@ -397,76 +463,104 @@ void DevModeScene::render() {
                 }
             }
             ImGui::Separator();
-            ImGui::Text("Available Textures:");
-            AssetManager& assets = AssetManager::getInstance();
-            const auto& textures = assets.getAllTextures();
-            ImGuiStyle& style = ImGui::GetStyle();
-            float windowVisibleX = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
-            float itemWidth = 64.0f;
-            float itemSpacing = style.ItemSpacing.x;
-            int itemsPerRow = std::max(1, static_cast<int>((ImGui::GetContentRegionAvail().x + itemSpacing) / (itemWidth + itemSpacing)));
-            int currentItem = 0;
 
-            for (const auto& [id, texture] : textures) {
-                ImGui::PushID(id.c_str());
-                ImGui::BeginGroup();
-                ImGui::Image((ImTextureID)texture, ImVec2(itemWidth, itemWidth));
-                ImGui::TextWrapped("%s", id.c_str());
-                ImGui::EndGroup();
+            std::function<void(const std::filesystem::path&)> displayAssetTree;
+            displayAssetTree = [&](const std::filesystem::path& currentPath) {
+                namespace fs = std::filesystem;
+                AssetManager& assets = AssetManager::getInstance();
+                ImGuiStyle& style = ImGui::GetStyle();
+                float itemWidth = 64.0f; 
 
-                if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-                    ImGui::SetDragDropPayload("ASSET_TEXTURE_ID", id.c_str(), id.length() + 1);
-                    ImGui::Image((ImTextureID)texture, ImVec2(itemWidth, itemWidth));
-                    ImGui::Text("%s", id.c_str());
-                    ImGui::EndDragDropSource();
-                }
-
-                currentItem++;
-                if (currentItem % itemsPerRow != 0) {
-                    float lastItemX = ImGui::GetItemRectMax().x;
-                    float nextItemX = lastItemX + style.ItemSpacing.x + itemWidth;
-                    if (nextItemX < (ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x)) {
-                        ImGui::SameLine();
+                std::vector<fs::directory_entry> entries;
+                try {
+                    for (const auto& entry : fs::directory_iterator(currentPath)) {
+                        entries.push_back(entry);
                     }
+                } catch (const fs::filesystem_error& e) {
+                    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Error accessing %s: %s", currentPath.string().c_str(), e.what());
+                    return;
                 }
-                ImGui::PopID();
-            }
 
-            ImGui::Separator();
-            ImGui::Text("Available Sounds:");
-            namespace fs = std::filesystem;
-            std::string soundDir = "../assets/Sound/";
-            if (fs::exists(soundDir)) {
-                for (const auto& entry : fs::directory_iterator(soundDir)) {
-                    if (entry.is_regular_file()) {
-                        std::string filename = entry.path().filename().string();
-                        std::string ext = entry.path().extension().string();
-                        if (ext == ".mp3" || ext == ".wav" || ext == ".ogg" || ext == ".flac") {
-                            ImGui::BulletText("%s", filename.c_str());
+                std::sort(entries.begin(), entries.end(), [](const fs::directory_entry& a, const fs::directory_entry& b) {
+                    if (a.is_directory() && !b.is_directory()) return true;
+                    if (!a.is_directory() && b.is_directory()) return false;
+                    return a.path().filename().string() < b.path().filename().string();
+                });
+
+                for (const auto& entry : entries) {
+                    const auto& path = entry.path();
+                    std::string filename = path.filename().string();
+                    std::string assetId = path.stem().string();
+
+                    if (entry.is_directory()) {
+                        ImGuiTreeNodeFlags node_flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
+                        bool node_open = ImGui::TreeNodeEx(filename.c_str(), node_flags, "[F] %s", filename.c_str());
+                        if (node_open) {
+                            displayAssetTree(path);
+                            ImGui::TreePop();
+                        }
+                    } else if (entry.is_regular_file()) {
+                        std::string ext = path.extension().string();
+                        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+                        if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp" || ext == ".gif" || ext == ".tga") {
+                            SDL_Texture* texture = assets.getTexture(assetId);
+                            ImGui::BeginGroup();
+                            if (texture) {
+                                ImGui::Image((ImTextureID)texture, ImVec2(itemWidth, itemWidth));
+                            } else {
+                                ImGui::Dummy(ImVec2(itemWidth, itemWidth)); 
+                                ImGui::TextWrapped("(No Preview)");
+                            }
+                            ImGui::TextWrapped("%s", filename.c_str());
+                            ImGui::EndGroup();
+
+                            if (texture && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+                                ImGui::SetDragDropPayload("ASSET_TEXTURE_ID", assetId.c_str(), assetId.length() + 1);
+                                ImGui::Image((ImTextureID)texture, ImVec2(itemWidth, itemWidth));
+                                ImGui::Text("%s", filename.c_str());
+                                ImGui::EndDragDropSource();
+                            }
+                        } else if (ext == ".mp3" || ext == ".wav" || ext == ".ogg" || ext == ".flac") {
+                            ImGui::BulletText("[A] %s", filename.c_str());
+                        } else if (ext == ".ttf" || ext == ".otf") {
+                            ImGui::BulletText("[T] %s", filename.c_str());
+                        } else if (ext == ".lua") {
+                            ImGui::BulletText("[S] %s", filename.c_str());
+                        } else if (ext == ".json") { 
+                            ImGui::BulletText("[J] %s", filename.c_str());
+                            if (ImGui::IsItemClicked(0) && ImGui::IsMouseDoubleClicked(0)) {
+                                std::string sceneToLoadPath = fs::relative(path, fs::current_path() / "../").string();
+                                std::replace(sceneToLoadPath.begin(), sceneToLoadPath.end(), '\\', '/');
+                                if (loadDevModeScene(*this, sceneToLoadPath)) {
+                                    strncpy(sceneFilePath, sceneToLoadPath.c_str(), sizeof(sceneFilePath) - 1);
+                                    sceneFilePath[sizeof(sceneFilePath) - 1] = '\0';
+                                    std::cout << "Loaded scene: " << sceneToLoadPath << std::endl;
+                                } else {
+                                    std::cerr << "Failed to load scene: " << sceneToLoadPath << std::endl;
+                                }
+                            }
+                        }
+                         else {
+                            ImGui::BulletText("[?] %s", filename.c_str());
+                        }
+                        float currentX = ImGui::GetCursorPosX() + ImGui::GetItemRectSize().x + style.ItemSpacing.x;
+                        float windowWidth = ImGui::GetWindowContentRegionMax().x;
+                        if (currentX < windowWidth) {
+                            // Check if the next item would fit, otherwise wrap. This logic is tricky with varying item widths.
+                            // For simplicity, this example doesn't implement complex wrapping for non-texture items.
+                            // ImGui::SameLine(); // Only if you want items side-by-side
                         }
                     }
                 }
-            } else {
-                ImGui::TextDisabled("No sound directory found.");
-            }
+            };
 
-            ImGui::Separator();
-            ImGui::Text("Available Fonts:");
-            std::string fontDir = "../assets/fonts/roboto/";
-            if (fs::exists(fontDir)) {
-                for (const auto& entry : fs::directory_iterator(fontDir)) {
-                    if (entry.is_regular_file()) {
-                        std::string filename = entry.path().filename().string();
-                        std::string ext = entry.path().extension().string();
-                        if (ext == ".ttf" || ext == ".otf") {
-                            ImGui::BulletText("%s", filename.c_str());
-                        }
-                    }
-                }
+            std::filesystem::path assetsRoot = "../assets";
+            if (std::filesystem::exists(assetsRoot) && std::filesystem::is_directory(assetsRoot)) {
+                displayAssetTree(assetsRoot);
             } else {
-                ImGui::TextDisabled("No font directory found.");
+                ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Assets directory not found at: %s", std::filesystem::absolute(assetsRoot).string().c_str());
             }
-
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Console")) {

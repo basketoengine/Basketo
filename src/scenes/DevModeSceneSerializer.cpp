@@ -57,12 +57,12 @@ void saveDevModeScene(DevModeScene& scene, const std::string& filepath) {
     }
 }
 
-void loadDevModeScene(DevModeScene& scene, const std::string& filepath) {
+bool loadDevModeScene(DevModeScene& scene, const std::string& filepath) {
     std::ifstream inFile(filepath);
     if (!inFile.is_open()) {
         std::cerr << "Error: Could not open file " << filepath << " for reading!" << std::endl;
         tinyfd_messageBox("Load Error", ("Could not open file: " + filepath).c_str(), "ok", "error", 1);
-        return;
+        return false;
     }
 
     nlohmann::json sceneJson;
@@ -73,7 +73,7 @@ void loadDevModeScene(DevModeScene& scene, const std::string& filepath) {
         std::cerr << "Error: Failed to parse scene file " << filepath << ". " << e.what() << std::endl;
         inFile.close();
         tinyfd_messageBox("Load Error", ("Failed to parse scene file: " + filepath + "\n" + e.what()).c_str(), "ok", "error", 1);
-        return;
+        return false;
     }
 
     std::cout << "Loading scene from " << filepath << "..." << std::endl;
@@ -93,14 +93,12 @@ void loadDevModeScene(DevModeScene& scene, const std::string& filepath) {
     scene.cameraZoom = 1.0f;
 
     if (!sceneJson.contains("entities") || !sceneJson["entities"].is_array()) {
-        std::cerr << "Error: Scene file format incorrect. Missing 'entities' array." << std::endl;
-        return;
+        std::cerr << "Error: Scene file " << filepath << " does not contain a valid 'entities' array." << std::endl;
+        tinyfd_messageBox("Load Error", ("Scene file " + filepath + " is missing or has an invalid 'entities' array.").c_str(), "ok", "error", 1);
+        return false;
     }
 
-    const auto& entitiesJson = sceneJson["entities"];
-    AssetManager& assets = AssetManager::getInstance();
-
-    for (const auto& entityJson : entitiesJson) {
+    for (const auto& entityJson : sceneJson["entities"]) {
         Entity newEntity = scene.entityManager->createEntity();
         Signature entitySignature; 
 
@@ -126,13 +124,13 @@ void loadDevModeScene(DevModeScene& scene, const std::string& filepath) {
                     SpriteComponent comp;
                     from_json(componentData, comp); 
 
-                    if (!assets.getTexture(comp.textureId)) {
+                    if (!scene.assetManager.getTexture(comp.textureId)) {
                         std::cout << "LoadScene: Texture '" << comp.textureId << "' not pre-loaded. Attempting dynamic load..." << std::endl;
                         
-                        std::string potentialPath = "../assets/Image/" + comp.textureId + ".png"; 
-                        if (!assets.loadTexture(comp.textureId, potentialPath)) {
-                            potentialPath = "../assets/Image/" + comp.textureId + ".jpg"; 
-                             if (!assets.loadTexture(comp.textureId, potentialPath)) {
+                        std::string potentialPath = "../assets/Textures/" + comp.textureId + ".png";
+                        if (!scene.assetManager.loadTexture(comp.textureId, potentialPath)) {
+                            potentialPath = "../assets/Textures/" + comp.textureId + ".jpg"; 
+                             if (!scene.assetManager.loadTexture(comp.textureId, potentialPath)) {
                                 std::cerr << "LoadScene Warning: Failed to dynamically load texture '" << comp.textureId 
                                           << "' needed by loaded entity " << newEntity << ". Check path/extension." << std::endl;
                             } else {
@@ -169,5 +167,6 @@ void loadDevModeScene(DevModeScene& scene, const std::string& filepath) {
         scene.entityManager->setSignature(newEntity, entitySignature);
         
     }
-    std::cout << "Scene loaded successfully." << std::endl;
+    std::cout << "Scene loaded successfully from " << filepath << std::endl;
+    return true;
 }

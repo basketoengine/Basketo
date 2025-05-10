@@ -14,6 +14,7 @@
 #include <iostream>
 #include <memory>
 #include <algorithm>
+#include <filesystem>
 
 GameScene::GameScene(SDL_Renderer* ren) : renderer(ren), cameraZoom(1.0f), cameraX(0.0f), cameraY(0.0f) {
     entityManager = std::make_unique<EntityManager>();
@@ -50,21 +51,47 @@ GameScene::GameScene(SDL_Renderer* ren) : renderer(ren), cameraZoom(1.0f), camer
 
     AssetManager& assets = AssetManager::getInstance();
 
-    if (!assets.loadTexture("logo", "../assets/Image/logo.png")) {
-        std::cerr << "GameScene Error: Failed to load logo texture!" << std::endl;
-    }
-    if (!assets.loadTexture("player", "../assets/Image/player.png")) {
-        std::cerr << "GameScene Error: Failed to load player texture!" << std::endl;
-    }
-    if (!assets.loadTexture("world", "../assets/Image/world.jpg")) {
-        std::cerr << "GameScene Error: Failed to load world texture!" << std::endl;
+    std::string texturePath = "../assets/Textures/";
+    if (std::filesystem::exists(texturePath)) {
+        for (const auto& entry : std::filesystem::directory_iterator(texturePath)) {
+            if (entry.is_regular_file()) {
+                std::string path = entry.path().string();
+                std::string id = entry.path().stem().string();
+                if (!assets.loadTexture(id, path)) {
+                    std::cerr << "GameScene Error: Failed to load texture: " << path << std::endl;
+                }
+            }
+        }
     }
 
-    if (!assets.loadFont("roboto_16", "../assets/fonts/roboto/Roboto-Regular.ttf", 16)) {
-         std::cerr << "GameScene Error: Failed to load roboto font size 16!" << std::endl;
+    std::string audioPath = "../assets/Audio/";
+    if (std::filesystem::exists(audioPath)) {
+        for (const auto& entry : std::filesystem::directory_iterator(audioPath)) {
+            if (entry.is_regular_file()) {
+                std::string path = entry.path().string();
+                std::string id = entry.path().stem().string();
+                if (!assets.loadSound(id, path)) {
+                    std::cerr << "GameScene Error: Failed to load sound: " << path << std::endl;
+                }
+            }
+        }
     }
-    if (!assets.loadSound("test_sound", "../assets/Sound/test.mp3")) {
-         std::cerr << "GameScene Error: Failed to load test sound!" << std::endl;
+
+    std::string fontBasePath = "../assets/Fonts/";
+    if (std::filesystem::exists(fontBasePath)) {
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(fontBasePath)) {
+            if (entry.is_regular_file()) {
+                std::string path = entry.path().string();
+                std::string filename = entry.path().filename().string();
+                std::string idBase = entry.path().stem().string();
+                std::string extension = entry.path().extension().string();
+                if (extension == ".ttf" || extension == ".otf") {
+                    if (!assets.loadFont(idBase + "_16", path, 16)) { 
+                        std::cerr << "GameScene Error: Failed to load font: " << path << " with size 16" << std::endl;
+                    }
+                }
+            }
+        }
     }
 
     playerEntity = entityManager->createEntity();
@@ -119,12 +146,12 @@ GameScene::~GameScene() {
 void GameScene::handleInput(SDL_Event& event) {
     if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_SPACE) {
          if (InputManager::getInstance().isActionPressed("PlaySound")) {
-            Mix_Chunk* sound = AssetManager::getInstance().getSound("test_sound");
+            Mix_Chunk* sound = AssetManager::getInstance().getSound("test");
             if (sound) {
                 Mix_PlayChannel(-1, sound, 0);
-                std::cout << "Played test_sound via event" << std::endl;
+                std::cout << "Played test sound via event" << std::endl;
             } else {
-                std::cerr << "Could not get test_sound to play." << std::endl;
+                std::cerr << "Could not get test sound to play." << std::endl;
             }
         }
     }
