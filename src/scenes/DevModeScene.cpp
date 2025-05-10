@@ -27,6 +27,10 @@
 #include "../utils/FileUtils.h" 
 #include "../utils/EditorHelpers.h" 
 
+static bool isEditingCollider = false;
+static int editingVertexIndex = -1;
+static bool isDraggingVertex = false;
+
 DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win) 
     : renderer(ren), 
       window(win),
@@ -317,6 +321,55 @@ void DevModeScene::handleInput(SDL_Event& event) {
             activeHandle = ResizeHandle::NONE;
         }
     }
+
+    if (isEditingCollider && selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<ColliderComponent>(selectedEntity) && componentManager->hasComponent<TransformComponent>(selectedEntity)) {
+        auto& collider = componentManager->getComponent<ColliderComponent>(selectedEntity);
+        auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
+        switch (event.type) {
+            case SDL_MOUSEBUTTONDOWN:
+                if (event.button.button == SDL_BUTTON_LEFT && mouseInViewport) {
+                    float minDist = 12.0f / cameraZoom;
+                    editingVertexIndex = -1;
+                    for (size_t i = 0; i < collider.vertices.size(); ++i) {
+                        float vx = transform.x + collider.offsetX + collider.vertices[i].x;
+                        float vy = transform.y + collider.offsetY + collider.vertices[i].y;
+                        float dx = worldMouseX - vx;
+                        float dy = worldMouseY - vy;
+                        if (dx * dx + dy * dy < minDist * minDist) {
+                            editingVertexIndex = (int)i;
+                            isDraggingVertex = true;
+                            break;
+                        }
+                    }
+                    if (editingVertexIndex == -1) {
+                        ColliderVertex newVert;
+                        newVert.x = worldMouseX - (transform.x + collider.offsetX);
+                        newVert.y = worldMouseY - (transform.y + collider.offsetY);
+                        collider.vertices.push_back(newVert);
+                        editingVertexIndex = (int)collider.vertices.size() - 1;
+                        isDraggingVertex = true;
+                    }
+                }
+                break;
+            case SDL_MOUSEBUTTONUP:
+                if (event.button.button == SDL_BUTTON_LEFT) {
+                    isDraggingVertex = false;
+                    editingVertexIndex = -1;
+                }
+                break;
+            case SDL_MOUSEMOTION:
+                if (isDraggingVertex && editingVertexIndex >= 0) {
+                    collider.vertices[editingVertexIndex].x = worldMouseX - (transform.x + collider.offsetX);
+                    collider.vertices[editingVertexIndex].y = worldMouseY - (transform.y + collider.offsetY);
+                }
+                break;
+        }
+        // Prevent entity movement/resizing while editing collider
+        isDragging = false;
+        isResizing = false;
+        activeHandle = ResizeHandle::NONE;
+        return;
+    }
 }
 
 void DevModeScene::update(float deltaTime) {
@@ -604,16 +657,14 @@ void DevModeScene::render() {
     ImGui::SetNextWindowPos(ImVec2(displaySize.x - inspectorWidth, topToolbarHeight), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(inspectorWidth, displaySize.y - topToolbarHeight - bottomPanelHeight), ImGuiCond_Always);
     ImGui::Begin("Inspector", nullptr, fixedPanelFlags);
-    if (selectedEntity != NO_ENTITY_SELECTED && std::find(entityManager->getActiveEntities().begin(), entityManager->getActiveEntities().end(), selectedEntity) != entityManager->getActiveEntities().end()) { // Assuming isEntityActive check is present or can be added
+    if (selectedEntity != NO_ENTITY_SELECTED && std::find(entityManager->getActiveEntities().begin(), entityManager->getActiveEntities().end(), selectedEntity) != entityManager->getActiveEntities().end()) { 
         ImGui::Text("Selected Entity: %u", selectedEntity);
         ImGui::Separator();
 
-        // --- ADD COMPONENT UI ---
         ImGui::PushItemWidth(-1);
-        const char* component_types[] = { "Transform", "Sprite", "Velocity", "Script", "Collider" }; // Added "Collider"
+        const char* component_types[] = { "Transform", "Sprite", "Velocity", "Script", "Collider" };
         static int current_component_type_idx = 0; 
 
-        // Display the combo box (dropdown menu)
         if (ImGui::BeginCombo("##AddComponentCombo", component_types[current_component_type_idx])) {
             for (int n = 0; n < IM_ARRAYSIZE(component_types); n++) {
                 const bool is_selected = (current_component_type_idx == n);
@@ -676,7 +727,6 @@ void DevModeScene::render() {
         }
         ImGui::Separator();
 
-        // --- DELETE ENTITY BUTTON ---
         if (selectedEntity != NO_ENTITY_SELECTED) {
             ImGui::Spacing();
             if (ImGui::Button("Delete Entity", ImVec2(-1, 0))) {
@@ -693,7 +743,6 @@ void DevModeScene::render() {
         }
 
 
-        // Display Transform Component
         if (componentManager->hasComponent<TransformComponent>(selectedEntity)) {
             if (ImGui::CollapsingHeader("Transform Component", ImGuiTreeNodeFlags_DefaultOpen)) {
                 auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
@@ -706,7 +755,6 @@ void DevModeScene::render() {
             }
         } else ImGui::TextDisabled("No Transform Component");
 
-        // Display Sprite Component
         if (componentManager->hasComponent<SpriteComponent>(selectedEntity)) {
             if (ImGui::CollapsingHeader("Sprite Component", ImGuiTreeNodeFlags_DefaultOpen)) {
                 auto& sprite = componentManager->getComponent<SpriteComponent>(selectedEntity);
@@ -770,7 +818,6 @@ void DevModeScene::render() {
         } else ImGui::TextDisabled("No Sprite Component");
         ImGui::Separator();
 
-        // --- Script Component UI ---
         if (componentManager->hasComponent<VelocityComponent>(selectedEntity)) {
             if (ImGui::CollapsingHeader("Velocity Component", ImGuiTreeNodeFlags_DefaultOpen)) {
                 auto& vel = componentManager->getComponent<VelocityComponent>(selectedEntity);
@@ -817,7 +864,6 @@ void DevModeScene::render() {
         }
         ImGui::Separator();
 
-        // --- Collider Component UI ---
         if (componentManager->hasComponent<ColliderComponent>(selectedEntity)) {
             if (ImGui::CollapsingHeader("Collider Component", ImGuiTreeNodeFlags_DefaultOpen)) {
                 auto& collider = componentManager->getComponent<ColliderComponent>(selectedEntity);
@@ -827,7 +873,6 @@ void DevModeScene::render() {
                 ImGui::DragFloat("Height##Collider", &collider.height, 1.0f, 1.0f); 
                 ImGui::Checkbox("Is Trigger##Collider", &collider.isTrigger);
 
-                // --- Polygon Vertices UI ---
                 ImGui::Separator();
                 ImGui::Text("Polygon Vertices:");
                 int removeIndex = -1;
@@ -857,6 +902,14 @@ void DevModeScene::render() {
                     entityManager->setSignature(selectedEntity, sig);
                     systemManager->entitySignatureChanged(selectedEntity, sig);
                 }
+
+                if (ImGui::Checkbox("Edit Collider in Scene", &isEditingCollider)) {
+                    if (!isEditingCollider) {
+                        isDraggingVertex = false;
+                        editingVertexIndex = -1;
+                    }
+                }
+                ImGui::Text("(Click to add, drag to move vertices)");
             }
         } else {
             if (ImGui::Button("Add Collider Component##Inspector")) {
@@ -940,7 +993,6 @@ void DevModeScene::render() {
                 ImGui::PopID();
             }
 
-            // --- SOUNDS SECTION ---
             ImGui::Separator();
             ImGui::Text("Available Sounds:");
             namespace fs = std::filesystem;
@@ -1017,10 +1069,10 @@ void DevModeScene::saveScene(const std::string& filepath) {
         if (componentManager->hasComponent<SpriteComponent>(entity)) {
             entityJson["components"]["SpriteComponent"] = componentManager->getComponent<SpriteComponent>(entity);
         }
-        if (componentManager->hasComponent<ScriptComponent>(entity)) { // Added for saving
-            entityJson["components"]["ScriptComponent"] = componentManager->getComponent<ScriptComponent>(entity); // Should use to_json
+        if (componentManager->hasComponent<ScriptComponent>(entity)) { 
+            entityJson["components"]["ScriptComponent"] = componentManager->getComponent<ScriptComponent>(entity); 
         }
-        if (componentManager->hasComponent<VelocityComponent>(entity)) { // Assuming VelocityComponent might be saved
+        if (componentManager->hasComponent<VelocityComponent>(entity)) { 
              entityJson["components"]["VelocityComponent"] = componentManager->getComponent<VelocityComponent>(entity);
         }
         if (componentManager->hasComponent<ColliderComponent>(entity)) {
