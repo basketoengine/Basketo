@@ -42,7 +42,7 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     componentManager->registerComponent<SpriteComponent>();
     componentManager->registerComponent<VelocityComponent>();
     componentManager->registerComponent<ScriptComponent>(); 
-    componentManager->registerComponent<ColliderComponent>(); // Registered ColliderComponent
+    componentManager->registerComponent<ColliderComponent>();
 
     renderSystem = systemManager->registerSystem<RenderSystem>();
     Signature renderSig;
@@ -472,14 +472,25 @@ void DevModeScene::render() {
                     if (componentManager->hasComponent<TransformComponent>(entity) && componentManager->hasComponent<ColliderComponent>(entity)) {
                         auto& transform = componentManager->getComponent<TransformComponent>(entity);
                         auto& collider = componentManager->getComponent<ColliderComponent>(entity);
-
-                        SDL_Rect colliderRect = {
-                            (int)(((transform.x + collider.offsetX) - cameraX) * cameraZoom),
-                            (int)(((transform.y + collider.offsetY) - cameraY) * cameraZoom),
-                            (int)(collider.width * cameraZoom),
-                            (int)(collider.height * cameraZoom)
-                        };
-                        SDL_RenderDrawRect(renderer, &colliderRect);
+                        if (!collider.vertices.empty()) {
+                            // Draw polygon collider
+                            for (size_t i = 0; i < collider.vertices.size(); ++i) {
+                                size_t j = (i + 1) % collider.vertices.size();
+                                float x1 = (transform.x + collider.offsetX + collider.vertices[i].x - cameraX) * cameraZoom;
+                                float y1 = (transform.y + collider.offsetY + collider.vertices[i].y - cameraY) * cameraZoom;
+                                float x2 = (transform.x + collider.offsetX + collider.vertices[j].x - cameraX) * cameraZoom;
+                                float y2 = (transform.y + collider.offsetY + collider.vertices[j].y - cameraY) * cameraZoom;
+                                SDL_RenderDrawLine(renderer, (int)x1, (int)y1, (int)x2, (int)y2);
+                            }
+                        } else {
+                            SDL_Rect colliderRect = {
+                                (int)(((transform.x + collider.offsetX) - cameraX) * cameraZoom),
+                                (int)(((transform.y + collider.offsetY) - cameraY) * cameraZoom),
+                                (int)(collider.width * cameraZoom),
+                                (int)(collider.height * cameraZoom)
+                            };
+                            SDL_RenderDrawRect(renderer, &colliderRect);
+                        }
                     }
                 }
             }
@@ -806,14 +817,38 @@ void DevModeScene::render() {
         }
         ImGui::Separator();
 
+        // --- Collider Component UI ---
         if (componentManager->hasComponent<ColliderComponent>(selectedEntity)) {
             if (ImGui::CollapsingHeader("Collider Component", ImGuiTreeNodeFlags_DefaultOpen)) {
                 auto& collider = componentManager->getComponent<ColliderComponent>(selectedEntity);
                 ImGui::DragFloat("Offset X##Collider", &collider.offsetX, 0.1f);
                 ImGui::DragFloat("Offset Y##Collider", &collider.offsetY, 0.1f);
-                ImGui::DragFloat("Width##Collider", &collider.width, 1.0f, 1.0f); 
-                ImGui::DragFloat("Height##Collider", &collider.height, 1.0f, 1.0f);
+                ImGui::DragFloat("Width##Collider", &collider.width, 1.0f, 1.0f);
+                ImGui::DragFloat("Height##Collider", &collider.height, 1.0f, 1.0f); 
                 ImGui::Checkbox("Is Trigger##Collider", &collider.isTrigger);
+
+                // --- Polygon Vertices UI ---
+                ImGui::Separator();
+                ImGui::Text("Polygon Vertices:");
+                int removeIndex = -1;
+                for (size_t i = 0; i < collider.vertices.size(); ++i) {
+                    ImGui::PushID(static_cast<int>(i));
+                    ImGui::DragFloat2("Vertex", &collider.vertices[i].x, 0.5f);
+                    ImGui::SameLine();
+                    if (ImGui::Button("Remove##Vertex")) {
+                        removeIndex = static_cast<int>(i);
+                    }
+                    ImGui::PopID();
+                }
+                if (removeIndex >= 0 && removeIndex < (int)collider.vertices.size()) {
+                    collider.vertices.erase(collider.vertices.begin() + removeIndex);
+                }
+                if (ImGui::Button("Add Vertex")) {
+                    collider.vertices.push_back({0.0f, 0.0f});
+                }
+                if (ImGui::Button("Clear Vertices")) {
+                    collider.vertices.clear();
+                }
 
                 if (ImGui::Button("Remove Collider Component")) {
                     componentManager->removeComponent<ColliderComponent>(selectedEntity);
