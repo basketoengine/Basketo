@@ -4,9 +4,9 @@
 #include <unordered_map>
 #include "../System.h"
 #include "../Entity.h"
-#include <sol/sol.hpp> // Changed to use angle brackets
+#include <sol/sol.hpp> 
+#include <functional> 
 
-// Forward declarations
 class EntityManager;
 class ComponentManager;
 
@@ -15,42 +15,38 @@ public:
     ScriptSystem(EntityManager* entityManager, ComponentManager* componentManager);
     ~ScriptSystem();
 
-    bool init(); // Initialize Lua state and register base functions
-    void update(float deltaTime); // Call onUpdate for all scripted entities
+    bool init();
+    void setLoggingFunctions(std::function<void(const std::string&)> logFunc, std::function<void(const std::string&)> errorFunc);
+    void update(float deltaTime);
 
-    // Load a script for an entity. Replaces existing script.
     bool loadScript(Entity entity, const std::string& scriptPath);
 
-    // Call a specific function in a script's environment
     template<typename... Args>
     sol::protected_function_result callScriptFunction(Entity entity, const std::string& functionName, Args&&... args);
 
-    // Expose a C++ function to Lua globally
     template<typename Func>
     void registerFunction(const std::string& luaName, Func&& f);
     
-    // Get the Lua state
     sol::state& getLuaState() { return lua; }
 
 private:
     EntityManager* entityManager;
     ComponentManager* componentManager;
     sol::state lua;
+    std::function<void(const std::string&)> logCallback;
+    std::function<void(const std::string&)> errorLogCallback;
 
-    // Stores the environment for each entity's script to keep them isolated
     std::unordered_map<Entity, sol::environment> entityScriptEnvironments;
 
-    void registerCoreAPI(); // Register engine core functionalities
-    void registerEntityAPI(); // Register entity-related functions
+    void registerCoreAPI(); 
+    void registerEntityAPI(); 
 };
 
-// Template implementation for registerFunction
 template<typename Func>
 void ScriptSystem::registerFunction(const std::string& luaName, Func&& f) {
     lua.set_function(luaName, std::forward<Func>(f));
 }
 
-// Template implementation for callScriptFunction
 template<typename... Args>
 sol::protected_function_result ScriptSystem::callScriptFunction(Entity entity, const std::string& functionName, Args&&... args) {
     auto it = entityScriptEnvironments.find(entity);
@@ -61,6 +57,6 @@ sol::protected_function_result ScriptSystem::callScriptFunction(Entity entity, c
             return func(std::forward<Args>(args)...);
         }
     }
-    sol::protected_function_result result; // Default-constructs to an invalid, error state
+    sol::protected_function_result result; 
     return result;
 }

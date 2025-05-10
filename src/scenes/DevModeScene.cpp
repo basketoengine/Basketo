@@ -29,7 +29,7 @@
 #include "DevModeInputHandler.h"
 #include "DevModeSceneSerializer.h" 
 #include "InspectorPanel.h" 
-#include <stack> // Added for iterative directory traversal
+#include <stack> 
 
 DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win) 
     : renderer(ren), 
@@ -55,6 +55,10 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     systemManager->setSignature<RenderSystem>(renderSig);
 
     scriptSystem = systemManager->registerSystem<ScriptSystem>(entityManager.get(), componentManager.get());
+    scriptSystem->setLoggingFunctions(
+        [this](const std::string& msg) { this->addLogToConsole(msg); },
+        [this](const std::string& errMsg) { this->addLogToConsole(errMsg); }
+    );
     scriptSystem->init(); 
 
     movementSystem = systemManager->registerSystem<MovementSystem>();
@@ -125,6 +129,14 @@ void DevModeScene::update(float deltaTime) {
             movementSystem->update(componentManager.get(), deltaTime);
         }
     }
+}
+
+void DevModeScene::addLogToConsole(const std::string& message) {
+    consoleLogBuffer.push_back(message);
+    // Optional: Limit buffer size
+    // if (consoleLogBuffer.size() > 1000) { // Example limit
+    //     consoleLogBuffer.erase(consoleLogBuffer.begin(), consoleLogBuffer.begin() + consoleLogBuffer.size() - 1000);
+    // }
 }
 
 void DevModeScene::render() {
@@ -564,7 +576,20 @@ void DevModeScene::render() {
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Console")) {
-            ImGui::TextWrapped("Console output placeholder...");
+            if (ImGui::Button("Clear")) {
+                consoleLogBuffer.clear();
+            }
+            ImGui::SameLine();
+
+            ImGui::Separator();
+            ImGui::BeginChild("ScrollingRegion", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
+            for (const auto& log : consoleLogBuffer) {
+                ImGui::TextUnformatted(log.c_str());
+            }
+            if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
+                ImGui::SetScrollHereY(1.0f); 
+            }
+            ImGui::EndChild();
             ImGui::EndTabItem();
         }
         ImGui::EndTabBar();

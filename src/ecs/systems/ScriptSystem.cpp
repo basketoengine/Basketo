@@ -13,6 +13,11 @@ ScriptSystem::ScriptSystem(EntityManager* em, ComponentManager* cm)
 
 ScriptSystem::~ScriptSystem() {}
 
+void ScriptSystem::setLoggingFunctions(std::function<void(const std::string&)> logFunc, std::function<void(const std::string&)> errorFunc) {
+    logCallback = logFunc;
+    errorLogCallback = errorFunc;
+}
+
 bool ScriptSystem::init() {
     lua.open_libraries(sol::lib::base, sol::lib::package, sol::lib::string, sol::lib::math, sol::lib::table, sol::lib::io);
     std::cout << "ScriptSystem: Lua initialized." << std::endl;
@@ -43,10 +48,8 @@ bool ScriptSystem::loadScript(Entity entity, const std::string& scriptPath) {
         std::cerr << "ScriptSystem Error: Could not open script file: " << scriptPath << std::endl;
         return false;
     }
-    scriptFile.close(); // Just checking if it exists for now, sol will load it.
+    scriptFile.close();
 
-    // Create a new environment for this script if it doesn't exist
-    // or reuse the existing one to allow for hot-reloading (though full hot-reloading needs more)
     sol::environment env(lua, sol::create, lua.globals());
     entityScriptEnvironments[entity] = env;
 
@@ -55,22 +58,19 @@ bool ScriptSystem::loadScript(Entity entity, const std::string& scriptPath) {
         if (!result.valid()) {
             sol::error err = result;
             std::cerr << "ScriptSystem Error: Failed to load or execute script '" << scriptPath << "' for entity " << entity << ": " << err.what() << std::endl;
-            entityScriptEnvironments.erase(entity); // Clean up failed environment
+            entityScriptEnvironments.erase(entity);
             return false;
         }
         std::cout << "ScriptSystem: Successfully loaded script '" << scriptPath << "' for entity " << entity << std::endl;
 
-        // Call an optional init function in the script
         sol::protected_function_result initResult = callScriptFunction(entity, "init", entity);
         if (!initResult.valid()) {
             sol::error err = initResult;
-            // This might not be an error if the script just doesn't have an init function
-            // std::cout << "ScriptSystem Info: No 'init' function or error in 'init' for entity " << entity << ": " << err.what() << std::endl;
         }
 
     } catch (const sol::error& e) {
         std::cerr << "ScriptSystem Sol2 Error: Exception during script load for entity " << entity << " with script '" << scriptPath << "': " << e.what() << std::endl;
-        entityScriptEnvironments.erase(entity); // Clean up failed environment
+        entityScriptEnvironments.erase(entity);
         return false;
     }
 
@@ -79,42 +79,37 @@ bool ScriptSystem::loadScript(Entity entity, const std::string& scriptPath) {
 
 
 void ScriptSystem::registerCoreAPI() {
-    // Input API Example
     lua.new_usertype<InputManager>("Input",
         sol::no_constructor,
         "isKeyDown", [](const std::string& keyName) { 
-            // This is a simplified example. You'd need scancode mapping or similar.
-            // For now, let's assume keyName is like "W", "A", etc.
-            // This needs to be mapped to SDL_Scancode in your InputManager
-            if (keyName == "W") return InputManager::getInstance().isActionPressed("MoveUp"); // Example mapping
+            if (keyName == "W") return InputManager::getInstance().isActionPressed("MoveUp");
             if (keyName == "A") return InputManager::getInstance().isActionPressed("MoveLeft");
             if (keyName == "S") return InputManager::getInstance().isActionPressed("MoveDown");
             if (keyName == "D") return InputManager::getInstance().isActionPressed("MoveRight");
-            // Add more key mappings as needed
             return false; 
         }
     );
-    // Make InputManager accessible globally via a function or a pre-created instance
     lua["Input"] = &InputManager::getInstance(); 
 
-    // Logging example
-    registerFunction("Log", [](const std::string& message) {
-        std::cout << "[LUA] " << message << std::endl;
+    registerFunction("Log", [this](const std::string& message) {
+        if (logCallback) {
+            logCallback("[LUA] " + message);
+        } else {
+            std::cout << "[LUA] " << message << std::endl;
+        }
     });
-    registerFunction("LogError", [](const std::string& message) {
-        std::cerr << "[LUA ERROR] " << message << std::endl;
+    registerFunction("LogError", [this](const std::string& message) {
+        if (errorLogCallback) {
+            errorLogCallback("[LUA ERROR] " + message);
+        } else {
+            std::cerr << "[LUA ERROR] " << message << std::endl;
+        }
     });
 }
 
 void ScriptSystem::registerEntityAPI() {
-    // Entity UserType for Lua
-    // This allows passing Entity (which is just an ID) to Lua functions
-    // And then using that ID to interact with components from Lua via C++ bridges
     lua.new_usertype<Entity>("Entity", sol::constructors<Entity(unsigned int)>());
 
-    // Example: Get/Set TransformComponent position
-    // Note: These functions will be part of the global Lua state but operate on a passed Entity ID.
-    // For better organization, you might group them under an "EntityAPI" table in Lua.
 
     registerFunction("GetEntityPosition", [this](Entity entity) -> sol::object {
         if (componentManager->hasComponent<TransformComponent>(entity)) {
@@ -145,19 +140,10 @@ void ScriptSystem::registerEntityAPI() {
             std::cerr << "[LUA ERROR] SetEntityVelocity: Entity " << entity << " does not have a VelocityComponent. Cannot set velocity." << std::endl;
             return;
         }
-        if (componentManager->hasComponent<VelocityComponent>(entity)) { // This check is now redundant due to the one above, but harmless
+        if (componentManager->hasComponent<VelocityComponent>(entity)) { 
             auto& velocity = componentManager->getComponent<VelocityComponent>(entity);
             velocity.vx = vx;
             velocity.vy = vy;
-            // Optional: Log that velocity was set
-            // std::cout << "[LUA DEBUG] SetEntityVelocity: Entity " << entity << " velocity set to (" << vx << ", " << vy << ")" << std::endl;
         }
     });
-
-    // Example: Get/Set Velocity (if you add VelocityComponent to Lua)
-    // registerFunction("GetEntityVelocity", ...);
-    // registerFunction("SetEntityVelocity", ...);
-
-    // You would add more functions here to expose other components or entity operations
-    // For example, creating/destroying entities, adding/removing components (more advanced)
 }

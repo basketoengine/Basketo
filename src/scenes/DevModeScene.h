@@ -53,6 +53,8 @@ public:
     void update(float deltaTime) override;
     void render() override;
 
+    void addLogToConsole(const std::string& message);
+
 public:
     friend void handleDevModeInput(DevModeScene& scene, SDL_Event& event);
 
@@ -71,6 +73,9 @@ public:
     std::unique_ptr<SystemManager> systemManager;
     std::shared_ptr<RenderSystem> renderSystem;
     std::shared_ptr<MovementSystem> movementSystem;
+
+    std::vector<std::string> consoleLogBuffer;
+
     AssetManager& assetManager;
 
     float hierarchyWidthRatio = 0.18f;
