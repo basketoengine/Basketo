@@ -31,6 +31,9 @@ static bool isEditingCollider = false;
 static int editingVertexIndex = -1;
 static bool isDraggingVertex = false;
 
+// Forward declaration for edge helper
+static std::tuple<int, int, float, float, float> getClosestEdgeToPoint(const std::vector<ColliderVertex>& vertices, float px, float py, const TransformComponent& transform, const ColliderComponent& collider);
+
 DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win) 
     : renderer(ren), 
       window(win),
@@ -325,11 +328,22 @@ void DevModeScene::handleInput(SDL_Event& event) {
     if (isEditingCollider && selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<ColliderComponent>(selectedEntity) && componentManager->hasComponent<TransformComponent>(selectedEntity)) {
         auto& collider = componentManager->getComponent<ColliderComponent>(selectedEntity);
         auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
+        static int hoveredEdgeA = -1, hoveredEdgeB = -1;
+        static float hoveredEdgeX = 0, hoveredEdgeY = 0;
+        static bool hoveringEdge = false;
+        hoveringEdge = false;
+        if (collider.vertices.size() >= 2) {
+            auto [a, b, dist, cx, cy] = getClosestEdgeToPoint(collider.vertices, worldMouseX, worldMouseY, transform, collider);
+            if (dist < 12.0f / cameraZoom) {
+                hoveredEdgeA = a; hoveredEdgeB = b; hoveredEdgeX = cx; hoveredEdgeY = cy; hoveringEdge = true;
+            }
+        }
         switch (event.type) {
             case SDL_MOUSEBUTTONDOWN:
                 if (event.button.button == SDL_BUTTON_LEFT && mouseInViewport) {
                     float minDist = 12.0f / cameraZoom;
                     editingVertexIndex = -1;
+                    // Check for vertex drag
                     for (size_t i = 0; i < collider.vertices.size(); ++i) {
                         float vx = transform.x + collider.offsetX + collider.vertices[i].x;
                         float vy = transform.y + collider.offsetY + collider.vertices[i].y;
@@ -341,7 +355,16 @@ void DevModeScene::handleInput(SDL_Event& event) {
                             break;
                         }
                     }
-                    if (editingVertexIndex == -1) {
+                    // If not on a vertex, check for edge insert
+                    if (editingVertexIndex == -1 && hoveringEdge && hoveredEdgeA != -1 && hoveredEdgeB != -1) {
+                        ColliderVertex newVert;
+                        newVert.x = hoveredEdgeX - (transform.x + collider.offsetX);
+                        newVert.y = hoveredEdgeY - (transform.y + collider.offsetY);
+                        collider.vertices.insert(collider.vertices.begin() + hoveredEdgeB, newVert);
+                        editingVertexIndex = hoveredEdgeB;
+                        isDraggingVertex = true;
+                    } else if (editingVertexIndex == -1) {
+                        // Add at cursor if not near edge or vertex
                         ColliderVertex newVert;
                         newVert.x = worldMouseX - (transform.x + collider.offsetX);
                         newVert.y = worldMouseY - (transform.y + collider.offsetY);
@@ -1258,4 +1281,35 @@ ResizeHandle DevModeScene::getHandleAtPosition(float worldMouseX, float worldMou
         }
     }
     return ResizeHandle::NONE;
+}
+
+// Helper: Find closest edge to mouse, return (indexA, indexB, distance, closestPoint)
+static std::tuple<int, int, float, float, float> getClosestEdgeToPoint(const std::vector<ColliderVertex>& vertices, float px, float py, const TransformComponent& transform, const ColliderComponent& collider) {
+    int closestA = -1, closestB = -1;
+    float minDist = 1e9f;
+    float closestX = 0, closestY = 0;
+    if (vertices.size() < 2) return {-1, -1, minDist, 0, 0};
+    for (size_t i = 0; i < vertices.size(); ++i) {
+        size_t j = (i + 1) % vertices.size();
+        float ax = transform.x + collider.offsetX + vertices[i].x;
+        float ay = transform.y + collider.offsetY + vertices[i].y;
+        float bx = transform.x + collider.offsetX + vertices[j].x;
+        float by = transform.y + collider.offsetY + vertices[j].y;
+        // Project point onto segment
+        float dx = bx - ax, dy = by - ay;
+        float len2 = dx*dx + dy*dy;
+        float t = len2 > 0 ? ((px-ax)*dx + (py-ay)*dy) / len2 : 0;
+        t = std::clamp(t, 0.0f, 1.0f);
+        float projX = ax + t*dx;
+        float projY = ay + t*dy;
+        float dist2 = (projX-px)*(projX-px) + (projY-py)*(projY-py);
+        if (dist2 < minDist) {
+            minDist = dist2;
+            closestA = (int)i;
+            closestB = (int)j;
+            closestX = projX;
+            closestY = projY;
+        }
+    }
+    return {closestA, closestB, std::sqrt(minDist), closestX, closestY};
 }
