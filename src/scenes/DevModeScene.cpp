@@ -19,6 +19,7 @@
 #include "../ecs/components/SpriteComponent.h"
 #include "../ecs/components/ScriptComponent.h"
 #include "../ecs/components/VelocityComponent.h"
+#include "../ecs/components/ColliderComponent.h"
 #include "../ecs/systems/RenderSystem.h"
 #include "../ecs/systems/ScriptSystem.h"
 #include "../ecs/systems/MovementSystem.h"
@@ -41,6 +42,7 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     componentManager->registerComponent<SpriteComponent>();
     componentManager->registerComponent<VelocityComponent>();
     componentManager->registerComponent<ScriptComponent>(); 
+    componentManager->registerComponent<ColliderComponent>(); // Registered ColliderComponent
 
     renderSystem = systemManager->registerSystem<RenderSystem>();
     Signature renderSig;
@@ -410,15 +412,11 @@ void DevModeScene::render() {
         }
     }
     ImGui::End();
-    // --- END GAME VIEWPORT WINDOW ---
-
-    // SDL RENDERING (manual transform for zoom/camera)
     SDL_SetRenderDrawColor(renderer, (Uint8)(clear_color.x * 255), (Uint8)(clear_color.y * 255), (Uint8)(clear_color.z * 255), (Uint8)(clear_color.w * 255));
     SDL_RenderClear(renderer);
     if (gameViewport.w > 0 && gameViewport.h > 0) {
         SDL_RenderSetViewport(renderer, &gameViewport);
 
-        // Draw grid with zoom/camera transform
         if (!isPlaying && showGrid) {
             SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255);
             float gridStartX = -fmodf(cameraX, gridSize);
@@ -441,18 +439,14 @@ void DevModeScene::render() {
                 }
             }
         }
-
-        // Sort entities by z_index (assuming z_index exists in TransformComponent)
-        // This sort will be fully effective once TransformComponent.h has z_index
         std::sort(entitiesToRender.begin(), entitiesToRender.end(),
             [&](Entity a, Entity b) {
-                // This check should ideally not be needed if entitiesToRender only contains valid entities with TransformComponent
                 if (!componentManager || !componentManager->hasComponent<TransformComponent>(a) || !componentManager->hasComponent<TransformComponent>(b)) {
                     return false; 
                 }
                 auto& transformA = componentManager->getComponent<TransformComponent>(a);
                 auto& transformB = componentManager->getComponent<TransformComponent>(b);
-                return transformA.z_index < transformB.z_index; // Enabled Z-index sorting
+                return transformA.z_index < transformB.z_index;
             }
         );
         
@@ -470,6 +464,27 @@ void DevModeScene::render() {
             SDL_Point center = { (int)(transform.width * cameraZoom / 2), (int)(transform.height * cameraZoom / 2) };
             SDL_RenderCopyEx(renderer, texture, srcRectPtr, &destRect, transform.rotation, &center, SDL_FLIP_NONE);
         }
+
+        if (!isPlaying) { 
+            SDL_SetRenderDrawColor(renderer, 0, 255, 0, 150); 
+            if (entityManager && componentManager) { 
+                for (auto entity : entityManager->getActiveEntities()) {
+                    if (componentManager->hasComponent<TransformComponent>(entity) && componentManager->hasComponent<ColliderComponent>(entity)) {
+                        auto& transform = componentManager->getComponent<TransformComponent>(entity);
+                        auto& collider = componentManager->getComponent<ColliderComponent>(entity);
+
+                        SDL_Rect colliderRect = {
+                            (int)(((transform.x + collider.offsetX) - cameraX) * cameraZoom),
+                            (int)(((transform.y + collider.offsetY) - cameraY) * cameraZoom),
+                            (int)(collider.width * cameraZoom),
+                            (int)(collider.height * cameraZoom)
+                        };
+                        SDL_RenderDrawRect(renderer, &colliderRect);
+                    }
+                }
+            }
+        }
+
 
         if (!isPlaying && selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<TransformComponent>(selectedEntity)) {
             auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
@@ -565,13 +580,13 @@ void DevModeScene::render() {
         if (ImGui::Selectable(label.c_str(), selectedEntity == entity)) {
             selectedEntity = entity;
             inspectorTextureIdBuffer[0] = '\0';
-            inspectorScriptPathBuffer[0] = '\0'; // Added this line as it was missing and likely intended
+            inspectorScriptPathBuffer[0] = '\0'; 
         }
     }
     if (ImGui::Button("Deselect")) {
         selectedEntity = NO_ENTITY_SELECTED;
         inspectorTextureIdBuffer[0] = '\0';
-        inspectorScriptPathBuffer[0] = '\0'; // Added this line as it was missing and likely intended
+        inspectorScriptPathBuffer[0] = '\0'; 
     }
     ImGui::End();
 
@@ -584,7 +599,7 @@ void DevModeScene::render() {
 
         // --- ADD COMPONENT UI ---
         ImGui::PushItemWidth(-1);
-        const char* component_types[] = { "Transform", "Sprite", "Velocity", "Script" };
+        const char* component_types[] = { "Transform", "Sprite", "Velocity", "Script", "Collider" }; // Added "Collider"
         static int current_component_type_idx = 0; 
 
         // Display the combo box (dropdown menu)
@@ -635,6 +650,13 @@ void DevModeScene::render() {
                     std::cout << "Added ScriptComponent to Entity " << selectedEntity << std::endl;
                 } else {
                     std::cout << "Entity " << selectedEntity << " already has ScriptComponent." << std::endl;
+                }
+            } else if (selected_component_str == "Collider") {
+                if (addComponentIfMissing<ColliderComponent>(componentManager.get(), selectedEntity)) {
+                    entitySignature.set(componentManager->getComponentType<ColliderComponent>());
+                    std::cout << "Added ColliderComponent to Entity " << selectedEntity << std::endl;
+                } else {
+                    std::cout << "Entity " << selectedEntity << " already has ColliderComponent." << std::endl;
                 }
             }
 
@@ -782,6 +804,35 @@ void DevModeScene::render() {
                 }
             }
         }
+        ImGui::Separator();
+
+        if (componentManager->hasComponent<ColliderComponent>(selectedEntity)) {
+            if (ImGui::CollapsingHeader("Collider Component", ImGuiTreeNodeFlags_DefaultOpen)) {
+                auto& collider = componentManager->getComponent<ColliderComponent>(selectedEntity);
+                ImGui::DragFloat("Offset X##Collider", &collider.offsetX, 0.1f);
+                ImGui::DragFloat("Offset Y##Collider", &collider.offsetY, 0.1f);
+                ImGui::DragFloat("Width##Collider", &collider.width, 1.0f, 1.0f); 
+                ImGui::DragFloat("Height##Collider", &collider.height, 1.0f, 1.0f);
+                ImGui::Checkbox("Is Trigger##Collider", &collider.isTrigger);
+
+                if (ImGui::Button("Remove Collider Component")) {
+                    componentManager->removeComponent<ColliderComponent>(selectedEntity);
+                    Signature sig = entityManager->getSignature(selectedEntity);
+                    sig.reset(componentManager->getComponentType<ColliderComponent>());
+                    entityManager->setSignature(selectedEntity, sig);
+                    systemManager->entitySignatureChanged(selectedEntity, sig);
+                }
+            }
+        } else {
+            if (ImGui::Button("Add Collider Component##Inspector")) {
+                if (addComponentIfMissing<ColliderComponent>(componentManager.get(), selectedEntity)) {
+                     Signature sig = entityManager->getSignature(selectedEntity);
+                     sig.set(componentManager->getComponentType<ColliderComponent>());
+                     entityManager->setSignature(selectedEntity, sig);
+                     systemManager->entitySignatureChanged(selectedEntity, sig);
+                }
+            }
+        }
 
     } else ImGui::Text("No entity selected.");
     ImGui::End();
@@ -830,7 +881,6 @@ void DevModeScene::render() {
             int currentItem = 0;
 
             for (const auto& [id, texture] : textures) {
-                // std::cout << "[DEBUG] Texture in loop: " << id << std::endl;
                 ImGui::PushID(id.c_str());
                 ImGui::BeginGroup();
                 ImGui::Image((ImTextureID)texture, ImVec2(itemWidth, itemWidth));
@@ -838,7 +888,6 @@ void DevModeScene::render() {
                 ImGui::EndGroup();
 
                 if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-                    // std::cout << "[DEBUG] Begin drag for texture: " << id << std::endl;
                     ImGui::SetDragDropPayload("ASSET_TEXTURE_ID", id.c_str(), id.length() + 1);
                     ImGui::Image((ImTextureID)texture, ImVec2(itemWidth, itemWidth));
                     ImGui::Text("%s", id.c_str());
@@ -868,7 +917,6 @@ void DevModeScene::render() {
                         std::string ext = entry.path().extension().string();
                         if (ext == ".mp3" || ext == ".wav" || ext == ".ogg" || ext == ".flac") {
                             ImGui::BulletText("%s", filename.c_str());
-                            // Optionally: add drag-drop source for sound files here
                         }
                     }
                 }
@@ -876,7 +924,6 @@ void DevModeScene::render() {
                 ImGui::TextDisabled("No sound directory found.");
             }
 
-            // --- FONTS SECTION ---
             ImGui::Separator();
             ImGui::Text("Available Fonts:");
             std::string fontDir = "../assets/fonts/roboto/";
@@ -887,7 +934,6 @@ void DevModeScene::render() {
                         std::string ext = entry.path().extension().string();
                         if (ext == ".ttf" || ext == ".otf") {
                             ImGui::BulletText("%s", filename.c_str());
-                            // Optionally: add drag-drop source for font files here
                         }
                     }
                 }
@@ -939,6 +985,13 @@ void DevModeScene::saveScene(const std::string& filepath) {
         if (componentManager->hasComponent<ScriptComponent>(entity)) { // Added for saving
             entityJson["components"]["ScriptComponent"] = componentManager->getComponent<ScriptComponent>(entity); // Should use to_json
         }
+        if (componentManager->hasComponent<VelocityComponent>(entity)) { // Assuming VelocityComponent might be saved
+             entityJson["components"]["VelocityComponent"] = componentManager->getComponent<VelocityComponent>(entity);
+        }
+        if (componentManager->hasComponent<ColliderComponent>(entity)) {
+            entityJson["components"]["ColliderComponent"] = componentManager->getComponent<ColliderComponent>(entity);
+        }
+
 
         if (!entityJson["components"].empty()) {
             sceneJson["entities"].push_back(entityJson);
@@ -986,7 +1039,7 @@ void DevModeScene::loadScene(const std::string& filepath) {
     }
     selectedEntity = NO_ENTITY_SELECTED;
     inspectorTextureIdBuffer[0] = '\0';
-    inspectorScriptPathBuffer[0] = '\0'; // Added this line as it was missing and likely intended
+    inspectorScriptPathBuffer[0] = '\0';
     cameraX = 0.0f;
     cameraY = 0.0f;
 
@@ -1041,13 +1094,21 @@ void DevModeScene::loadScene(const std::string& filepath) {
                     }
                     componentManager->addComponent(newEntity, comp);
                     entitySignature.set(componentManager->getComponentType<SpriteComponent>());
-                } else if (componentType == "ScriptComponent") { // Added for loading
+                } else if (componentType == "VelocityComponent") {
+                    VelocityComponent comp;
+                    from_json(componentData, comp);
+                    componentManager->addComponent(newEntity, comp);
+                    entitySignature.set(componentManager->getComponentType<VelocityComponent>());
+                } else if (componentType == "ScriptComponent") { 
                     ScriptComponent comp;
-                    // from_json is defined in ScriptComponent.h and should be found by ADL
                     from_json(componentData, comp); 
-                    // comp.initialized = false; // Removed, 'initialized' no longer a member
                     componentManager->addComponent(newEntity, comp);
                     entitySignature.set(componentManager->getComponentType<ScriptComponent>());
+                } else if (componentType == "ColliderComponent") {
+                    ColliderComponent comp;
+                    from_json(componentData, comp);
+                    componentManager->addComponent(newEntity, comp);
+                    entitySignature.set(componentManager->getComponentType<ColliderComponent>());
                 } else {
                     std::cerr << "Warning: Unknown component type '" << componentType << "' encountered during loading." << std::endl;
                 }
@@ -1056,8 +1117,11 @@ void DevModeScene::loadScene(const std::string& filepath) {
             }
         }
         entityManager->setSignature(newEntity, entitySignature);
-        systemManager->entitySignatureChanged(newEntity, entitySignature);
+        // systemManager->entitySignatureChanged(newEntity, entitySignature); // This might be implicitly handled or done after all components
     }
+    // It might be better to call entitySignatureChanged for all entities once after loading all of them
+    // or ensure it's correctly handled within the loop if systems need immediate updates.
+    // For now, assuming the existing structure handles system updates appropriately.
     std::cout << "Scene loaded successfully." << std::endl;
 }
 

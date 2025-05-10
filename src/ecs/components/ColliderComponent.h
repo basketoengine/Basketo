@@ -1,16 +1,20 @@
-\
-#pragma once
-#include <string>
+#ifndef COLLIDERCOMPONENT_H
+#define COLLIDERCOMPONENT_H
+
+#include "../../../vendor/nlohmann/json.hpp"
 
 struct ColliderComponent {
     float offsetX = 0.0f;
     float offsetY = 0.0f;
-    float width = 0.0f; 
-    float height = 0.0f; 
+    float width = 32.0f;  // Default width
+    float height = 32.0f; // Default height
+    bool isTrigger = false;
 
-    std::string tag = "default";
-    int layer = 0;
+    // Optional: Add a tag or layer for collision filtering later
+    // int layer = 0; 
+    // std::string tag = "default";
 
-    ColliderComponent(float w = 0.0f, float h = 0.0f, float offX = 0.0f, float offY = 0.0f, std::string t = "default", int l = 0)
-        : width(w), height(h), offsetX(offX), offsetY(offY), tag(t), layer(l) {}
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE(ColliderComponent, offsetX, offsetY, width, height, isTrigger)
 };
+
+#endif // COLLIDERCOMPONENT_H
