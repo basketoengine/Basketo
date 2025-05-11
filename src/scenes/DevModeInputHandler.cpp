@@ -61,7 +61,6 @@ std::tuple<int, int, float, float, float> getClosestEdgeToPoint(
 
 
 void handleDevModeInput(DevModeScene& scene, SDL_Event& event) {
-    ImGui_ImplSDL2_ProcessEvent(&event);
     ImGuiIO& io = ImGui::GetIO();
 
     int rawMouseX, rawMouseY;

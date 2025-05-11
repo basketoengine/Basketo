@@ -689,35 +689,6 @@ ResizeHandle DevModeScene::getHandleAtPosition(float worldMouseX, float worldMou
     return ResizeHandle::NONE;
 }
 
-void DevModeScene::renderLlmPromptPanel() {
-    ImGui::Begin("AI Prompt (Basic)");
-
-    ImGui::InputText("Command", m_llmPromptBuffer, sizeof(m_llmPromptBuffer));
-    if (ImGui::Button("Execute")) {
-        if (strlen(m_llmPromptBuffer) > 0) {
-            Console::Log("Executing: " + std::string(m_llmPromptBuffer));
-            processLlmPrompt(m_llmPromptBuffer);
-            m_llmPromptBuffer[0] = '\0'; // Clear buffer after execution
-        } else {
-            Console::Warn("Prompt is empty.");
-        }
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Clear")) {
-        m_llmPromptBuffer[0] = '\0';
-    }
-
-    ImGui::Spacing();
-    ImGui::TextWrapped("Example Commands:");
-    ImGui::BulletText("create entity <name> at <x> <y> sprite <texture_id> [width <w>] [height <h>]");
-    ImGui::BulletText("script entity <name> with <script_path.lua>");
-    ImGui::BulletText("move entity <name> to <x> <y>");
-    ImGui::BulletText("delete entity <name>");
-
-
-    ImGui::End();
-}
-
 Entity DevModeScene::findEntityByName(const std::string& name) {
     for (auto const& entity : entityManager->getActiveEntities()) { 
         if (componentManager->hasComponent<NameComponent>(entity)) {
