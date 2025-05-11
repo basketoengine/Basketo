@@ -1,7 +1,7 @@
 #include "PhysicsSystem.h"
 #include "../components/VelocityComponent.h"
 #include "../components/RigidbodyComponent.h"
-#include <iostream> // For debugging
+#include <iostream> 
 
 const float PhysicsSystem::GRAVITY_ACCELERATION = 980.0f;
 

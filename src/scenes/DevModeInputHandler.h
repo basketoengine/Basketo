@@ -6,3 +6,12 @@
 class DevModeScene;
 
 void handleDevModeInput(DevModeScene& scene, SDL_Event& event);
+
+class DevModeInputHandler {
+public:
+    explicit DevModeInputHandler(DevModeScene& scene);
+
+
+private:
+    DevModeScene& m_sceneRef;
+};

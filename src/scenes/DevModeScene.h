@@ -10,13 +10,16 @@
 #include <cmath>
 #include <vector>
 #include <utility>
+#include <sstream>
 
 #include "../ecs/EntityManager.h"
 #include "../ecs/ComponentManager.h"
 #include "../ecs/SystemManager.h"
 #include "../ecs/components/TransformComponent.h"
 #include "../ecs/components/SpriteComponent.h"
-#include "../ecs/components/ScriptComponent.h" 
+#include "../ecs/components/ScriptComponent.h"
+#include "../ecs/components/ColliderComponent.h"
+#include "../ecs/components/NameComponent.h" 
 #include "../ecs/systems/RenderSystem.h"
 #include "../ecs/systems/ScriptSystem.h"
 #include "../ecs/systems/MovementSystem.h"
@@ -26,6 +29,7 @@
 #include "DevModeInputHandler.h"
 #include "DevModeSceneSerializer.h" 
 #include "InspectorPanel.h" 
+#include "../utils/Console.h"
 
 class EntityManager;
 class ComponentManager;
@@ -121,4 +125,16 @@ public:
     std::vector<std::pair<ResizeHandle, SDL_Rect>> getResizeHandles(const TransformComponent& transform);
     
     ResizeHandle getHandleAtPosition(float worldMouseX, float worldMouseY, const TransformComponent& transform); // Use float
+
+    void renderConsolePanel();
+    void renderLlmPromptPanel();
+
+    void processLlmPrompt(const std::string& prompt); 
+    Entity findEntityByName(const std::string& name); 
+    DevModeInputHandler m_devModeInputHandler;
+
+    char m_sceneNameBuffer[128];
+    char m_llmPromptBuffer[256];
+
+    std::string getComponentNameForDisplay(Entity entity);
 };

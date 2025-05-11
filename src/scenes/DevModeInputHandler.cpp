@@ -1,16 +1,10 @@
-\
 #include "DevModeInputHandler.h"
 #include "DevModeScene.h"
 #include "imgui.h"
 #include "../../vendor/imgui/backends/imgui_impl_sdl2.h"
 #include "../ecs/components/TransformComponent.h"
-#include "../ecs/components/ColliderComponent.h"
-#include "../ecs/EntityManager.h"
-#include "../ecs/ComponentManager.h"
-#include <SDL2/SDL.h>
-#include <iostream>
-#include <algorithm> 
-#include <vector>  
+#include "../ecs/components/ColliderComponent.h" 
+#include "../utils/Console.h"
 
 static void closestPointOnSegment(float pX, float pY, float s1X, float s1Y, float s2X, float s2Y, float& cX, float& cY) {
     float segVX = s2X - s1X;
@@ -21,12 +15,13 @@ static void closestPointOnSegment(float pX, float pY, float s1X, float s1Y, floa
     cY = s1Y + t * segVY;
 }
 
-static std::tuple<int, int, float, float, float> getClosestEdgeToPoint(
-    const std::vector<ColliderVertex>& vertices, 
-    float px, float py, 
-    const TransformComponent& transform, 
+std::tuple<int, int, float, float, float> getClosestEdgeToPoint(
+    const std::vector<Vec2D>& vertices,
+    float pointX, float pointY,
+    const TransformComponent& transform,
     const ColliderComponent& collider,
-    float cameraZoom) {
+    float cameraZoom
+) {
 
     if (vertices.size() < 2) {
         return std::make_tuple(-1, -1, FLT_MAX, 0.0f, 0.0f);
@@ -47,10 +42,10 @@ static std::tuple<int, int, float, float, float> getClosestEdgeToPoint(
         float v2y = transform.y + collider.offsetY + vertices[j].y;
 
         float cX, cY;
-        closestPointOnSegment(px, py, v1x, v1y, v2x, v2y, cX, cY);
+        closestPointOnSegment(pointX, pointY, v1x, v1y, v2x, v2y, cX, cY);
 
-        float dx = px - cX;
-        float dy = py - cY;
+        float dx = pointX - cX;
+        float dy = pointY - cY;
         float distanceSq = dx * dx + dy * dy;
 
         if (distanceSq < minDistanceSq) {
@@ -182,19 +177,25 @@ void handleDevModeInput(DevModeScene& scene, SDL_Event& event) {
                             }
                         }
                         if (!scene.isDraggingVertex && hoveringEdge && hoveredEdgeA != -1 && hoveredEdgeB != -1) {
-                            ColliderVertex newVert;
+                            Vec2D newVert;
                             newVert.x = hoveredEdgeX - (transform.x + collider.offsetX);
                             newVert.y = hoveredEdgeY - (transform.y + collider.offsetY);
-                            collider.vertices.insert(collider.vertices.begin() + hoveredEdgeB, newVert);
-                            scene.editingVertexIndex = hoveredEdgeB; 
+                            int insert_idx = (hoveredEdgeA + 1) % collider.vertices.size();
+                            if (hoveredEdgeA == -1 && collider.vertices.empty()) { 
+                                insert_idx = 0;
+                            }
+                            collider.vertices.insert(collider.vertices.begin() + insert_idx, newVert);
+                            scene.editingVertexIndex = insert_idx; 
                             scene.isDraggingVertex = true; 
                         } else if (!scene.isDraggingVertex) { 
-                            ColliderVertex newVert;
-                            newVert.x = worldMouseX - (transform.x + collider.offsetX);
-                            newVert.y = worldMouseY - (transform.y + collider.offsetY);
-                            collider.vertices.push_back(newVert);
-                            scene.editingVertexIndex = (int)collider.vertices.size() - 1;
-                            scene.isDraggingVertex = true;
+                            if (!hoveringEdge) {
+                                Vec2D newVert;
+                                newVert.x = worldMouseX - (transform.x + collider.offsetX);
+                                newVert.y = worldMouseY - (transform.y + collider.offsetY);
+                                collider.vertices.push_back(newVert);
+                                scene.editingVertexIndex = collider.vertices.size() - 1;
+                                scene.isDraggingVertex = true;
+                            }
                         }
                     } else if (event.button.button == SDL_BUTTON_RIGHT) { 
                          float minDistVertex = (8.0f / cameraZoom);
@@ -434,3 +435,6 @@ void handleDevModeInput(DevModeScene& scene, SDL_Event& event) {
         }
     }
 }
+
+DevModeInputHandler::DevModeInputHandler(DevModeScene& scene)
+    : m_sceneRef(scene) {}

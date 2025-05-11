@@ -60,6 +60,7 @@ set(SOURCE_FILES
     src/ecs/systems/ScriptSystem.cpp
     src/utils/EditorUtils.cpp
     src/utils/FileUtils.cpp
+    src/utils/Console.cpp
 )
 
 add_executable(PhysicsTest

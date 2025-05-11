@@ -5,6 +5,9 @@
 
 struct ScriptComponent {
     std::string scriptPath = "";
+
+    ScriptComponent() = default;
+    explicit ScriptComponent(const std::string& path) : scriptPath(path) {}
 };
 
 inline void to_json(nlohmann::json& j, const ScriptComponent& c) {

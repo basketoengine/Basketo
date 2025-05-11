@@ -55,7 +55,7 @@ int main() {
 
     // Create player (dynamic)
     Entity player = entityManager->createEntity();
-    TransformComponent playerTransform{100, 0, 32, 32};
+    TransformComponent playerTransform{100, 0, 32, 32, 0.0f, 0}; // Added rotation and z_index
     VelocityComponent playerVelocity{0, 0};
     RigidbodyComponent playerRb{1.0f, true, false, 1.0f, 0.0f, false};
     componentManager->addComponent(player, playerTransform);
@@ -70,7 +70,7 @@ int main() {
 
     // Create wall (static)
     Entity wall = entityManager->createEntity();
-    TransformComponent wallTransform{100, 200, 128, 32};
+    TransformComponent wallTransform{100, 200, 128, 32, 0.0f, 0}; // Added rotation and z_index
     RigidbodyComponent wallRb{1.0f, false, true, 1.0f, 0.0f, false};
     componentManager->addComponent(wall, wallTransform);
     componentManager->addComponent(wall, wallRb);

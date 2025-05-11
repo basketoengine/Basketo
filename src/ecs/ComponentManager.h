@@ -6,6 +6,7 @@
 #include <cassert>
 #include <array>
 #include <iostream>
+#include <typeinfo>
 #include <type_traits>
 #include "Types.h"
 #include "components/TransformComponent.h"
@@ -73,6 +74,12 @@ public:
         componentTypes[typeName] = nextComponentType;
         componentArrays[typeName] = std::make_shared<ComponentArray<T>>();
         ++nextComponentType;
+    }
+
+    template<typename T>
+    bool isComponentRegistered() {
+        const char* typeName = typeid(T).name();
+        return componentTypes.find(typeName) != componentTypes.end();
     }
 
     template<typename T>

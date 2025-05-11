@@ -15,27 +15,20 @@
 #include <utility>
 #include <algorithm>
 
+#include "../ecs/components/RigidbodyComponent.h" 
+#include "../ecs/components/NameComponent.h"
 #include "../ecs/components/TransformComponent.h"
 #include "../ecs/components/SpriteComponent.h"
-#include "../ecs/components/ScriptComponent.h"
-#include "../ecs/components/VelocityComponent.h"
-#include "../ecs/components/ColliderComponent.h"
-#include "../ecs/systems/RenderSystem.h"
-#include "../ecs/systems/ScriptSystem.h"
-#include "../ecs/systems/MovementSystem.h"
-#include "../AssetManager.h"
-#include "../utils/FileUtils.h" 
-#include "../utils/EditorHelpers.h" 
-#include "DevModeInputHandler.h"
-#include "DevModeSceneSerializer.h" 
-#include "InspectorPanel.h" 
-#include <stack> 
+#include "../ecs/components/ScriptComponent.h" 
+#include "../AssetManager.h" 
 
-DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win) 
-    : renderer(ren), 
-      window(win),
-      assetManager(AssetManager::getInstance()) 
-{
+
+DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
+    : Scene(), 
+      renderer(ren), window(win),
+      assetManager(AssetManager::getInstance()),
+      m_devModeInputHandler(*this) 
+      {
     std::cout << "Entering Dev Mode Scene" << std::endl;
 
     entityManager = std::make_unique<EntityManager>();
@@ -45,8 +38,9 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     componentManager->registerComponent<TransformComponent>();
     componentManager->registerComponent<SpriteComponent>();
     componentManager->registerComponent<VelocityComponent>();
-    componentManager->registerComponent<ScriptComponent>(); 
-    componentManager->registerComponent<ColliderComponent>();
+    componentManager->registerComponent<ScriptComponent>();
+    componentManager->registerComponent<ColliderComponent>(); 
+    componentManager->registerComponent<NameComponent>();
 
     renderSystem = systemManager->registerSystem<RenderSystem>();
     Signature renderSig;
@@ -110,6 +104,8 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
             }
         }
     }
+
+    m_llmPromptBuffer[0] = '\0';
 }
 
 DevModeScene::~DevModeScene() {
@@ -133,10 +129,7 @@ void DevModeScene::update(float deltaTime) {
 
 void DevModeScene::addLogToConsole(const std::string& message) {
     consoleLogBuffer.push_back(message);
-    // Optional: Limit buffer size
-    // if (consoleLogBuffer.size() > 1000) { // Example limit
-    //     consoleLogBuffer.erase(consoleLogBuffer.begin(), consoleLogBuffer.begin() + consoleLogBuffer.size() - 1000);
-    // }
+
 }
 
 void DevModeScene::render() {
@@ -395,24 +388,63 @@ void DevModeScene::render() {
 
     ImGui::SetNextWindowPos(ImVec2(0, topToolbarHeight), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(hierarchyWidth, displaySize.y - topToolbarHeight - bottomPanelHeight), ImGuiCond_Always);
-    ImGui::Begin("Hierarchy", nullptr, fixedPanelFlags);
-    ImGui::Text("Entities:");
-    ImGui::Separator();
-    const auto& activeEntities = entityManager->getActiveEntities();
-    for (Entity entity : activeEntities) {
-        std::string label = "Entity " + std::to_string(entity);
-        if (ImGui::Selectable(label.c_str(), selectedEntity == entity)) {
-            selectedEntity = entity;
-            inspectorTextureIdBuffer[0] = '\0';
-            inspectorScriptPathBuffer[0] = '\0'; 
+    if (ImGui::Begin("Hierarchy", nullptr, fixedPanelFlags)) {
+        if (ImGui::BeginTabBar("LeftTabs")) {
+            if (ImGui::BeginTabItem("Entities")) {
+                ImGui::Text("Entities:");
+                ImGui::Separator();
+                const auto& activeEntities = entityManager->getActiveEntities();
+                for (Entity entity : activeEntities) {
+                    std::string label = "Entity " + std::to_string(entity);
+                    if (ImGui::Selectable(label.c_str(), selectedEntity == entity)) {
+                        selectedEntity = entity;
+                        inspectorTextureIdBuffer[0] = '\0';
+                        inspectorScriptPathBuffer[0] = '\0'; 
+                    }
+                }
+                if (ImGui::Button("Deselect")) {
+                    selectedEntity = NO_ENTITY_SELECTED;
+                    inspectorTextureIdBuffer[0] = '\0';
+                    inspectorScriptPathBuffer[0] = '\0'; 
+                }
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem("AI Prompt")) {
+                ImGui::Text("AI Prompt (Basic)");
+                if (ImGui::InputText("##llmPrompt", m_llmPromptBuffer, sizeof(m_llmPromptBuffer), ImGuiInputTextFlags_EnterReturnsTrue)) {
+                    if (strlen(m_llmPromptBuffer) > 0) {
+                        Console::Log("Executing: " + std::string(m_llmPromptBuffer));
+                        processLlmPrompt(m_llmPromptBuffer);
+                        m_llmPromptBuffer[0] = '\0';
+                    } else {
+                        Console::Warn("Prompt is empty.");
+                    }
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Execute##llm")) {
+                    if (strlen(m_llmPromptBuffer) > 0) {
+                        Console::Log("Executing: " + std::string(m_llmPromptBuffer));
+                        processLlmPrompt(m_llmPromptBuffer);
+                        m_llmPromptBuffer[0] = '\0';
+                    } else {
+                        Console::Warn("Prompt is empty.");
+                    }
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Clear##llm")) {
+                    m_llmPromptBuffer[0] = '\0';
+                }
+                ImGui::TextWrapped("Examples: create entity <name> at <x> <y> sprite <texture_id>");
+                ImGui::BulletText("create entity <name> at <x> <y> sprite <texture_id> [width <w>] [height <h>]");
+                ImGui::BulletText("script entity <name> with <script_path.lua>");
+                ImGui::BulletText("move entity <name> to <x> <y>");
+                ImGui::BulletText("delete entity <name>");
+                ImGui::EndTabItem();
+            }
+            ImGui::EndTabBar();
         }
+        ImGui::End();
     }
-    if (ImGui::Button("Deselect")) {
-        selectedEntity = NO_ENTITY_SELECTED;
-        inspectorTextureIdBuffer[0] = '\0';
-        inspectorScriptPathBuffer[0] = '\0'; 
-    }
-    ImGui::End();
 
     EditorUI::renderInspectorPanel(*this, io); 
 
@@ -656,3 +688,196 @@ ResizeHandle DevModeScene::getHandleAtPosition(float worldMouseX, float worldMou
     }
     return ResizeHandle::NONE;
 }
+
+void DevModeScene::renderLlmPromptPanel() {
+    ImGui::Begin("AI Prompt (Basic)");
+
+    ImGui::InputText("Command", m_llmPromptBuffer, sizeof(m_llmPromptBuffer));
+    if (ImGui::Button("Execute")) {
+        if (strlen(m_llmPromptBuffer) > 0) {
+            Console::Log("Executing: " + std::string(m_llmPromptBuffer));
+            processLlmPrompt(m_llmPromptBuffer);
+            m_llmPromptBuffer[0] = '\0'; // Clear buffer after execution
+        } else {
+            Console::Warn("Prompt is empty.");
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Clear")) {
+        m_llmPromptBuffer[0] = '\0';
+    }
+
+    ImGui::Spacing();
+    ImGui::TextWrapped("Example Commands:");
+    ImGui::BulletText("create entity <name> at <x> <y> sprite <texture_id> [width <w>] [height <h>]");
+    ImGui::BulletText("script entity <name> with <script_path.lua>");
+    ImGui::BulletText("move entity <name> to <x> <y>");
+    ImGui::BulletText("delete entity <name>");
+
+
+    ImGui::End();
+}
+
+Entity DevModeScene::findEntityByName(const std::string& name) {
+    for (auto const& entity : entityManager->getActiveEntities()) { 
+        if (componentManager->hasComponent<NameComponent>(entity)) {
+            auto& nameComp = componentManager->getComponent<NameComponent>(entity);
+            if (nameComp.name == name) {
+                return entity;
+            }
+        }
+    }
+    return NO_ENTITY_SELECTED;
+}
+
+void DevModeScene::processLlmPrompt(const std::string& prompt) {
+    std::istringstream iss(prompt);
+    std::string command;
+    iss >> command;
+
+    if (command == "create") {
+        std::string type, entityName, at_keyword, sprite_keyword, textureId;
+        float x = 0.0f, y = 0.0f;
+        float w = 32.0f, h = 32.0f; 
+
+        iss >> type; 
+        if (type != "entity") {
+            Console::Error("LLM: Expected 'entity' after 'create'. Usage: create entity <name> at <x> <y> sprite <texture_id>");
+            return;
+        }
+        iss >> entityName >> at_keyword >> x >> y >> sprite_keyword >> textureId;
+
+        if (at_keyword != "at" || sprite_keyword != "sprite") {
+            Console::Error("LLM: Invalid 'create' syntax. Usage: create entity <name> at <x> <y> sprite <texture_id> [width <w>] [height <h>]");
+            return;
+        }
+        
+        std::string opt_param;
+        while(iss >> opt_param) {
+            if (opt_param == "width") iss >> w;
+            else if (opt_param == "height") iss >> h;
+        }
+
+        if (findEntityByName(entityName) != NO_ENTITY_SELECTED) {
+            Console::Warn("LLM: Entity with name '" + entityName + "' already exists.");
+            return;
+        }
+        
+        if (!AssetManager::getInstance().getTexture(textureId)) {
+            Console::Warn("LLM: Texture ID '" + textureId + "' not found. Entity might be invisible.");
+        }
+
+        Entity newEntity = entityManager->createEntity();
+        componentManager->addComponent<NameComponent>(newEntity, NameComponent(entityName));
+        TransformComponent transformComp(x, y, w, h, 0.0f, 0);
+        componentManager->addComponent<TransformComponent>(newEntity, transformComp);
+        componentManager->addComponent<SpriteComponent>(newEntity, SpriteComponent(textureId));
+
+        if (componentManager->isComponentRegistered<RigidbodyComponent>()) {
+            RigidbodyComponent rigidBodyComp; 
+            componentManager->addComponent<RigidbodyComponent>(newEntity, rigidBodyComp);
+        }
+
+        Signature sig;
+        sig.set(componentManager->getComponentType<NameComponent>());
+        sig.set(componentManager->getComponentType<TransformComponent>());
+        sig.set(componentManager->getComponentType<SpriteComponent>());
+        if (componentManager->isComponentRegistered<RigidbodyComponent>() && componentManager->hasComponent<RigidbodyComponent>(newEntity)) {
+            sig.set(componentManager->getComponentType<RigidbodyComponent>());
+        }
+        entityManager->setSignature(newEntity, sig);
+        systemManager->entitySignatureChanged(newEntity, sig);
+
+        Console::Log("LLM: Created entity '" + entityName + "' at (" + std::to_string(x) + "," + std::to_string(y) + ") with sprite '" + textureId + "'.");
+        selectedEntity = newEntity;
+
+    } else if (command == "script") {
+        std::string type, entityName, with_keyword, scriptPath;
+        iss >> type; 
+        if (type != "entity") {
+             Console::Error("LLM: Expected 'entity' after 'script'. Usage: script entity <name> with <script_path.lua>");
+            return;
+        }
+        iss >> entityName >> with_keyword >> scriptPath;
+
+        if (with_keyword != "with") {
+            Console::Error("LLM: Invalid 'script' syntax. Usage: script entity <name> with <script_path.lua>");
+            return;
+        }
+
+        Entity targetEntity = findEntityByName(entityName);
+        if (targetEntity == NO_ENTITY_SELECTED) {
+            Console::Error("LLM: Entity '" + entityName + "' not found for scripting.");
+            return;
+        }
+        
+        if (!componentManager->isComponentRegistered<ScriptComponent>()) {
+            Console::Error("LLM: ScriptComponent is not registered with the ComponentManager.");
+            return;
+        }
+
+        if (!componentManager->hasComponent<ScriptComponent>(targetEntity)) {
+            componentManager->addComponent<ScriptComponent>(targetEntity, ScriptComponent(scriptPath));
+            Signature sig = entityManager->getSignature(targetEntity);
+            sig.set(componentManager->getComponentType<ScriptComponent>());
+            entityManager->setSignature(targetEntity, sig);
+            systemManager->entitySignatureChanged(targetEntity, sig);
+            Console::Log("LLM: Added script '" + scriptPath + "' to entity '" + entityName + "'.");
+        } else {
+            auto& scriptComp = componentManager->getComponent<ScriptComponent>(targetEntity);
+            scriptComp.scriptPath = scriptPath; 
+            Console::Log("LLM: Updated script for entity '" + entityName + "' to '" + scriptPath + "'.");
+        }
+
+    } else if (command == "move") {
+        std::string type, entityName, to_keyword;
+        float x, y;
+        iss >> type; 
+        if (type != "entity") {
+             Console::Error("LLM: Expected 'entity' after 'move'. Usage: move entity <name> to <x> <y>");
+            return;
+        }
+        iss >> entityName >> to_keyword >> x >> y;
+
+        if (to_keyword != "to") {
+            Console::Error("LLM: Invalid 'move' syntax. Usage: move entity <name> to <x> <y>");
+            return;
+        }
+        Entity targetEntity = findEntityByName(entityName);
+        if (targetEntity == NO_ENTITY_SELECTED) {
+            Console::Error("LLM: Entity '" + entityName + "' not found to move.");
+            return;
+        }
+        if (componentManager->hasComponent<TransformComponent>(targetEntity)) {
+            auto& transform = componentManager->getComponent<TransformComponent>(targetEntity);
+            transform.x = x;
+            transform.y = y;
+            Console::Log("LLM: Moved entity '" + entityName + "' to (" + std::to_string(x) + "," + std::to_string(y) + ").");
+        } else {
+            Console::Error("LLM: Entity '" + entityName + "' does not have a TransformComponent to move.");
+        }
+    } else if (command == "delete") {
+        std::string type, entityName;
+        iss >> type; 
+         if (type != "entity") {
+             Console::Error("LLM: Expected 'entity' after 'delete'. Usage: delete entity <name>");
+            return;
+        }
+        iss >> entityName;
+        Entity targetEntity = findEntityByName(entityName);
+        if (targetEntity == NO_ENTITY_SELECTED) {
+            Console::Error("LLM: Entity '" + entityName + "' not found to delete.");
+            return;
+        }
+        entityManager->destroyEntity(targetEntity);
+        if (selectedEntity == targetEntity) {
+            selectedEntity = NO_ENTITY_SELECTED;
+        }
+        Console::Log("LLM: Deleted entity '" + entityName + "'.");
+
+    } else {
+        Console::Error("LLM: Unknown command '" + command + "'.");
+    }
+}
+
+// ... cleanup() and other methods ...
