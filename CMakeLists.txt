@@ -45,6 +45,7 @@ set(SOURCE_FILES
     src/scenes/DevModeScene.cpp
     src/scenes/DevModeInputHandler.cpp
     src/scenes/DevModeSceneSerializer.cpp
+    
     src/scenes/InspectorPanel.cpp
     utils/utility.cpp
     src/Physics.cpp
@@ -58,6 +59,7 @@ set(SOURCE_FILES
     vendor/imgui/backends/imgui_impl_sdlrenderer2.cpp
     vendor/libtinyfiledialogs/tinyfiledialogs.c
     src/ecs/systems/ScriptSystem.cpp
+    src/ecs/systems/AnimationSystem.cpp
     src/utils/EditorUtils.cpp
     src/utils/FileUtils.cpp
     src/utils/Console.cpp

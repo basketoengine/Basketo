@@ -36,7 +36,7 @@ public:
 
             // Use SDL_RenderCopyEx for rotation
             SDL_Point center = { static_cast<int>(transform.width / 2), static_cast<int>(transform.height / 2) };
-            SDL_RenderCopyEx(renderer, texture, srcRectPtr, &destRect, transform.rotation, &center, SDL_FLIP_NONE);
+            SDL_RenderCopyEx(renderer, texture, srcRectPtr, &destRect, transform.rotation, &center, sprite.flip); // Use sprite.flip
         }
     }
 };

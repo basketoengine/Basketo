@@ -9,6 +9,7 @@
 #include "../ecs/components/VelocityComponent.h"
 #include "../ecs/components/ScriptComponent.h"
 #include "../ecs/components/ColliderComponent.h"
+#include "../ecs/components/AnimationComponent.h" 
 #include "../AssetManager.h"
 #include "../utils/FileUtils.h" 
 #include "../utils/EditorHelpers.h" 
@@ -36,7 +37,7 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
         ImGui::Separator();
 
         ImGui::PushItemWidth(-1);
-        const char* component_types[] = { "Transform", "Sprite", "Velocity", "Script", "Collider" };
+        const char* component_types[] = { "Transform", "Sprite", "Velocity", "Script", "Collider", "Animation" }; // Add "Animation"
         static int current_component_type_idx = 0;
 
         if (ImGui::BeginCombo("##AddComponentCombo", component_types[current_component_type_idx])) {
@@ -93,6 +94,13 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
                     std::cout << "Added ColliderComponent to Entity " << scene.selectedEntity << std::endl;
                 } else {
                     std::cout << "Entity " << scene.selectedEntity << " already has ColliderComponent." << std::endl;
+                }
+            } else if (selected_component_str == "Animation") { // Add AnimationComponent to UI
+                if (addComponentIfMissing<AnimationComponent>(scene.componentManager.get(), scene.selectedEntity)) {
+                    entitySignature.set(scene.componentManager->getComponentType<AnimationComponent>());
+                    std::cout << "Added AnimationComponent to Entity " << scene.selectedEntity << std::endl;
+                } else {
+                    std::cout << "Entity " << scene.selectedEntity << " already has AnimationComponent." << std::endl;
                 }
             }
 
@@ -294,10 +302,45 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
             }
         }
 
+        if (scene.componentManager->hasComponent<AnimationComponent>(scene.selectedEntity)) {
+            if (ImGui::CollapsingHeader("Animation Component", ImGuiTreeNodeFlags_DefaultOpen)) {
+                auto& animComp = scene.componentManager->getComponent<AnimationComponent>(scene.selectedEntity);
+                ImGui::InputText("Current Animation##AnimComp", (char*)animComp.currentAnimationName.c_str(), animComp.currentAnimationName.capacity() + 1, ImGuiInputTextFlags_ReadOnly);
+                ImGui::InputInt("Current Frame Index##AnimComp", &animComp.currentFrameIndex);
+                ImGui::InputFloat("Current Frame Time##AnimComp", &animComp.currentFrameTime);
+                ImGui::Checkbox("Is Playing##AnimComp", &animComp.isPlaying);
+                ImGui::Checkbox("Flip Horizontal##AnimComp", &animComp.flipHorizontal);
+                ImGui::Checkbox("Flip Vertical##AnimComp", &animComp.flipVertical);
+                if (ImGui::Button("Browse Animation JSON...##AnimComp")) {
+                    const char* filterPatterns[] = { "*.json" };
+                    const char* filePath = tinyfd_openFileDialog("Select Animation JSON", "../assets/animations/", 1, filterPatterns, "Animation JSON", 0);
+                    if (filePath != NULL) {
+                        std::ifstream in(filePath);
+                        if (in) {
+                            nlohmann::json animJson;
+                            in >> animJson;
+                            AnimationComponent newAnimComp = animJson.get<AnimationComponent>();
+                            animComp = newAnimComp;
+                        }
+                    }
+                }
+                // TODO: Add UI for editing animations map - this is complex
+            }
+        } else {
+            if (ImGui::Button("Add Animation Component##Inspector")) {
+                 if (addComponentIfMissing<AnimationComponent>(scene.componentManager.get(), scene.selectedEntity)) {
+                     Signature sig = scene.entityManager->getSignature(scene.selectedEntity);
+                     sig.set(scene.componentManager->getComponentType<AnimationComponent>());
+                     scene.entityManager->setSignature(scene.selectedEntity, sig);
+                     scene.systemManager->entitySignatureChanged(scene.selectedEntity, sig);
+                }
+            }
+        }
+
     } else {
         ImGui::Text("No entity selected.");
     }
     ImGui::End();
 }
 
-} 
+}

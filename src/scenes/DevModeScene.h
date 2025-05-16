@@ -23,6 +23,7 @@
 #include "../ecs/systems/RenderSystem.h"
 #include "../ecs/systems/ScriptSystem.h"
 #include "../ecs/systems/MovementSystem.h"
+#include "../ecs/systems/AnimationSystem.h"
 #include "../AssetManager.h"
 #include "../ecs/Entity.h"
 #include "../../vendor/nlohmann/json.hpp"
@@ -36,6 +37,8 @@ class ComponentManager;
 class SystemManager; 
 class RenderSystem; 
 class ScriptSystem;
+class MovementSystem;
+class AnimationSystem; 
 
 const Entity NO_ENTITY_SELECTED = MAX_ENTITIES;
 const int HANDLE_SIZE = 8; 
@@ -73,10 +76,11 @@ public:
 
     std::unique_ptr<EntityManager> entityManager;
     std::unique_ptr<ComponentManager> componentManager; 
-    std::shared_ptr<ScriptSystem> scriptSystem; 
     std::unique_ptr<SystemManager> systemManager;
     std::shared_ptr<RenderSystem> renderSystem;
-    std::shared_ptr<MovementSystem> movementSystem;
+    std::shared_ptr<MovementSystem> movementSystem;  
+    std::shared_ptr<ScriptSystem> scriptSystem; 
+    std::shared_ptr<AnimationSystem> animationSystem; 
 
     std::vector<std::string> consoleLogBuffer;
 
@@ -124,7 +128,7 @@ public:
     
     std::vector<std::pair<ResizeHandle, SDL_Rect>> getResizeHandles(const TransformComponent& transform);
     
-    ResizeHandle getHandleAtPosition(float worldMouseX, float worldMouseY, const TransformComponent& transform); // Use float
+    ResizeHandle getHandleAtPosition(float worldMouseX, float worldMouseY, const TransformComponent& transform);
 
     void renderConsolePanel();
     void renderLlmPromptPanel();

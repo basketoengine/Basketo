@@ -1,0 +1,27 @@
+{
+  "animations": {
+    "walk": {
+      "name": "walk",
+      "textureId": "running.png",
+        "frames": [
+            { "sourceRect": { "x": 69, "y": 47, "w": 206, "h": 288 }, "duration": 0.1 },
+            { "sourceRect": { "x": 297, "y": 75, "w": 230, "h": 281 }, "duration": 0.1 },
+            { "sourceRect": { "x": 570, "y": 96, "w": 235, "h": 274 }, "duration": 0.1 },
+            { "sourceRect": { "x": 894, "y": 78, "w": 195, "h": 298 }, "duration": 0.1 },
+            { "sourceRect": { "x": 1153, "y": 93, "w": 201, "h": 291 }, "duration": 0.1 },
+            { "sourceRect": { "x": 44, "y": 419, "w": 208, "h": 282 }, "duration": 0.1 },
+            { "sourceRect": { "x": 294, "y": 423, "w": 238, "h": 281 }, "duration": 0.1 },
+            { "sourceRect": { "x": 565, "y": 438, "w": 243, "h": 263 }, "duration": 0.1 },
+            { "sourceRect": { "x": 858, "y": 424, "w": 220, "h": 294 }, "duration": 0.1 },
+            { "sourceRect": { "x": 1143, "y": 417, "w": 213, "h": 294 }, "duration": 0.1 }
+        ],
+      "loop": true
+    }
+  },
+  "currentAnimationName": "walk",
+  "currentFrameIndex": 0,
+  "currentFrameTime": 0.0,
+  "isPlaying": true,
+  "flipHorizontal": false,
+  "flipVertical": false
+}

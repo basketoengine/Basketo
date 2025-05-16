@@ -7,6 +7,7 @@
 #include "../ecs/components/VelocityComponent.h"
 #include "../ecs/components/ScriptComponent.h"
 #include "../ecs/components/ColliderComponent.h"
+#include "../ecs/components/AnimationComponent.h"
 #include "../AssetManager.h"
 #include "tinyfiledialogs.h"
 #include <fstream>
@@ -39,6 +40,9 @@ void saveDevModeScene(DevModeScene& scene, const std::string& filepath) {
         }
         if (scene.componentManager->hasComponent<ColliderComponent>(entity)) {
             entityJson["components"]["ColliderComponent"] = scene.componentManager->getComponent<ColliderComponent>(entity);
+        }
+        if (scene.componentManager->hasComponent<AnimationComponent>(entity)) { // Add AnimationComponent serialization
+            entityJson["components"]["AnimationComponent"] = scene.componentManager->getComponent<AnimationComponent>(entity);
         }
 
         if (!entityJson["components"].empty()) {
@@ -157,6 +161,11 @@ bool loadDevModeScene(DevModeScene& scene, const std::string& filepath) {
                     from_json(componentData, comp); 
                     scene.componentManager->addComponent(newEntity, comp);
                     entitySignature.set(scene.componentManager->getComponentType<ColliderComponent>());
+                } else if (componentType == "AnimationComponent") { // Add AnimationComponent deserialization
+                    AnimationComponent comp;
+                    from_json(componentData, comp);
+                    scene.componentManager->addComponent(newEntity, comp);
+                    entitySignature.set(scene.componentManager->getComponentType<AnimationComponent>());
                 } else {
                     std::cerr << "Warning: Unknown component type '" << componentType << "' encountered during loading." << std::endl;
                 }

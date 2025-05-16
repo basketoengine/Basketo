@@ -20,6 +20,8 @@
 #include "../ecs/components/TransformComponent.h"
 #include "../ecs/components/SpriteComponent.h"
 #include "../ecs/components/ScriptComponent.h" 
+#include "../ecs/components/ColliderComponent.h"
+#include "../ecs/components/AnimationComponent.h"
 #include "../AssetManager.h" 
 
 
@@ -41,6 +43,7 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     componentManager->registerComponent<ScriptComponent>();
     componentManager->registerComponent<ColliderComponent>(); 
     componentManager->registerComponent<NameComponent>();
+    componentManager->registerComponent<AnimationComponent>();
 
     renderSystem = systemManager->registerSystem<RenderSystem>();
     Signature renderSig;
@@ -60,6 +63,12 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     moveSig.set(componentManager->getComponentType<TransformComponent>());
     moveSig.set(componentManager->getComponentType<VelocityComponent>());
     systemManager->setSignature<MovementSystem>(moveSig);
+
+    animationSystem = systemManager->registerSystem<AnimationSystem>();
+    Signature animSig;
+    animSig.set(componentManager->getComponentType<SpriteComponent>());
+    animSig.set(componentManager->getComponentType<AnimationComponent>());
+    systemManager->setSignature<AnimationSystem>(animSig);
 
     AssetManager& assets = AssetManager::getInstance();
     std::string texturePath = "../assets/Textures/";
@@ -105,6 +114,18 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
         }
     }
 
+    std::string texturesRoot = "../assets/Textures/";
+    namespace fs = std::filesystem;
+    if (fs::exists(texturesRoot)) {
+        for (const auto& entry : fs::recursive_directory_iterator(texturesRoot)) {
+            if (entry.is_regular_file()) {
+                std::string fullPath = entry.path().string();
+                std::string relPath = fs::relative(entry.path(), texturesRoot).string();
+                AssetManager::getInstance().loadTexture(relPath, fullPath);
+            }
+        }
+    }
+
     m_llmPromptBuffer[0] = '\0';
 }
 
@@ -123,6 +144,9 @@ void DevModeScene::update(float deltaTime) {
         }
         if (movementSystem) {
             movementSystem->update(componentManager.get(), deltaTime);
+        }
+        if (animationSystem) { 
+            animationSystem->update(deltaTime, *entityManager, *componentManager);
         }
     }
 }
@@ -850,5 +874,3 @@ void DevModeScene::processLlmPrompt(const std::string& prompt) {
         Console::Error("LLM: Unknown command '" + command + "'.");
     }
 }
-
-// ... cleanup() and other methods ...

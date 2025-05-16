@@ -6,8 +6,10 @@
 #include "../ecs/components/VelocityComponent.h"
 #include "../ecs/components/SpriteComponent.h"
 #include "../ecs/components/RigidbodyComponent.h"
+#include "../ecs/components/AnimationComponent.h"
 #include "../ecs/systems/PhysicsSystem.h"
 #include "../ecs/systems/CollisionSystem.h"
+#include "../ecs/systems/AnimationSystem.h" 
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
 #include <SDL2/SDL_mixer.h>
@@ -24,6 +26,8 @@ GameScene::GameScene(SDL_Renderer* ren) : renderer(ren), cameraZoom(1.0f), camer
     componentManager->registerComponent<TransformComponent>();
     componentManager->registerComponent<SpriteComponent>();
     componentManager->registerComponent<VelocityComponent>();
+    componentManager->registerComponent<RigidbodyComponent>(); // Register RigidbodyComponent
+    componentManager->registerComponent<AnimationComponent>(); // Register AnimationComponent
 
     renderSystem = systemManager->registerSystem<RenderSystem>();
     Signature renderSig;
@@ -48,6 +52,12 @@ GameScene::GameScene(SDL_Renderer* ren) : renderer(ren), cameraZoom(1.0f), camer
     collisionSig.set(componentManager->getComponentType<TransformComponent>());
     collisionSig.set(componentManager->getComponentType<RigidbodyComponent>());
     systemManager->setSignature<CollisionSystem>(collisionSig);
+
+    animationSystem = systemManager->registerSystem<AnimationSystem>(); // Register AnimationSystem
+    Signature animSig;
+    animSig.set(componentManager->getComponentType<SpriteComponent>());
+    animSig.set(componentManager->getComponentType<AnimationComponent>());
+    systemManager->setSignature<AnimationSystem>(animSig);
 
     AssetManager& assets = AssetManager::getInstance();
 
@@ -177,6 +187,7 @@ void GameScene::update(float deltaTime) {
     physicsSystem->update(componentManager.get(), deltaTime);
     movementSystem->update(componentManager.get(), deltaTime);
     collisionSystem->update(componentManager.get(), deltaTime);
+    animationSystem->update(deltaTime, *entityManager, *componentManager); // Add AnimationSystem update
 
     auto& playerTransform = componentManager->getComponent<TransformComponent>(playerEntity);
     if (playerTransform.x < 0) playerTransform.x = 0;
