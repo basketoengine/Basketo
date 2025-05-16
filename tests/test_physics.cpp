@@ -12,7 +12,6 @@
 #include "../src/Physics.h"
 
 int main() {
-    // SDL Init
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         std::cerr << "SDL_Init Error: " << SDL_GetError() << std::endl;
         return 1;
@@ -55,7 +54,7 @@ int main() {
 
     // Create player (dynamic)
     Entity player = entityManager->createEntity();
-    TransformComponent playerTransform{100, 0, 32, 32, 0.0f, 0}; // Added rotation and z_index
+    TransformComponent playerTransform{100, 0, 32, 32, 0.0f, 0};
     VelocityComponent playerVelocity{0, 0};
     RigidbodyComponent playerRb{1.0f, true, false, 1.0f, 0.0f, false};
     componentManager->addComponent(player, playerTransform);
@@ -70,7 +69,7 @@ int main() {
 
     // Create wall (static)
     Entity wall = entityManager->createEntity();
-    TransformComponent wallTransform{100, 200, 128, 32, 0.0f, 0}; // Added rotation and z_index
+    TransformComponent wallTransform{100, 200, 128, 32, 0.0f, 0};
     RigidbodyComponent wallRb{1.0f, false, true, 1.0f, 0.0f, false};
     componentManager->addComponent(wall, wallTransform);
     componentManager->addComponent(wall, wallRb);

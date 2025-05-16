@@ -6,6 +6,36 @@ Welcome to the Basketo Engine - a passion project where I’m putting my best sh
 
 ![Basketo Engine Screenshot](readmeimgs/image.png)
 
+[![Basketo Engine Demo](readmeimgs/image2.png)](https://youtu.be/NHDqr_CjF0I)
+
+## Building the Engine (Linux)
+
+### Prerequisites
+- CMake >= 3.10
+- SDL2, SDL2_image, SDL2_ttf, SDL2_mixer
+- OpenGL
+- Lua 5.4
+- g++ (C++17)
+
+### Build Steps
+```bash
+# Clone the repository
+cd Basketo
+mkdir build && cd build
+cmake ..
+make -j$(nproc)
+```
+
+### Running
+```bash
+./BasketoGameEngine
+```
+
+If you want to run the physics test:
+```bash
+./PhysicsTest
+```
+
 ## Get Involved
 
 - Found a bug? Open an issue!  
