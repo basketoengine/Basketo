@@ -17,6 +17,7 @@ Welcome to the Basketo Engine - a passion project where I’m putting my best sh
 ### Build Steps
 ```bash
 # Clone the repository
+git clone git@github.com:basketoengine/Basketo.git
 cd Basketo
 mkdir build && cd build
 cmake ..
