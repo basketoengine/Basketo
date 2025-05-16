@@ -2,11 +2,8 @@
 
 Welcome to the Basketo Engine - a passion project where I’m putting my best shot into creating something awesome. Whether you’re here to contribute, suggest ideas, or just watch it grow, you’re part of the journey!
 
-## Current Progress
-
-![Basketo Engine Screenshot](readmeimgs/image.png)
-
-[![Basketo Engine Demo](readmeimgs/image2.png)](https://youtu.be/NHDqr_CjF0I)
+## Click the below image to see Video
+[![Basketo Engine Demo](readmeimgs/image2.png)](https://x.com/BaslaelWorkneh/status/1922713614697288096)
 
 ## Building the Engine (Linux)
 
