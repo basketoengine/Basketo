@@ -2,6 +2,8 @@
 
 Welcome to the Basketo Engine - a passion project where I’m putting my best shot into creating something awesome. Whether you’re here to contribute, suggest ideas, or just watch it grow, you’re part of the journey!
 
+## Discord: https://discord.gg/sTM6FPMH (NEW)
+
 ## Click the below image to see Video
 [![Basketo Engine Demo](readmeimgs/image2.png)](https://x.com/BaslaelWorkneh/status/1922713614697288096)
 
