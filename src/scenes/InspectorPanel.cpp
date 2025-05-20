@@ -10,6 +10,7 @@
 #include "../ecs/components/ScriptComponent.h"
 #include "../ecs/components/ColliderComponent.h"
 #include "../ecs/components/AnimationComponent.h" 
+#include "../ecs/components/AudioComponent.h" // Include AudioComponent
 #include "../AssetManager.h"
 #include "../utils/FileUtils.h" 
 #include "../utils/EditorHelpers.h" 
@@ -37,7 +38,7 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
         ImGui::Separator();
 
         ImGui::PushItemWidth(-1);
-        const char* component_types[] = { "Transform", "Sprite", "Velocity", "Script", "Collider", "Animation" }; // Add "Animation"
+        const char* component_types[] = { "Transform", "Sprite", "Velocity", "Script", "Collider", "Animation", "Audio" }; // Add "Audio"
         static int current_component_type_idx = 0;
 
         if (ImGui::BeginCombo("##AddComponentCombo", component_types[current_component_type_idx])) {
@@ -101,6 +102,14 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
                     std::cout << "Added AnimationComponent to Entity " << scene.selectedEntity << std::endl;
                 } else {
                     std::cout << "Entity " << scene.selectedEntity << " already has AnimationComponent." << std::endl;
+                }
+            } else if (selected_component_str == "Audio") {
+                if (!scene.componentManager->hasComponent<AudioComponent>(scene.selectedEntity)) {
+                    scene.componentManager->addComponent(scene.selectedEntity, AudioComponent{});
+                    entitySignature.set(scene.componentManager->getComponentType<AudioComponent>());
+                    std::cout << "Added AudioComponent to Entity " << scene.selectedEntity << std::endl;
+                } else {
+                    std::cout << "Entity " << scene.selectedEntity << " already has AudioComponent." << std::endl;
                 }
             }
 
@@ -331,6 +340,38 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
                  if (addComponentIfMissing<AnimationComponent>(scene.componentManager.get(), scene.selectedEntity)) {
                      Signature sig = scene.entityManager->getSignature(scene.selectedEntity);
                      sig.set(scene.componentManager->getComponentType<AnimationComponent>());
+                     scene.entityManager->setSignature(scene.selectedEntity, sig);
+                     scene.systemManager->entitySignatureChanged(scene.selectedEntity, sig);
+                }
+            }
+        }
+
+        if (scene.componentManager->hasComponent<AudioComponent>(scene.selectedEntity)) {
+            if (ImGui::CollapsingHeader("Audio Component", ImGuiTreeNodeFlags_DefaultOpen)) {
+                auto& audioComp = scene.componentManager->getComponent<AudioComponent>(scene.selectedEntity);
+                char audioIdBuffer[256];
+                strncpy(audioIdBuffer, audioComp.audioId.c_str(), sizeof(audioIdBuffer) - 1);
+                audioIdBuffer[sizeof(audioIdBuffer) - 1] = '\0';
+                if (ImGui::InputText("Audio ID", audioIdBuffer, sizeof(audioIdBuffer))) {
+                    audioComp.audioId = audioIdBuffer;
+                }
+                ImGui::Checkbox("Is Music", &audioComp.isMusic);
+                ImGui::Checkbox("Play On Start", &audioComp.playOnStart);
+                ImGui::Checkbox("Loop", &audioComp.loop);
+                ImGui::SliderInt("Volume", &audioComp.volume, 0, 128);
+                if (ImGui::Button("Remove Audio Component")) {
+                    scene.componentManager->removeComponent<AudioComponent>(scene.selectedEntity);
+                    Signature sig = scene.entityManager->getSignature(scene.selectedEntity);
+                    sig.reset(scene.componentManager->getComponentType<AudioComponent>());
+                    scene.entityManager->setSignature(scene.selectedEntity, sig);
+                    scene.systemManager->entitySignatureChanged(scene.selectedEntity, sig);
+                }
+            }
+        } else {
+            if (ImGui::Button("Add Audio Component")) {
+                if (addComponentIfMissing<AudioComponent>(scene.componentManager.get(), scene.selectedEntity)) {
+                     Signature sig = scene.entityManager->getSignature(scene.selectedEntity);
+                     sig.set(scene.componentManager->getComponentType<AudioComponent>());
                      scene.entityManager->setSignature(scene.selectedEntity, sig);
                      scene.systemManager->entitySignatureChanged(scene.selectedEntity, sig);
                 }

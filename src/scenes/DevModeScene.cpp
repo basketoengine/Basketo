@@ -22,6 +22,7 @@
 #include "../ecs/components/ScriptComponent.h" 
 #include "../ecs/components/ColliderComponent.h"
 #include "../ecs/components/AnimationComponent.h"
+#include "../ecs/components/AudioComponent.h"
 #include "../AssetManager.h" 
 
 
@@ -44,6 +45,7 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     componentManager->registerComponent<ColliderComponent>(); 
     componentManager->registerComponent<NameComponent>();
     componentManager->registerComponent<AnimationComponent>();
+    componentManager->registerComponent<AudioComponent>(); // Register AudioComponent
 
     renderSystem = systemManager->registerSystem<RenderSystem>();
     Signature renderSig;

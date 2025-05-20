@@ -80,6 +80,21 @@ bool AssetManager::loadFont(const std::string& id, const std::string& path, int 
     return true;
 }
 
+bool AssetManager::loadMusic(const std::string& id, const std::string& path) {
+    if (musics.find(id) != musics.end()) {
+        std::cout << "AssetManager Info: Music with ID '" << id << "' already loaded." << std::endl;
+        return true;
+    }
+    Mix_Music* music = Mix_LoadMUS(path.c_str());
+    if (!music) {
+        std::cerr << "AssetManager Error: Failed to load music '" << path << "'. Mix_Error: " << Mix_GetError() << std::endl;
+        return false;
+    }
+    musics[id] = music;
+    std::cout << "AssetManager Info: Loaded music '" << id << "' from '" << path << "'" << std::endl;
+    return true;
+}
+
 SDL_Texture* AssetManager::getTexture(const std::string& id) const {
     auto it = textures.find(id);
     if (it != textures.end()) {
@@ -110,6 +125,16 @@ TTF_Font* AssetManager::getFont(const std::string& id) const {
     }
 }
 
+Mix_Music* AssetManager::getMusic(const std::string& id) const {
+    auto it = musics.find(id);
+    if (it != musics.end()) {
+        return it->second;
+    } else {
+        std::cerr << "AssetManager Warning: Music with ID '" << id << "' not found." << std::endl;
+        return nullptr;
+    }
+}
+
 void AssetManager::cleanup() {
     std::cout << "AssetManager Info: Cleaning up assets..." << std::endl;
 
@@ -136,6 +161,14 @@ void AssetManager::cleanup() {
         }
     }
     fonts.clear();
+
+    for (auto const& [id, music] : musics) {
+        if (music) {
+            Mix_FreeMusic(music);
+            std::cout << "  - Freed music: " << id << std::endl;
+        }
+    }
+    musics.clear();
 
     renderer = nullptr;
     std::cout << "AssetManager Info: Cleanup complete." << std::endl;
