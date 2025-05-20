@@ -366,6 +366,32 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
                     scene.entityManager->setSignature(scene.selectedEntity, sig);
                     scene.systemManager->entitySignatureChanged(scene.selectedEntity, sig);
                 }
+
+                // Audio asset browser for AudioComponent
+                if (ImGui::Button("Browse Audio...")) {
+                    const char* filterPatterns[] = { "*.mp3", "*.wav", "*.ogg", "*.flac" };
+                    const char* filePath = tinyfd_openFileDialog("Select Audio File", "../assets/Audio/", 4, filterPatterns, "Audio Files", 0);
+                    if (filePath != NULL) {
+                        std::filesystem::path selectedPath = filePath;
+                        std::string filename = selectedPath.filename().string();
+                        std::string assetId = selectedPath.stem().string();
+                        std::filesystem::path destDir = std::filesystem::absolute("../assets/Audio/");
+                        std::filesystem::path destPath = destDir / filename;
+                        try {
+                            std::filesystem::create_directories(destDir);
+                            std::filesystem::copy_file(selectedPath, destPath, std::filesystem::copy_options::overwrite_existing);
+                            AssetManager& assets = AssetManager::getInstance();
+                            if (assets.loadMusic(assetId, destPath.string()) || assets.loadSound(assetId, destPath.string())) {
+                                audioComp.audioId = assetId;
+                            } else {
+                                tinyfd_messageBox("Error", "Failed to load audio into AssetManager.", "ok", "error", 1);
+                            }
+                        } catch (const std::filesystem::filesystem_error& e) {
+                            std::cerr << "Filesystem Error: " << e.what() << std::endl;
+                            tinyfd_messageBox("Error", ("Failed to copy file: " + std::string(e.what())).c_str(), "ok", "error", 1);
+                        }
+                    }
+                }
             }
         } else {
             if (ImGui::Button("Add Audio Component")) {
