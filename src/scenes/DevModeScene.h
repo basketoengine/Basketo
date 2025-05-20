@@ -24,6 +24,7 @@
 #include "../ecs/systems/ScriptSystem.h"
 #include "../ecs/systems/MovementSystem.h"
 #include "../ecs/systems/AnimationSystem.h"
+#include "../ecs/systems/AudioSystem.h"
 #include "../AssetManager.h"
 #include "../ecs/Entity.h"
 #include "../../vendor/nlohmann/json.hpp"
@@ -81,6 +82,7 @@ public:
     std::shared_ptr<MovementSystem> movementSystem;  
     std::shared_ptr<ScriptSystem> scriptSystem; 
     std::shared_ptr<AnimationSystem> animationSystem; 
+    std::shared_ptr<AudioSystem> audioSystem;
 
     std::vector<std::string> consoleLogBuffer;
 

@@ -45,6 +45,7 @@ set(SOURCE_FILES
     src/scenes/DevModeScene.cpp
     src/scenes/DevModeInputHandler.cpp
     src/scenes/DevModeSceneSerializer.cpp
+    src/ecs/systems/AudioSystem.cpp
     
     src/scenes/InspectorPanel.cpp
     utils/utility.cpp

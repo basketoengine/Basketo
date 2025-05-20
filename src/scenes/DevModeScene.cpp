@@ -24,6 +24,7 @@
 #include "../ecs/components/AnimationComponent.h"
 #include "../ecs/components/AudioComponent.h"
 #include "../AssetManager.h" 
+#include "../ecs/systems/AudioSystem.h"
 
 
 DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
@@ -71,6 +72,11 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     animSig.set(componentManager->getComponentType<SpriteComponent>());
     animSig.set(componentManager->getComponentType<AnimationComponent>());
     systemManager->setSignature<AnimationSystem>(animSig);
+
+    audioSystem = systemManager->registerSystem<AudioSystem>();
+    Signature audioSig;
+    audioSig.set(componentManager->getComponentType<AudioComponent>());
+    systemManager->setSignature<AudioSystem>(audioSig);
 
     AssetManager& assets = AssetManager::getInstance();
     std::string texturePath = "../assets/Textures/";
@@ -149,6 +155,9 @@ void DevModeScene::update(float deltaTime) {
         }
         if (animationSystem) { 
             animationSystem->update(deltaTime, *entityManager, *componentManager);
+        }
+        if (audioSystem) {
+            audioSystem->update(deltaTime, *entityManager, *componentManager);
         }
     }
 }
