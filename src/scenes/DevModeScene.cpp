@@ -14,6 +14,7 @@
 #include <SDL2/SDL_rect.h>
 #include <utility>
 #include <algorithm>
+#include <SDL2/SDL_mixer.h>
 
 #include "../ecs/components/RigidbodyComponent.h" 
 #include "../ecs/components/NameComponent.h"
@@ -138,6 +139,9 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
 }
 
 DevModeScene::~DevModeScene() {
+    // Stop any playing music or sounds when exiting play mode or scene
+    Mix_HaltMusic();
+    Mix_HaltChannel(-1);
     std::cout << "Exiting Dev Mode Scene" << std::endl;
 }
 
@@ -378,6 +382,9 @@ void DevModeScene::render() {
     if (isPlaying) {
         if (ImGui::Button("Stop")) {
             isPlaying = false;
+            // Stop all audio immediately
+            Mix_HaltMusic();
+            Mix_HaltChannel(-1);
             loadDevModeScene(*this, sceneFilePath);
         }
     } else {
