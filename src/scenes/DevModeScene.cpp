@@ -13,7 +13,7 @@
 #include "imgui_internal.h"
 #include <SDL2/SDL_rect.h>
 #include <utility>
-#include <algorithm>
+#include <algorithm> 
 #include <SDL2/SDL_mixer.h>
 
 #include "../ecs/components/RigidbodyComponent.h" 
@@ -47,8 +47,8 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     componentManager->registerComponent<ColliderComponent>(); 
     componentManager->registerComponent<NameComponent>();
     componentManager->registerComponent<AnimationComponent>();
-    componentManager->registerComponent<AudioComponent>();
-    componentManager->registerComponent<RigidbodyComponent>();
+    componentManager->registerComponent<AudioComponent>(); 
+    componentManager->registerComponent<RigidbodyComponent>(); 
 
     renderSystem = systemManager->registerSystem<RenderSystem>();
     Signature renderSig;
@@ -204,7 +204,7 @@ void DevModeScene::render() {
     if (ImGui::IsDragDropActive()) {
         ImGui::InvisibleButton("##GameViewportDropTarget", ImVec2(static_cast<float>(gameViewport.w), static_cast<float>(gameViewport.h)));
         if (ImGui::BeginDragDropTarget()) {
-            std::string assetType; 
+            std::string assetType;
             std::cout << "[DEBUG] Drop target active in game viewport" << std::endl;
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_TEXTURE_ID")) {
                 std::cout << "[DEBUG] Payload received in drop target" << std::endl;
@@ -501,7 +501,7 @@ void DevModeScene::render() {
 
     EditorUI::renderInspectorPanel(*this, io); 
 
-    // Asset Preview Panel (Bottom Right)
+    // Asset Preview Panel (Bottom Right)  NEEEEED TO BE FIXED
     ImGui::SetNextWindowPos(ImVec2(hierarchyWidth + gameViewport.w, displaySize.y - bottomPanelHeight), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(inspectorWidth, bottomPanelHeight), ImGuiCond_Always);
     ImGui::Begin("AssetPreview", nullptr, fixedPanelFlags | ImGuiWindowFlags_NoScrollbar);
@@ -527,13 +527,15 @@ void DevModeScene::render() {
             try {
                 std::filesystem::path typeRootPath = std::filesystem::absolute(assetTypeRootPathStr);
                 correctAssetId = std::filesystem::relative(assetPathObj, typeRootPath).string();
+                // Normalize path separators to '/'
                 std::replace(correctAssetId.begin(), correctAssetId.end(), '\\', '/');
             } catch (const std::filesystem::filesystem_error& e) {
+                // Fallback if relative path fails (e.g. different drives on Windows, though less likely here)
                 correctAssetId = assetPathObj.filename().string();
                 addLogToConsole("Filesystem error calculating relative path for preview: " + std::string(e.what()) + ". Falling back to filename.");
             }
         } else {
-            correctAssetId = assetPathObj.filename().string();
+            correctAssetId = assetPathObj.filename().string(); // Fallback if type root is not defined
         }
 
         std::string extension = assetPathObj.extension().string();
@@ -541,6 +543,7 @@ void DevModeScene::render() {
         std::transform(extLower.begin(), extLower.end(), extLower.begin(), ::tolower);
 
         ImGui::TextWrapped("Preview: %s", assetPathObj.filename().string().c_str());
+        // ImGui::TextWrapped("ID: %s", correctAssetId.c_str()); // Optional: for debugging the ID
 
         if (selectedAssetTypeForPreview == "texture" && (extLower == ".png" || extLower == ".jpg" || extLower == ".jpeg")) {
             SDL_Texture* texture = assetManager.getTexture(correctAssetId);
@@ -563,6 +566,7 @@ void DevModeScene::render() {
             } else {
                 ImGui::TextWrapped("Texture not found or failed to load.");
                 ImGui::TextWrapped("Attempted ID: %s", correctAssetId.c_str());
+                // ImGui::TextWrapped("Full path: %s", selectedAssetPathForPreview.c_str()); // Already shown as "Preview:"
             }
         } else if (selectedAssetTypeForPreview == "audio" && (extLower == ".mp3" || extLower == ".wav" || extLower == ".ogg")) {
             ImGui::TextWrapped("Audio File: %s", assetPathObj.filename().string().c_str());
