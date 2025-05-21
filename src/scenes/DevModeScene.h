@@ -142,5 +142,13 @@ public:
     char m_sceneNameBuffer[128];
     char m_llmPromptBuffer[256];
 
+    std::string currentAssetDirectory = "../assets/"; // Or wherever your assets root is
+
+    // For asset preview
+    std::string selectedAssetPathForPreview = "";
+    std::string selectedAssetTypeForPreview = "";
+
+
+    void renderDevModeUI();
     std::string getComponentNameForDisplay(Entity entity);
 };

@@ -47,7 +47,8 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     componentManager->registerComponent<ColliderComponent>(); 
     componentManager->registerComponent<NameComponent>();
     componentManager->registerComponent<AnimationComponent>();
-    componentManager->registerComponent<AudioComponent>(); // Register AudioComponent
+    componentManager->registerComponent<AudioComponent>();
+    componentManager->registerComponent<RigidbodyComponent>();
 
     renderSystem = systemManager->registerSystem<RenderSystem>();
     Signature renderSig;
@@ -139,7 +140,6 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
 }
 
 DevModeScene::~DevModeScene() {
-    // Stop any playing music or sounds when exiting play mode or scene
     Mix_HaltMusic();
     Mix_HaltChannel(-1);
     std::cout << "Exiting Dev Mode Scene" << std::endl;
@@ -204,6 +204,7 @@ void DevModeScene::render() {
     if (ImGui::IsDragDropActive()) {
         ImGui::InvisibleButton("##GameViewportDropTarget", ImVec2(static_cast<float>(gameViewport.w), static_cast<float>(gameViewport.h)));
         if (ImGui::BeginDragDropTarget()) {
+            std::string assetType; 
             std::cout << "[DEBUG] Drop target active in game viewport" << std::endl;
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_TEXTURE_ID")) {
                 std::cout << "[DEBUG] Payload received in drop target" << std::endl;
@@ -382,7 +383,6 @@ void DevModeScene::render() {
     if (isPlaying) {
         if (ImGui::Button("Stop")) {
             isPlaying = false;
-            // Stop all audio immediately
             Mix_HaltMusic();
             Mix_HaltChannel(-1);
             loadDevModeScene(*this, sceneFilePath);
@@ -408,23 +408,28 @@ void DevModeScene::render() {
     ImGui::SameLine(); ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical); ImGui::SameLine();
     ImGui::Checkbox("Show Grid", &showGrid);
     ImGui::SameLine(); ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical); ImGui::SameLine();
-    ImGui::Text("Spawn:"); ImGui::SameLine(); ImGui::PushItemWidth(40); ImGui::InputFloat("X", &spawnPosX, 0, 0, "%.0f"); ImGui::SameLine(); ImGui::InputFloat("Y", &spawnPosY, 0, 0, "%.0f"); ImGui::PopItemWidth(); ImGui::SameLine(); ImGui::PushItemWidth(60); ImGui::InputText("TexID", spawnTextureId, IM_ARRAYSIZE(spawnTextureId)); ImGui::PopItemWidth(); ImGui::SameLine();
-    if (ImGui::Button("Spawn")) {
-        Entity newEntity = entityManager->createEntity();
-        float spawnWorldX = cameraX + gameViewport.w / 2.0f;
-        float spawnWorldY = cameraY + gameViewport.h / 2.0f;
-        TransformComponent transform; transform.x = spawnWorldX + spawnPosX; transform.y = spawnWorldY + spawnPosY; transform.width = spawnSizeW > 0 ? spawnSizeW : 32; transform.height = spawnSizeH > 0 ? spawnSizeH : 32;
-        componentManager->addComponent(newEntity, transform);
-        Signature entitySignature; entitySignature.set(componentManager->getComponentType<TransformComponent>());
-        std::string textureIdStr(spawnTextureId);
-        if (strlen(spawnTextureId) > 0 && AssetManager::getInstance().getTexture(textureIdStr)) {
-            componentManager->addComponent(newEntity, SpriteComponent{textureIdStr});
-            entitySignature.set(componentManager->getComponentType<SpriteComponent>());
-        } else if (strlen(spawnTextureId) > 0) {
-            std::cerr << "Spawn Warning: Texture ID '" << textureIdStr << "' not found. Sprite not added." << std::endl;
+
+    if (ImGui::CollapsingHeader("Spawn Entity", ImGuiTreeNodeFlags_None)) {
+        ImGui::Text("Spawn Pos:"); ImGui::SameLine(); ImGui::PushItemWidth(40); ImGui::InputFloat("X", &spawnPosX, 0, 0, "%.0f"); ImGui::SameLine(); ImGui::InputFloat("Y", &spawnPosY, 0, 0, "%.0f"); ImGui::PopItemWidth();
+        ImGui::SameLine(); ImGui::Text("Size:"); ImGui::SameLine(); ImGui::PushItemWidth(40); ImGui::InputFloat("W", &spawnSizeW, 0, 0, "%.0f"); ImGui::SameLine(); ImGui::InputFloat("H", &spawnSizeH, 0, 0, "%.0f"); ImGui::PopItemWidth();
+        ImGui::SameLine(); ImGui::Text("TexID:"); ImGui::SameLine(); ImGui::PushItemWidth(60); ImGui::InputText("##SpawnTexID", spawnTextureId, IM_ARRAYSIZE(spawnTextureId)); ImGui::PopItemWidth(); ImGui::SameLine();
+        if (ImGui::Button("Spawn##Button")) {
+            Entity newEntity = entityManager->createEntity();
+            float spawnWorldX = cameraX + gameViewport.w / 2.0f;
+            float spawnWorldY = cameraY + gameViewport.h / 2.0f;
+            TransformComponent transform; transform.x = spawnWorldX + spawnPosX; transform.y = spawnWorldY + spawnPosY; transform.width = spawnSizeW > 0 ? spawnSizeW : 32; transform.height = spawnSizeH > 0 ? spawnSizeH : 32;
+            componentManager->addComponent(newEntity, transform);
+            Signature entitySignature; entitySignature.set(componentManager->getComponentType<TransformComponent>());
+            std::string textureIdStr(spawnTextureId);
+            if (strlen(spawnTextureId) > 0 && AssetManager::getInstance().getTexture(textureIdStr)) {
+                componentManager->addComponent(newEntity, SpriteComponent{textureIdStr});
+                entitySignature.set(componentManager->getComponentType<SpriteComponent>());
+            } else if (strlen(spawnTextureId) > 0) {
+                std::cerr << "Spawn Warning: Texture ID '" << textureIdStr << "' not found. Sprite not added." << std::endl;
+            }
+            entityManager->setSignature(newEntity, entitySignature);
+            systemManager->entitySignatureChanged(newEntity, entitySignature);
         }
-        entityManager->setSignature(newEntity, entitySignature);
-        systemManager->entitySignatureChanged(newEntity, entitySignature);
     }
     ImGui::End();
 
@@ -438,6 +443,12 @@ void DevModeScene::render() {
                 const auto& activeEntities = entityManager->getActiveEntities();
                 for (Entity entity : activeEntities) {
                     std::string label = "Entity " + std::to_string(entity);
+                    if (componentManager->hasComponent<NameComponent>(entity)) {
+                        label = componentManager->getComponent<NameComponent>(entity).name;
+                    }
+                    if (componentManager->hasComponent<TransformComponent>(entity)) {
+                        label += " (Z: " + std::to_string(componentManager->getComponent<TransformComponent>(entity).z_index) + ")";
+                    }
                     if (ImGui::Selectable(label.c_str(), selectedEntity == entity)) {
                         selectedEntity = entity;
                         inspectorTextureIdBuffer[0] = '\0';
@@ -490,6 +501,99 @@ void DevModeScene::render() {
 
     EditorUI::renderInspectorPanel(*this, io); 
 
+    // Asset Preview Panel (Bottom Right)
+    ImGui::SetNextWindowPos(ImVec2(hierarchyWidth + gameViewport.w, displaySize.y - bottomPanelHeight), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(inspectorWidth, bottomPanelHeight), ImGuiCond_Always);
+    ImGui::Begin("AssetPreview", nullptr, fixedPanelFlags | ImGuiWindowFlags_NoScrollbar);
+    if (!selectedAssetPathForPreview.empty()) {
+        std::filesystem::path assetPathObj(selectedAssetPathForPreview);
+        // std::string assetId = assetPathObj.stem().string(); // Old problematic way
+        std::string correctAssetId;
+
+        std::string assetTypeRootPathStr;
+        if (selectedAssetTypeForPreview == "texture") {
+            assetTypeRootPathStr = "../assets/Textures/";
+        } else if (selectedAssetTypeForPreview == "audio") {
+            assetTypeRootPathStr = "../assets/Audio/";
+        } else if (selectedAssetTypeForPreview == "animation") {
+            assetTypeRootPathStr = "../assets/Animations/";
+        } else if (selectedAssetTypeForPreview == "font") {
+            assetTypeRootPathStr = "../assets/Fonts/";
+        } else if (selectedAssetTypeForPreview == "script") {
+            assetTypeRootPathStr = "../assets/Scripts/";
+        }
+
+        if (!assetTypeRootPathStr.empty()) {
+            try {
+                std::filesystem::path typeRootPath = std::filesystem::absolute(assetTypeRootPathStr);
+                correctAssetId = std::filesystem::relative(assetPathObj, typeRootPath).string();
+                std::replace(correctAssetId.begin(), correctAssetId.end(), '\\', '/');
+            } catch (const std::filesystem::filesystem_error& e) {
+                correctAssetId = assetPathObj.filename().string();
+                addLogToConsole("Filesystem error calculating relative path for preview: " + std::string(e.what()) + ". Falling back to filename.");
+            }
+        } else {
+            correctAssetId = assetPathObj.filename().string();
+        }
+
+        std::string extension = assetPathObj.extension().string();
+        std::string extLower = extension;
+        std::transform(extLower.begin(), extLower.end(), extLower.begin(), ::tolower);
+
+        ImGui::TextWrapped("Preview: %s", assetPathObj.filename().string().c_str());
+
+        if (selectedAssetTypeForPreview == "texture" && (extLower == ".png" || extLower == ".jpg" || extLower == ".jpeg")) {
+            SDL_Texture* texture = assetManager.getTexture(correctAssetId);
+            if (texture) {
+                int w, h;
+                SDL_QueryTexture(texture, NULL, NULL, &w, &h);
+                float aspectRatio = static_cast<float>(w) / h;
+                float previewWidth = ImGui::GetContentRegionAvail().x;
+                float previewHeight = previewWidth / aspectRatio;
+
+                if (previewHeight > ImGui::GetContentRegionAvail().y - ImGui::GetTextLineHeightWithSpacing() * 2) { // Adjusted for text lines
+                    previewHeight = ImGui::GetContentRegionAvail().y - ImGui::GetTextLineHeightWithSpacing() * 2;
+                    previewWidth = previewHeight * aspectRatio;
+                }
+                 if (previewWidth > ImGui::GetContentRegionAvail().x) {
+                    previewWidth = ImGui::GetContentRegionAvail().x;
+                    previewHeight = previewWidth / aspectRatio;
+                }
+                ImGui::Image((ImTextureID)(uintptr_t)texture, ImVec2(previewWidth, previewHeight));
+            } else {
+                ImGui::TextWrapped("Texture not found or failed to load.");
+                ImGui::TextWrapped("Attempted ID: %s", correctAssetId.c_str());
+            }
+        } else if (selectedAssetTypeForPreview == "audio" && (extLower == ".mp3" || extLower == ".wav" || extLower == ".ogg")) {
+            ImGui::TextWrapped("Audio File: %s", assetPathObj.filename().string().c_str());
+            if (ImGui::Button("Play")) {
+                Mix_Chunk* sound = assetManager.getSound(correctAssetId);
+                if (sound) {
+                    Mix_PlayChannel(-1, sound, 0);
+                } else {
+                    addLogToConsole("Error: Sound not found with ID: " + correctAssetId);
+                }
+            }
+        } else if (selectedAssetTypeForPreview == "animation" && extLower == ".json") {
+            ImGui::TextWrapped("Animation File: %s", assetPathObj.filename().string().c_str());
+            // Add animation preview logic if needed, using correctAssetId
+        } else if (selectedAssetTypeForPreview == "font" && (extLower == ".ttf" || extLower == ".otf")) {
+            ImGui::TextWrapped("Font File: %s", assetPathObj.filename().string().c_str());
+            // Font preview might require specific ID format (e.g., "fontname_size")
+            // For now, just displaying filename.
+        } else if (selectedAssetTypeForPreview == "script" && extLower == ".lua") {
+            ImGui::TextWrapped("Script File: %s", assetPathObj.filename().string().c_str());
+            // Script preview logic
+        }
+        else {
+            ImGui::TextWrapped("Unsupported file type for preview or unknown asset type for ID generation.");
+        }
+    } else {
+        ImGui::Text("Select an asset to preview.");
+    }
+    ImGui::End();
+
+
     ImGui::SetNextWindowPos(ImVec2(0, displaySize.y - bottomPanelHeight), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(displaySize.x, bottomPanelHeight), ImGuiCond_Always);
     ImGui::Begin("BottomPanel", nullptr, fixedPanelFlags | ImGuiWindowFlags_NoScrollbar);
@@ -506,147 +610,117 @@ void DevModeScene::render() {
                         std::string assetId = p.stem().string();
                         std::filesystem::path destDir;
                         std::string ext = p.extension().string();
+                        std::string assetTypeToImport;
+
                         if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp" || ext == ".gif" || ext == ".tga") {
                             destDir = std::filesystem::absolute("../assets/Textures/");
+                            assetTypeToImport = "texture";
                         } else if (ext == ".mp3" || ext == ".wav" || ext == ".ogg" || ext == ".flac") {
                             destDir = std::filesystem::absolute("../assets/Audio/");
+                            assetTypeToImport = "audio";
                         } else if (ext == ".ttf" || ext == ".otf") {
                             destDir = std::filesystem::absolute("../assets/Fonts/");
+                            assetTypeToImport = "font";
                         } else if (ext == ".lua") {
                             destDir = std::filesystem::absolute("../assets/Scripts/");
-                        } else if (ext == ".json") { 
-                            destDir = std::filesystem::absolute("../assets/Scenes/");
-                        }
-                         else {
-                            destDir = std::filesystem::absolute("../assets/"); 
-                        }
-                        std::filesystem::path destPath = destDir / filename;
-                        try {
-                            std::filesystem::create_directories(destDir);
-                            std::filesystem::copy_file(selectedPath, destPath, std::filesystem::copy_options::overwrite_existing);
-                            std::cout << "Asset copied to: " << destPath.string() << std::endl;
-                            AssetManager& assets = AssetManager::getInstance();
-                            if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp" || ext == ".gif" || ext == ".tga") {
-                                if (!assets.loadTexture(assetId, destPath.string())) {
-                                    tinyfd_messageBox("Error", "Failed to load imported texture.", "ok", "error", 1);
-                                }
-                            } else if (ext == ".mp3" || ext == ".wav" || ext == ".ogg" || ext == ".flac") {
-                                if (!assets.loadSound(assetId, destPath.string())) {
-                                    tinyfd_messageBox("Error", "Failed to load imported sound.", "ok", "error", 1);
-                                }
-                            } else if (ext == ".ttf" || ext == ".otf") {
-                                 if (!assets.loadFont(assetId + "_16", destPath.string(), 16)) { 
-                                    tinyfd_messageBox("Error", "Failed to load imported font.", "ok", "error", 1);
-                                }
+                            assetTypeToImport = "script";
+                        } else if (ext == ".json") { // Assuming .json for animations for now
+                            // Check if it's in an 'animations' subdirectory or has a typical animation name
+                            if (p.parent_path().filename() == "animations" || filename.find("anim") != std::string::npos) {
+                                destDir = std::filesystem::absolute("../assets/Animations/");
+                                assetTypeToImport = "animation";
+                            } else {
+                                // Generic json, could be scene or other data
+                                destDir = std::filesystem::absolute("../assets/Scenes/"); // Or a generic data folder
+                                assetTypeToImport = "scene_data";
                             }
-                        } catch (const std::filesystem::filesystem_error& e) {
-                            std::cerr << "Filesystem Error: " << e.what() << std::endl;
-                            tinyfd_messageBox("Error", ("Failed to copy file: " + std::string(e.what())).c_str(), "ok", "error", 1);
+                        } else {
+                            addLogToConsole("Unsupported file type for import: " + ext);
                         }
-                    } else {
-                        tinyfd_messageBox("Error", "Could not extract filename.", "ok", "error", 1);
+
+                        if (!destDir.empty() && !assetTypeToImport.empty() && assetTypeToImport != "scene_data") {
+                            std::filesystem::create_directories(destDir);
+                            std::filesystem::path destPath = destDir / filename;
+                            try {
+                                std::filesystem::copy_file(p, destPath, std::filesystem::copy_options::overwrite_existing);
+                                addLogToConsole("Imported " + assetTypeToImport + ": " + filename + " to " + destPath.string());
+                                // Reload the specific asset type
+                                if (assetTypeToImport == "texture") {
+                                    assetManager.loadTexture(assetId, destPath.string());
+                                } else if (assetTypeToImport == "audio") {
+                                    assetManager.loadSound(assetId, destPath.string());
+                                } else if (assetTypeToImport == "font") {
+                                    assetManager.loadFont(assetId + "_16", destPath.string(), 16); // Default size
+                                } else if (assetTypeToImport == "animation") {
+                                    // assetManager.loadAnimation(assetId, destPath.string());
+                                    addLogToConsole("Animation import for '" + assetId + "' needs AssetManager::loadAnimation implementation.");
+                                }
+                            } catch (const std::filesystem::filesystem_error& e) {
+                                addLogToConsole("Error importing file: " + std::string(e.what()));
+                            }
+                        } else if (assetTypeToImport == "scene_data") {
+                             addLogToConsole("Scene data files (.json) should be handled by scene loading logic, not direct asset import.");
+                        }
                     }
                 }
             }
             ImGui::Separator();
 
-            std::function<void(const std::filesystem::path&)> displayAssetTree;
-            displayAssetTree = [&](const std::filesystem::path& currentPath) {
-                namespace fs = std::filesystem;
-                AssetManager& assets = AssetManager::getInstance();
-                ImGuiStyle& style = ImGui::GetStyle();
-                float itemWidth = 64.0f; 
+            // Asset Browser Tree
+            std::function<void(const std::filesystem::path&, const std::string&)> displayDirectoryAssets = 
+                [&](const std::filesystem::path& dirPath, const std::string& assetType) {
+                if (std::filesystem::exists(dirPath) && std::filesystem::is_directory(dirPath)) {
+                    for (const auto& entry : std::filesystem::directory_iterator(dirPath)) {
+                        const auto& path = entry.path();
+                        std::string filename = path.filename().string();
+                        std::string fullPath = std::filesystem::absolute(path).string();
 
-                std::vector<fs::directory_entry> entries;
-                try {
-                    for (const auto& entry : fs::directory_iterator(currentPath)) {
-                        entries.push_back(entry);
-                    }
-                } catch (const fs::filesystem_error& e) {
-                    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Error accessing %s: %s", currentPath.string().c_str(), e.what());
-                    return;
-                }
-
-                std::sort(entries.begin(), entries.end(), [](const fs::directory_entry& a, const fs::directory_entry& b) {
-                    if (a.is_directory() && !b.is_directory()) return true;
-                    if (!a.is_directory() && b.is_directory()) return false;
-                    return a.path().filename().string() < b.path().filename().string();
-                });
-
-                for (const auto& entry : entries) {
-                    const auto& path = entry.path();
-                    std::string filename = path.filename().string();
-                    std::string assetId = path.stem().string();
-
-                    if (entry.is_directory()) {
-                        ImGuiTreeNodeFlags node_flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
-                        bool node_open = ImGui::TreeNodeEx(filename.c_str(), node_flags, "[F] %s", filename.c_str());
-                        if (node_open) {
-                            displayAssetTree(path);
-                            ImGui::TreePop();
-                        }
-                    } else if (entry.is_regular_file()) {
-                        std::string ext = path.extension().string();
-                        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-
-                        if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp" || ext == ".gif" || ext == ".tga") {
-                            SDL_Texture* texture = assets.getTexture(assetId);
-                            ImGui::BeginGroup();
-                            if (texture) {
-                                ImGui::Image((ImTextureID)texture, ImVec2(itemWidth, itemWidth));
-                            } else {
-                                ImGui::Dummy(ImVec2(itemWidth, itemWidth)); 
-                                ImGui::TextWrapped("(No Preview)");
+                        if (entry.is_directory()) {
+                            if (ImGui::TreeNode(filename.c_str())) {
+                                displayDirectoryAssets(path, assetType); // Recurse
+                                ImGui::TreePop();
                             }
-                            ImGui::TextWrapped("%s", filename.c_str());
-                            ImGui::EndGroup();
+                        } else {
+                            ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+                            if (selectedAssetPathForPreview == fullPath) {
+                                nodeFlags |= ImGuiTreeNodeFlags_Selected;
+                            }
+                            ImGui::TreeNodeEx(filename.c_str(), nodeFlags);
+                            if (ImGui::IsItemClicked()) {
+                                selectedAssetPathForPreview = fullPath;
+                                selectedAssetTypeForPreview = assetType;
+                                std::cout << "Selected asset: " << selectedAssetPathForPreview << " type: " << selectedAssetTypeForPreview << std::endl; // Debug log
+                            }
 
-                            if (texture && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-                                ImGui::SetDragDropPayload("ASSET_TEXTURE_ID", assetId.c_str(), assetId.length() + 1);
-                                ImGui::Image((ImTextureID)texture, ImVec2(itemWidth, itemWidth));
-                                ImGui::Text("%s", filename.c_str());
+                            if (assetType == "texture" && ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                                ImGui::SetDragDropPayload("ASSET_TEXTURE_ID", filename.c_str(), filename.length() + 1);
+                                ImGui::Text("%s", filename.c_str()); // Display item name while dragging
                                 ImGui::EndDragDropSource();
                             }
-                        } else if (ext == ".mp3" || ext == ".wav" || ext == ".ogg" || ext == ".flac") {
-                            ImGui::BulletText("[A] %s", filename.c_str());
-                        } else if (ext == ".ttf" || ext == ".otf") {
-                            ImGui::BulletText("[T] %s", filename.c_str());
-                        } else if (ext == ".lua") {
-                            ImGui::BulletText("[S] %s", filename.c_str());
-                        } else if (ext == ".json") { 
-                            ImGui::BulletText("[J] %s", filename.c_str());
-                            if (ImGui::IsItemClicked(0) && ImGui::IsMouseDoubleClicked(0)) {
-                                std::string sceneToLoadPath = fs::relative(path, fs::current_path() / "../").string();
-                                std::replace(sceneToLoadPath.begin(), sceneToLoadPath.end(), '\\', '/');
-                                if (loadDevModeScene(*this, sceneToLoadPath)) {
-                                    strncpy(sceneFilePath, sceneToLoadPath.c_str(), sizeof(sceneFilePath) - 1);
-                                    sceneFilePath[sizeof(sceneFilePath) - 1] = '\0';
-                                    std::cout << "Loaded scene: " << sceneToLoadPath << std::endl;
-                                } else {
-                                    std::cerr << "Failed to load scene: " << sceneToLoadPath << std::endl;
-                                }
-                            }
-                        }
-                         else {
-                            ImGui::BulletText("[?] %s", filename.c_str());
-                        }
-                        float currentX = ImGui::GetCursorPosX() + ImGui::GetItemRectSize().x + style.ItemSpacing.x;
-                        float windowWidth = ImGui::GetWindowContentRegionMax().x;
-                        if (currentX < windowWidth) {
-                            // Check if the next item would fit, otherwise wrap. This logic is tricky with varying item widths.
-                            // For simplicity, this example doesn't implement complex wrapping for non-texture items.
-                            // ImGui::SameLine(); // Only if you want items side-by-side
                         }
                     }
                 }
             };
 
-            std::filesystem::path assetsRoot = "../assets";
-            if (std::filesystem::exists(assetsRoot) && std::filesystem::is_directory(assetsRoot)) {
-                displayAssetTree(assetsRoot);
-            } else {
-                ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Assets directory not found at: %s", std::filesystem::absolute(assetsRoot).string().c_str());
+            if (ImGui::CollapsingHeader("Textures")) {
+                displayDirectoryAssets("../assets/Textures/", "texture");
             }
+            if (ImGui::CollapsingHeader("Audio")) {
+                displayDirectoryAssets("../assets/Audio/", "audio");
+            }
+            if (ImGui::CollapsingHeader("Animations")) {
+                displayDirectoryAssets("../assets/Animations/", "animation");
+            }
+            if (ImGui::CollapsingHeader("Fonts")) {
+                displayDirectoryAssets("../assets/Fonts/", "font");
+            }
+            if (ImGui::CollapsingHeader("Scripts")) {
+                displayDirectoryAssets("../assets/Scripts/", "script");
+            }
+            if (ImGui::CollapsingHeader("Scenes")) {
+                displayDirectoryAssets("../assets/Scenes/", "scene");
+            }
+
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Console")) {

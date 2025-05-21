@@ -13,6 +13,11 @@
 #include "../vendor/imgui/imgui.h"
 #include "../vendor/imgui/backends/imgui_impl_sdl2.h"
 #include "../vendor/imgui/backends/imgui_impl_sdlrenderer2.h"
+#include <imgui_internal.h>
+
+// Defines for FontAwesome icons
+#define ICON_MIN_FA 0xf000
+#define ICON_MAX_FA 0xf3ff // Adjusted to a common FontAwesome range, verify with your font version
 
 Game::Game() {}
 
@@ -88,6 +93,25 @@ bool Game::init(const char* title, int width, int height) {
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+
+    // Load default font
+    io.Fonts->AddFontFromFileTTF("../assets/Fonts/roboto/Roboto-Regular.ttf", 16.0f);
+
+    // Add FontAwesome icons
+    // 1. Download FontAwesome ttf
+    // 2. Add it to your assets/Fonts folder (e.g., as FontAwesome.ttf)
+    // 3. Uncomment and adjust the path and size below
+    /*
+    ImFontConfig fontConfig;
+    fontConfig.MergeMode = true;
+    fontConfig.PixelSnapH = true;
+    fontConfig.GlyphMinAdvanceX = 16.0f; // Adjust as needed
+    static const ImWchar icon_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
+    io.Fonts->AddFontFromFileTTF("../assets/Fonts/FontAwesome.ttf", 16.0f, &fontConfig, icon_ranges);
+    */
+
+    io.Fonts->Build();
+
 
     ImGuiStyle& style = ImGui::GetStyle();
     if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
@@ -166,6 +190,15 @@ bool Game::init(const char* title, int width, int height) {
     style.Colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
     style.Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.20f, 0.20f, 0.20f, 0.35f);
     // --- Customizations End ---
+    // Add/Adjust Padding and Spacing
+    style.WindowPadding = ImVec2(8.0f, 8.0f);
+    style.FramePadding = ImVec2(5.0f, 3.0f);
+    style.CellPadding = ImVec2(4.0f, 2.0f);
+    style.ItemSpacing = ImVec2(8.0f, 4.0f);
+    style.ItemInnerSpacing = ImVec2(4.0f, 4.0f);
+    style.IndentSpacing = 21.0f;
+    style.ScrollbarSize = 15.0f;
+    style.GrabMinSize = 10.0f;
 
     style.WindowBorderSize = 1.0f;
     style.FrameBorderSize = 0.0f;
