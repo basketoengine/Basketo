@@ -13,7 +13,7 @@ Welcome to the Basketo Engine - a passion project where I’m putting my best sh
 ## Building the Engine (Linux)
 
 ### Prerequisites
-- CMake >= 3.10
+- CMake 3.26.0 or higher is required.
 - SDL2, SDL2_image, SDL2_ttf, SDL2_mixer
 - Lua 5.4
 - g++ (C++17)
