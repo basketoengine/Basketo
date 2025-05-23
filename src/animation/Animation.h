@@ -1,10 +1,9 @@
 #pragma once
 #include <string>
 #include <vector>
-#include "SDL.h" // Assuming you use SDL_Rect for frame definitions
-#include "../../vendor/nlohmann/json.hpp" // Added for JSON serialization
+#include "SDL.h"
+#include "../../vendor/nlohmann/json.hpp" 
 
-// Forward declaration for nlohmann
 namespace nlohmann {
     template <typename T>
     struct adl_serializer;
@@ -23,8 +22,8 @@ inline void from_json(const nlohmann::json& j, SDL_Rect& rect) {
 }
 
 struct AnimationFrame {
-    SDL_Rect sourceRect; // The portion of the texture to draw for this frame
-    float duration;      // How long this frame should be displayed (in seconds)
+    SDL_Rect sourceRect; 
+    float duration;
 };
 
 inline void to_json(nlohmann::json& j, const AnimationFrame& frame) {
@@ -41,7 +40,7 @@ inline void from_json(const nlohmann::json& j, AnimationFrame& frame) {
 
 struct AnimationSequence {
     std::string name;
-    std::string textureId; // ID of the texture atlas/spritesheet
+    std::string textureId; 
     std::vector<AnimationFrame> frames;
     bool loop = false;
 };

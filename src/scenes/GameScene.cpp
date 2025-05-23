@@ -26,8 +26,8 @@ GameScene::GameScene(SDL_Renderer* ren) : renderer(ren), cameraZoom(1.0f), camer
     componentManager->registerComponent<TransformComponent>();
     componentManager->registerComponent<SpriteComponent>();
     componentManager->registerComponent<VelocityComponent>();
-    componentManager->registerComponent<RigidbodyComponent>(); // Register RigidbodyComponent
-    componentManager->registerComponent<AnimationComponent>(); // Register AnimationComponent
+    componentManager->registerComponent<RigidbodyComponent>(); 
+    componentManager->registerComponent<AnimationComponent>(); 
 
     renderSystem = systemManager->registerSystem<RenderSystem>();
     Signature renderSig;
@@ -53,11 +53,14 @@ GameScene::GameScene(SDL_Renderer* ren) : renderer(ren), cameraZoom(1.0f), camer
     collisionSig.set(componentManager->getComponentType<RigidbodyComponent>());
     systemManager->setSignature<CollisionSystem>(collisionSig);
 
-    animationSystem = systemManager->registerSystem<AnimationSystem>(); // Register AnimationSystem
+    animationSystem = systemManager->registerSystem<AnimationSystem>(); 
     Signature animSig;
     animSig.set(componentManager->getComponentType<SpriteComponent>());
     animSig.set(componentManager->getComponentType<AnimationComponent>());
     systemManager->setSignature<AnimationSystem>(animSig);
+
+    scriptSystem = systemManager->registerSystem<ScriptSystem>(entityManager.get(), componentManager.get());
+    scriptSystem->init();
 
     AssetManager& assets = AssetManager::getInstance();
 
@@ -174,20 +177,11 @@ void GameScene::handleInput(SDL_Event& event) {
 }
 
 void GameScene::update(float deltaTime) {
-    float speed = 200.0f;
-    auto& playerVelocity = componentManager->getComponent<VelocityComponent>(playerEntity);
-    playerVelocity.vx = 0.0f;
-    playerVelocity.vy = 0.0f;
-
-    if (InputManager::getInstance().isActionPressed("MoveLeft"))  playerVelocity.vx -= speed;
-    if (InputManager::getInstance().isActionPressed("MoveRight")) playerVelocity.vx += speed;
-    if (InputManager::getInstance().isActionPressed("MoveUp"))    playerVelocity.vy -= speed;
-    if (InputManager::getInstance().isActionPressed("MoveDown"))  playerVelocity.vy += speed;
-
+    scriptSystem->update(deltaTime);
     physicsSystem->update(componentManager.get(), deltaTime);
     movementSystem->update(componentManager.get(), deltaTime);
     collisionSystem->update(componentManager.get(), deltaTime);
-    animationSystem->update(deltaTime, *entityManager, *componentManager); // Add AnimationSystem update
+    animationSystem->update(deltaTime, *entityManager, *componentManager);
 
     auto& playerTransform = componentManager->getComponent<TransformComponent>(playerEntity);
     if (playerTransform.x < 0) playerTransform.x = 0;

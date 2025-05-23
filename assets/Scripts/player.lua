@@ -1,7 +1,6 @@
--- player.lua
--- This script controls the player entity
 
-local playerSpeed = 150.0 -- units per second, adjust as needed
+
+local playerSpeed = 150.0 
 
 function init(entity)
     Log("Player script initialized for entity: " .. tostring(entity))
@@ -15,15 +14,25 @@ end
 
 function update(entity, deltaTime)
     local vx, vy = 0, 0
-    local speed = 150
-    if Input.isKeyDown("W") then vy = vy - speed end
-    if Input.isKeyDown("S") then vy = vy + speed end
-    if Input.isKeyDown("A") then vx = vx - speed end
-    if Input.isKeyDown("D") then vx = vx + speed end
+
+    local w_pressed = Input.isKeyDown("W")
+    local s_pressed = Input.isKeyDown("S")
+    local a_pressed = Input.isKeyDown("A")
+    local d_pressed = Input.isKeyDown("D")
+    Log("Lua update: W=" .. tostring(w_pressed) .. " A=" .. tostring(a_pressed) .. " S=" .. tostring(s_pressed) .. " D=" .. tostring(d_pressed))
+
+    if w_pressed then vy = vy - playerSpeed end
+    if s_pressed then vy = vy + playerSpeed end
+    if a_pressed then vx = vx - playerSpeed end
+    if d_pressed then vx = vx + playerSpeed end
+
     SetEntityVelocity(entity, vx, vy)
+    Log("Lua set velocity: vx=" .. tostring(vx) .. ", vy=" .. tostring(vy))
+
+    if vx ~= 0 or vy ~= 0 then
+        SetEntityAnimation(entity, "walk")
+    else
+        SetEntityAnimation(entity, "idle")
+    end
 end
 
--- You can add more functions here for other events later, e.g.:
--- function onCollision(entity, otherEntity, collisionDetails)
---     Log("Player entity " .. tostring(entity) .. " collided with " .. tostring(otherEntity))
--- end

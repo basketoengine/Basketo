@@ -1,0 +1,86 @@
+{
+    "animations": {
+      "idle": {
+        "name": "idle",
+        "textureId": "mario.png",
+        "frames": [
+          {
+            "sourceRect": { "x": 0, "y": 0, "w": 120, "h": 210 },
+            "duration": 0.15
+          }
+        ],
+        "loop": true
+      },
+      "walk": {
+        "name": "walk",
+        "textureId": "mario.png",
+        "frames": [
+          {
+            "sourceRect": { "x": 3, "y": 11, "w": 130, "h": 210 },
+            "duration": 0.1
+          },
+          {
+            "sourceRect": { "x": 182, "y": 1, "w": 150, "h": 220 },
+            "duration": 0.1
+          },
+          {
+            "sourceRect": { "x": 363, "y": 1, "w": 130, "h": 220 },
+            "duration": 0.1
+          }
+        ],
+        "loop": true
+      },
+      "running": {
+        "name": "running",
+        "textureId": "mario.png",
+        "frames": [
+          {
+            "sourceRect": { "x": 3, "y": 11, "w": 130, "h": 210 },
+            "duration": 0.1
+          },
+          {
+            "sourceRect": { "x": 182, "y": 1, "w": 150, "h": 220 },
+            "duration": 0.1
+          },
+          {
+            "sourceRect": { "x": 363, "y": 1, "w": 130, "h": 220 },
+            "duration": 0.1
+          }
+        ],
+        "loop": true
+      },
+      "falling": {
+        "name": "falling",
+        "textureId": "mario.png",
+        "frames": [
+          {
+            "sourceRect": { "x": 0, "y": 250, "w": 130, "h": 220 },
+            "duration": 0.1
+          }
+        ],
+        "loop": false
+      },
+      "jumping": {
+        "name": "jumping",
+        "textureId": "mario.png",
+        "frames": [
+          {
+            "sourceRect": { "x": 140, "y": 250, "w": 130, "h": 220 },
+            "duration": 0.1
+          },
+          {
+            "sourceRect": { "x": 280, "y": 250, "w": 130, "h": 220 },
+            "duration": 0.1
+          }
+        ],
+        "loop": false
+      }
+    },
+    "currentAnimationName": "idle",
+    "currentFrameIndex": 0,
+    "currentFrameTime": 0.0,
+    "isPlaying": true,
+    "flipHorizontal": false,
+    "flipVertical": false
+  }
+  

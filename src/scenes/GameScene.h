@@ -11,6 +11,7 @@
 #include "../ecs/systems/PhysicsSystem.h"
 #include "../ecs/systems/CollisionSystem.h"
 #include "../ecs/systems/AnimationSystem.h"
+#include "../ecs/systems/ScriptSystem.h"
 #include "../ecs/Types.h"
 #include <SDL2/SDL.h>
 #include <string>
@@ -44,5 +45,6 @@ private:
     std::shared_ptr<PhysicsSystem> physicsSystem;
     std::shared_ptr<CollisionSystem> collisionSystem;
     std::shared_ptr<AnimationSystem> animationSystem;
+    std::shared_ptr<ScriptSystem> scriptSystem;
     SDL_Texture* loadTexture(const std::string& path);
 };
