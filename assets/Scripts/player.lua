@@ -1,5 +1,3 @@
-
-
 local playerSpeed = 150.0 
 
 function init(entity)
@@ -19,7 +17,7 @@ function update(entity, deltaTime)
     local s_pressed = Input.isKeyDown("S")
     local a_pressed = Input.isKeyDown("A")
     local d_pressed = Input.isKeyDown("D")
-    Log("Lua update: W=" .. tostring(w_pressed) .. " A=" .. tostring(a_pressed) .. " S=" .. tostring(s_pressed) .. " D=" .. tostring(d_pressed))
+    -- Log("Lua update: W=" .. tostring(w_pressed) .. " A=" .. tostring(a_pressed) .. " S=" .. tostring(s_pressed) .. " D=" .. tostring(d_pressed))
 
     if w_pressed then vy = vy - playerSpeed end
     if s_pressed then vy = vy + playerSpeed end
@@ -27,7 +25,7 @@ function update(entity, deltaTime)
     if d_pressed then vx = vx + playerSpeed end
 
     SetEntityVelocity(entity, vx, vy)
-    Log("Lua set velocity: vx=" .. tostring(vx) .. ", vy=" .. tostring(vy))
+    -- Log("Lua set velocity: vx=" .. tostring(vx) .. ", vy=" .. tostring(vy))
 
     if vx ~= 0 or vy ~= 0 then
         SetEntityAnimation(entity, "walk")

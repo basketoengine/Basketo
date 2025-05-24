@@ -34,24 +34,44 @@ include_directories(${SDL2_INCLUDE_DIRS})
 include_directories(vendor/imgui)
 include_directories(vendor/libtinyfiledialogs)
 
-set(SOURCE_FILES
+add_executable(PhysicsTest
+    tests/test_physics.cpp
+    src/Physics.cpp
+    utils/utility.cpp
+)
+
+add_executable(BasketoGameEngine)
+
+target_sources(BasketoGameEngine PRIVATE
+    # Core application files
     src/main.cpp
     src/Game.cpp
     src/InputManager.cpp
     src/SceneManager.cpp
     src/AssetManager.cpp
+    src/Physics.cpp
+
+    # Scenes
     src/scenes/GameScene.cpp
     src/scenes/MenuScene.cpp
     src/scenes/DevModeScene.cpp
     src/scenes/DevModeInputHandler.cpp
     src/scenes/DevModeSceneSerializer.cpp
+    src/scenes/InspectorPanel.cpp
+
+    # ECS Systems
     src/ecs/systems/AudioSystem.cpp
     src/ecs/systems/CameraSystem.cpp
-    
-    src/scenes/InspectorPanel.cpp
-    utils/utility.cpp
-    src/Physics.cpp
+    src/ecs/systems/ScriptSystem.cpp
+    src/ecs/systems/AnimationSystem.cpp
 
+    # Utilities
+    utils/utility.cpp
+    src/utils/EditorUtils.cpp
+    src/utils/FileUtils.cpp
+    src/utils/Console.cpp
+
+    # Vendor libraries (compiled directly)
     vendor/imgui/imgui.cpp
     vendor/imgui/imgui_demo.cpp
     vendor/imgui/imgui_draw.cpp
@@ -60,20 +80,7 @@ set(SOURCE_FILES
     vendor/imgui/backends/imgui_impl_sdl2.cpp
     vendor/imgui/backends/imgui_impl_sdlrenderer2.cpp
     vendor/libtinyfiledialogs/tinyfiledialogs.c
-    src/ecs/systems/ScriptSystem.cpp
-    src/ecs/systems/AnimationSystem.cpp
-    src/utils/EditorUtils.cpp
-    src/utils/FileUtils.cpp
-    src/utils/Console.cpp
 )
-
-add_executable(PhysicsTest
-    tests/test_physics.cpp
-    src/Physics.cpp
-    utils/utility.cpp
-)
-
-add_executable(BasketoGameEngine ${SOURCE_FILES})
 
 if(LUA_FOUND)
     target_include_directories(BasketoGameEngine PUBLIC ${LUA_INCLUDE_DIR})

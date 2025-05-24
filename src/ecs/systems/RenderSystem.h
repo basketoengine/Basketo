@@ -10,10 +10,12 @@
 
 class RenderSystem : public System {
 public:
+    AssetManager& assetManager;
+
+    RenderSystem() : assetManager(AssetManager::getInstance()) {}
+
     // Modify signature to accept camera coordinates
     void update(SDL_Renderer* renderer, ComponentManager* componentManager, float cameraX, float cameraY) {
-        AssetManager& assetManager = AssetManager::getInstance();
-
         for (auto const& entity : entities) {
             auto& transform = componentManager->getComponent<TransformComponent>(entity);
             auto& sprite = componentManager->getComponent<SpriteComponent>(entity);
