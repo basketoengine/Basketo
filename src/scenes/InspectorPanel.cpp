@@ -10,7 +10,8 @@
 #include "../ecs/components/ScriptComponent.h"
 #include "../ecs/components/ColliderComponent.h"
 #include "../ecs/components/AnimationComponent.h" 
-#include "../ecs/components/AudioComponent.h" // Include AudioComponent
+#include "../ecs/components/AudioComponent.h" 
+#include "../ecs/components/CameraComponent.h"
 #include "../AssetManager.h"
 #include "../utils/FileUtils.h" 
 #include "../utils/EditorHelpers.h" 
@@ -38,7 +39,7 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
         ImGui::Separator();
 
         ImGui::PushItemWidth(-1);
-        const char* component_types[] = { "Transform", "Sprite", "Velocity", "Script", "Collider", "Animation", "Audio" }; // Add "Audio"
+        const char* component_types[] = { "Transform", "Sprite", "Velocity", "Script", "Collider", "Animation", "Audio", "Camera" }; // Add "Camera"
         static int current_component_type_idx = 0;
 
         if (ImGui::BeginCombo("##AddComponentCombo", component_types[current_component_type_idx])) {
@@ -96,7 +97,7 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
                 } else {
                     std::cout << "Entity " << scene.selectedEntity << " already has ColliderComponent." << std::endl;
                 }
-            } else if (selected_component_str == "Animation") { // Add AnimationComponent to UI
+            } else if (selected_component_str == "Animation") { 
                 if (addComponentIfMissing<AnimationComponent>(scene.componentManager.get(), scene.selectedEntity)) {
                     entitySignature.set(scene.componentManager->getComponentType<AnimationComponent>());
                     std::cout << "Added AnimationComponent to Entity " << scene.selectedEntity << std::endl;
@@ -110,6 +111,23 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
                     std::cout << "Added AudioComponent to Entity " << scene.selectedEntity << std::endl;
                 } else {
                     std::cout << "Entity " << scene.selectedEntity << " already has AudioComponent." << std::endl;
+                }
+            } else if (selected_component_str == "Camera") {
+                if (!scene.componentManager->hasComponent<CameraComponent>(scene.selectedEntity)) {
+                    // When adding a new camera, if it's set to active, deactivate others.
+                    CameraComponent newCamComp;
+                    if (newCamComp.isActive) {
+                        for (Entity entity : scene.entityManager->getActiveEntities()) {
+                            if (scene.componentManager->hasComponent<CameraComponent>(entity) && entity != scene.selectedEntity) {
+                                scene.componentManager->getComponent<CameraComponent>(entity).isActive = false;
+                            }
+                        }
+                    }
+                    scene.componentManager->addComponent(scene.selectedEntity, newCamComp);
+                    entitySignature.set(scene.componentManager->getComponentType<CameraComponent>());
+                    std::cout << "Added CameraComponent to Entity " << scene.selectedEntity << std::endl;
+                } else {
+                    std::cout << "Entity " << scene.selectedEntity << " already has CameraComponent." << std::endl;
                 }
             }
 
@@ -240,17 +258,8 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
                     scene.inspectorScriptPathBuffer[0] = '\0';
                 }
             }
-        } else {
-            if (ImGui::Button("Add Script Component")) {
-                if (addComponentIfMissing<ScriptComponent>(scene.componentManager.get(), scene.selectedEntity)) {
-                     scene.inspectorScriptPathBuffer[0] = '\0';
-                     Signature sig = scene.entityManager->getSignature(scene.selectedEntity);
-                     sig.set(scene.componentManager->getComponentType<ScriptComponent>());
-                     scene.entityManager->setSignature(scene.selectedEntity, sig);
-                     scene.systemManager->entitySignatureChanged(scene.selectedEntity, sig);
-                }
-            }
-        }
+        } 
+
         ImGui::Separator();
 
         if (scene.componentManager->hasComponent<ColliderComponent>(scene.selectedEntity)) {
@@ -300,16 +309,7 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
                 }
                 ImGui::Text("(Click to add, drag to move vertices)");
             }
-        } else {
-            if (ImGui::Button("Add Collider Component##Inspector")) {
-                if (addComponentIfMissing<ColliderComponent>(scene.componentManager.get(), scene.selectedEntity)) {
-                     Signature sig = scene.entityManager->getSignature(scene.selectedEntity);
-                     sig.set(scene.componentManager->getComponentType<ColliderComponent>());
-                     scene.entityManager->setSignature(scene.selectedEntity, sig);
-                     scene.systemManager->entitySignatureChanged(scene.selectedEntity, sig);
-                }
-            }
-        }
+        } 
 
         if (scene.componentManager->hasComponent<AnimationComponent>(scene.selectedEntity)) {
             if (ImGui::CollapsingHeader("Animation Component", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -335,16 +335,7 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
                 }
                 // TODO: Add UI for editing animations map - this is complex
             }
-        } else {
-            if (ImGui::Button("Add Animation Component##Inspector")) {
-                 if (addComponentIfMissing<AnimationComponent>(scene.componentManager.get(), scene.selectedEntity)) {
-                     Signature sig = scene.entityManager->getSignature(scene.selectedEntity);
-                     sig.set(scene.componentManager->getComponentType<AnimationComponent>());
-                     scene.entityManager->setSignature(scene.selectedEntity, sig);
-                     scene.systemManager->entitySignatureChanged(scene.selectedEntity, sig);
-                }
-            }
-        }
+        } 
 
         if (scene.componentManager->hasComponent<AudioComponent>(scene.selectedEntity)) {
             if (ImGui::CollapsingHeader("Audio Component", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -393,13 +384,50 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
                     }
                 }
             }
-        } else {
-            if (ImGui::Button("Add Audio Component")) {
-                if (addComponentIfMissing<AudioComponent>(scene.componentManager.get(), scene.selectedEntity)) {
-                     Signature sig = scene.entityManager->getSignature(scene.selectedEntity);
-                     sig.set(scene.componentManager->getComponentType<AudioComponent>());
-                     scene.entityManager->setSignature(scene.selectedEntity, sig);
-                     scene.systemManager->entitySignatureChanged(scene.selectedEntity, sig);
+        } 
+
+        if (scene.componentManager->hasComponent<CameraComponent>(scene.selectedEntity)) {
+            if (ImGui::CollapsingHeader("Camera Component", ImGuiTreeNodeFlags_DefaultOpen)) {
+                auto& cameraComp = scene.componentManager->getComponent<CameraComponent>(scene.selectedEntity);
+                ImGui::DragFloat("Width##Camera", &cameraComp.width, 1.0f, 1.0f, 10000.0f);
+                ImGui::DragFloat("Height##Camera", &cameraComp.height, 1.0f, 1.0f, 10000.0f);
+                ImGui::DragFloat("Zoom##Camera", &cameraComp.zoom, 0.01f, 0.01f, 100.0f); // Min zoom 0.01, max 100
+                
+                bool isActive = cameraComp.isActive;
+                if (ImGui::Checkbox("Is Active Camera##Camera", &isActive)) {
+                    if (isActive) {
+                        // Deactivate all other cameras if this one is being set to active
+                        for (Entity entity : scene.entityManager->getActiveEntities()) {
+                            if (scene.componentManager->hasComponent<CameraComponent>(entity) && entity != scene.selectedEntity) {
+                                scene.componentManager->getComponent<CameraComponent>(entity).isActive = false;
+                            }
+                        }
+                    }
+                    cameraComp.isActive = isActive;
+                }
+
+                if (ImGui::Button("Remove Camera Component")) {
+                    bool wasActive = cameraComp.isActive;
+                    scene.componentManager->removeComponent<CameraComponent>(scene.selectedEntity);
+                    Signature sig = scene.entityManager->getSignature(scene.selectedEntity);
+                    sig.reset(scene.componentManager->getComponentType<CameraComponent>());
+                    scene.entityManager->setSignature(scene.selectedEntity, sig);
+                    scene.systemManager->entitySignatureChanged(scene.selectedEntity, sig);
+                    // If the removed camera was active, try to find another one to activate or log
+                    if (wasActive) {
+                        bool foundAnotherActive = false;
+                        for (Entity entity : scene.entityManager->getActiveEntities()) {
+                            if (scene.componentManager->hasComponent<CameraComponent>(entity)) {
+                                scene.componentManager->getComponent<CameraComponent>(entity).isActive = true; // Activate the first one found
+                                foundAnotherActive = true;
+                                std::cout << "Activated another camera (Entity " << entity << ") as fallback." << std::endl;
+                                break;
+                            }
+                        }
+                        if (!foundAnotherActive) {
+                            std::cout << "Removed active camera. No other cameras found to activate." << std::endl;
+                        }
+                    }
                 }
             }
         }

@@ -10,6 +10,7 @@
 #include "../ecs/components/AnimationComponent.h"
 #include "../ecs/components/NameComponent.h"
 #include "../ecs/components/AudioComponent.h"
+#include "../ecs/components/CameraComponent.h" 
 #include "../AssetManager.h"
 #include "tinyfiledialogs.h"
 #include <fstream>
@@ -43,7 +44,7 @@ void saveDevModeScene(DevModeScene& scene, const std::string& filepath) {
         if (scene.componentManager->hasComponent<ColliderComponent>(entity)) {
             entityJson["components"]["ColliderComponent"] = scene.componentManager->getComponent<ColliderComponent>(entity);
         }
-        if (scene.componentManager->hasComponent<AnimationComponent>(entity)) { // Add AnimationComponent serialization
+        if (scene.componentManager->hasComponent<AnimationComponent>(entity)) {
             entityJson["components"]["AnimationComponent"] = scene.componentManager->getComponent<AnimationComponent>(entity);
         }
         if (scene.componentManager->hasComponent<NameComponent>(entity)) {
@@ -51,6 +52,9 @@ void saveDevModeScene(DevModeScene& scene, const std::string& filepath) {
         }
         if (scene.componentManager->hasComponent<AudioComponent>(entity)) {
             entityJson["components"]["AudioComponent"] = scene.componentManager->getComponent<AudioComponent>(entity);
+        }
+        if (scene.componentManager->hasComponent<CameraComponent>(entity)) {
+            entityJson["components"]["CameraComponent"] = scene.componentManager->getComponent<CameraComponent>(entity);
         }
 
         if (!entityJson["components"].empty()) {
@@ -184,6 +188,11 @@ bool loadDevModeScene(DevModeScene& scene, const std::string& filepath) {
                     from_json(componentData, comp);
                     scene.componentManager->addComponent(newEntity, comp);
                     entitySignature.set(scene.componentManager->getComponentType<AudioComponent>());
+                } else if (componentType == "CameraComponent") { // Deserialize CameraComponent
+                    CameraComponent comp;
+                    from_json(componentData, comp);
+                    scene.componentManager->addComponent(newEntity, comp);
+                    entitySignature.set(scene.componentManager->getComponentType<CameraComponent>());
                 } else {
                     std::cerr << "Warning: Unknown component type '" << componentType << "' encountered during loading." << std::endl;
                 }

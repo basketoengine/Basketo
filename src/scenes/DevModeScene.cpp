@@ -26,6 +26,7 @@
 #include "../ecs/components/AudioComponent.h"
 #include "../AssetManager.h" 
 #include "../ecs/systems/AudioSystem.h"
+#include "../ecs/systems/CameraSystem.h"
 
 
 DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
@@ -49,6 +50,7 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     componentManager->registerComponent<AnimationComponent>();
     componentManager->registerComponent<AudioComponent>(); 
     componentManager->registerComponent<RigidbodyComponent>(); 
+    componentManager->registerComponent<CameraComponent>(); // Register CameraComponent
 
     renderSystem = systemManager->registerSystem<RenderSystem>();
     Signature renderSig;
@@ -79,6 +81,8 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     Signature audioSig;
     audioSig.set(componentManager->getComponentType<AudioComponent>());
     systemManager->setSignature<AudioSystem>(audioSig);
+
+    cameraSystem = systemManager->registerSystem<CameraSystem>(componentManager.get(), entityManager.get(), renderer); // Initialize CameraSystem
 
     AssetManager& assets = AssetManager::getInstance();
     std::string texturePath = "../assets/Textures/";
@@ -151,6 +155,16 @@ void DevModeScene::handleInput(SDL_Event& event) {
 
 void DevModeScene::update(float deltaTime) {
     if (isPlaying) {
+        // Update game camera system first if playing
+        if (cameraSystem) {
+            SDL_Rect worldView;
+            float zoom;
+            // This call updates the active camera entity within cameraSystem and gets its view parameters.
+            // We don't strictly need to use worldView and zoom here in DevModeScene::update,
+            // but it ensures the cameraSystem is aware of the active camera for the current frame.
+            cameraSystem->update(worldView, zoom); 
+        }
+
         if (scriptSystem) {
             scriptSystem->update(deltaTime);
         }
@@ -178,6 +192,30 @@ void DevModeScene::render() {
 
     ImGuiIO& io = ImGui::GetIO();
     ImVec2 displaySize = io.DisplaySize;
+
+    // Determine current camera parameters for rendering
+    float currentRenderCameraX = this->cameraX; // Default to editor camera X
+    float currentRenderCameraY = this->cameraY;  // Default to editor camera Y
+    float currentRenderZoom = this->cameraZoom; // Default to editor camera Zoom
+    
+    if (isPlaying && cameraSystem) {
+        SDL_Rect activeGameCameraWorldView;
+        float gameCamZoom = 1.0f;
+        // This call retrieves the latest active game camera's view properties.
+        cameraSystem->update(activeGameCameraWorldView, gameCamZoom);
+        Entity activeCamEntity = cameraSystem->getActiveCameraEntity();
+
+        if (activeCamEntity != NO_ENTITY) {
+            // If a game camera is active and we are playing, use its properties for rendering.
+            // The CameraSystem::update gives us the top-left of the world view (activeGameCameraWorldView.x, .y)
+            // and the zoom level (gameCamZoom).
+            // The width/height from activeGameCameraWorldView (activeGameCameraWorldView.w, .h) 
+            // represent the amount of world space visible through that camera.
+            currentRenderCameraX = static_cast<float>(activeGameCameraWorldView.x);
+            currentRenderCameraY = static_cast<float>(activeGameCameraWorldView.y);
+            currentRenderZoom = gameCamZoom;
+        }
+    }
 
     const float hierarchyWidth = displaySize.x * hierarchyWidthRatio;
     const float inspectorWidth = displaySize.x * inspectorWidthRatio;
@@ -260,20 +298,23 @@ void DevModeScene::render() {
         if (!isPlaying && showGrid) {
             SDL_SetRenderDrawColor(renderer, 70, 70, 80, 255); 
 
-            float worldViewLeft = cameraX;
-            float worldViewTop = cameraY;
-            float worldViewRight = cameraX + gameViewport.w / cameraZoom;
-            float worldViewBottom = cameraY + gameViewport.h / cameraZoom;
+            float worldViewLeft = currentRenderCameraX; 
+            float worldViewTop = currentRenderCameraY;  
+            // Calculate how much of the world is visible in the gameViewport with the current zoom
+            float visibleWorldWidthInViewport = gameViewport.w / currentRenderZoom;
+            float visibleWorldHeightInViewport = gameViewport.h / currentRenderZoom;
+            float worldViewRight = currentRenderCameraX + visibleWorldWidthInViewport; 
+            float worldViewBottom = currentRenderCameraY + visibleWorldHeightInViewport; 
 
             float gridStartX = std::floor(worldViewLeft / gridSize) * gridSize;
             float gridStartY = std::floor(worldViewTop / gridSize) * gridSize;
 
             for (float x = gridStartX; x < worldViewRight; x += gridSize) {
-                int screenX = static_cast<int>((x - cameraX) * cameraZoom);
+                int screenX = static_cast<int>((x - currentRenderCameraX) * currentRenderZoom); 
                 SDL_RenderDrawLine(renderer, screenX, 0, screenX, gameViewport.h);
             }
             for (float y = gridStartY; y < worldViewBottom; y += gridSize) {
-                int screenY = static_cast<int>((y - cameraY) * cameraZoom);
+                int screenY = static_cast<int>((y - currentRenderCameraY) * currentRenderZoom); 
                 SDL_RenderDrawLine(renderer, 0, screenY, gameViewport.w, screenY);
             }
         }
@@ -303,12 +344,12 @@ void DevModeScene::render() {
             SDL_Texture* texture = AssetManager::getInstance().getTexture(sprite.textureId);
             if (!texture) continue;
             SDL_Rect destRect;
-            destRect.x = (int)((transform.x - cameraX) * cameraZoom);
-            destRect.y = (int)((transform.y - cameraY) * cameraZoom);
-            destRect.w = (int)(transform.width * cameraZoom);
-            destRect.h = (int)(transform.height * cameraZoom);
+            destRect.x = (int)((transform.x - currentRenderCameraX) * currentRenderZoom); 
+            destRect.y = (int)((transform.y - currentRenderCameraY) * currentRenderZoom); 
+            destRect.w = (int)(transform.width * currentRenderZoom);                       
+            destRect.h = (int)(transform.height * currentRenderZoom);                      
             SDL_Rect* srcRectPtr = sprite.useSrcRect ? &sprite.srcRect : nullptr;
-            SDL_Point center = { (int)(transform.width * cameraZoom / 2), (int)(transform.height * cameraZoom / 2) };
+            SDL_Point center = { (int)(transform.width * currentRenderZoom / 2), (int)(transform.height * currentRenderZoom / 2) }; 
             SDL_RenderCopyEx(renderer, texture, srcRectPtr, &destRect, transform.rotation, &center, SDL_FLIP_NONE);
         }
 
@@ -322,18 +363,18 @@ void DevModeScene::render() {
                         if (!collider.vertices.empty()) {
                             for (size_t i = 0; i < collider.vertices.size(); ++i) {
                                 size_t j = (i + 1) % collider.vertices.size();
-                                float x1 = (transform.x + collider.offsetX + collider.vertices[i].x - cameraX) * cameraZoom;
-                                float y1 = (transform.y + collider.offsetY + collider.vertices[i].y - cameraY) * cameraZoom;
-                                float x2 = (transform.x + collider.offsetX + collider.vertices[j].x - cameraX) * cameraZoom;
-                                float y2 = (transform.y + collider.offsetY + collider.vertices[j].y - cameraY) * cameraZoom;
+                                float x1 = (transform.x + collider.offsetX + collider.vertices[i].x - currentRenderCameraX) * currentRenderZoom; 
+                                float y1 = (transform.y + collider.offsetY + collider.vertices[i].y - currentRenderCameraY) * currentRenderZoom; 
+                                float x2 = (transform.x + collider.offsetX + collider.vertices[j].x - currentRenderCameraX) * currentRenderZoom; 
+                                float y2 = (transform.y + collider.offsetY + collider.vertices[j].y - currentRenderCameraY) * currentRenderZoom; 
                                 SDL_RenderDrawLine(renderer, (int)x1, (int)y1, (int)x2, (int)y2);
                             }
                         } else {
                             SDL_Rect colliderRect = {
-                                (int)(((transform.x + collider.offsetX) - cameraX) * cameraZoom),
-                                (int)(((transform.y + collider.offsetY) - cameraY) * cameraZoom),
-                                (int)(collider.width * cameraZoom),
-                                (int)(collider.height * cameraZoom)
+                                (int)(((transform.x + collider.offsetX) - currentRenderCameraX) * currentRenderZoom), 
+                                (int)(((transform.y + collider.offsetY) - currentRenderCameraY) * currentRenderZoom), 
+                                (int)(collider.width * currentRenderZoom),                                         
+                                (int)(collider.height * currentRenderZoom)                                        
                             };
                             SDL_RenderDrawRect(renderer, &colliderRect);
                         }
@@ -346,20 +387,21 @@ void DevModeScene::render() {
         if (!isPlaying && selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<TransformComponent>(selectedEntity)) {
             auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
             SDL_Rect selectionRect = {
-                (int)((transform.x - cameraX) * cameraZoom),
-                (int)((transform.y - cameraY) * cameraZoom),
-                (int)(transform.width * cameraZoom),
-                (int)(transform.height * cameraZoom)
+                (int)((transform.x - currentRenderCameraX) * currentRenderZoom), 
+                (int)((transform.y - currentRenderCameraY) * currentRenderZoom), 
+                (int)(transform.width * currentRenderZoom),                     
+                (int)(transform.height * currentRenderZoom)                    
             };
             SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255);
             SDL_RenderDrawRect(renderer, &selectionRect);
             SDL_SetRenderDrawColor(renderer, 0, 150, 255, 255);
             for (const auto& handlePair : getResizeHandles(transform)) {
                 SDL_Rect handleRect = handlePair.second;
-                handleRect.x = (int)((handleRect.x - cameraX) * cameraZoom);
-                handleRect.y = (int)((handleRect.y - cameraY) * cameraZoom);
-                handleRect.w = (int)(handleRect.w * cameraZoom);
-                handleRect.h = (int)(handleRect.h * cameraZoom);
+
+                handleRect.x = (int)((handleRect.x - currentRenderCameraX) * currentRenderZoom); 
+                handleRect.y = (int)((handleRect.y - currentRenderCameraY) * currentRenderZoom); 
+                handleRect.w = (int)(handleRect.w * currentRenderZoom);                         
+                handleRect.h = (int)(handleRect.h * currentRenderZoom);                         
                 SDL_RenderFillRect(renderer, &handleRect);
             }
         }
@@ -415,9 +457,10 @@ void DevModeScene::render() {
         ImGui::SameLine(); ImGui::Text("TexID:"); ImGui::SameLine(); ImGui::PushItemWidth(60); ImGui::InputText("##SpawnTexID", spawnTextureId, IM_ARRAYSIZE(spawnTextureId)); ImGui::PopItemWidth(); ImGui::SameLine();
         if (ImGui::Button("Spawn##Button")) {
             Entity newEntity = entityManager->createEntity();
-            float spawnWorldX = cameraX + gameViewport.w / 2.0f;
-            float spawnWorldY = cameraY + gameViewport.h / 2.0f;
-            TransformComponent transform; transform.x = spawnWorldX + spawnPosX; transform.y = spawnWorldY + spawnPosY; transform.width = spawnSizeW > 0 ? spawnSizeW : 32; transform.height = spawnSizeH > 0 ? spawnSizeH : 32;
+            // Spawn relative to the center of the current camera's view
+            float viewCenterX = currentRenderCameraX + (gameViewport.w / (2.0f * currentRenderZoom));
+            float viewCenterY = currentRenderCameraY + (gameViewport.h / (2.0f * currentRenderZoom));
+            TransformComponent transform; transform.x = viewCenterX + spawnPosX; transform.y = viewCenterY + spawnPosY; transform.width = spawnSizeW > 0 ? spawnSizeW : 32; transform.height = spawnSizeH > 0 ? spawnSizeH : 32;
             componentManager->addComponent(newEntity, transform);
             Signature entitySignature; entitySignature.set(componentManager->getComponentType<TransformComponent>());
             std::string textureIdStr(spawnTextureId);

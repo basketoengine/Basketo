@@ -25,6 +25,7 @@
 #include "../ecs/systems/MovementSystem.h"
 #include "../ecs/systems/AnimationSystem.h"
 #include "../ecs/systems/AudioSystem.h"
+#include "../ecs/systems/CameraSystem.h"
 #include "../AssetManager.h"
 #include "../ecs/Entity.h"
 #include "../../vendor/nlohmann/json.hpp"
@@ -40,6 +41,7 @@ class RenderSystem;
 class ScriptSystem;
 class MovementSystem;
 class AnimationSystem; 
+class CameraSystem;
 
 const Entity NO_ENTITY_SELECTED = MAX_ENTITIES;
 const int HANDLE_SIZE = 8; 
@@ -83,6 +85,7 @@ public:
     std::shared_ptr<ScriptSystem> scriptSystem; 
     std::shared_ptr<AnimationSystem> animationSystem; 
     std::shared_ptr<AudioSystem> audioSystem;
+    std::shared_ptr<CameraSystem> cameraSystem;
 
     std::vector<std::string> consoleLogBuffer;
 
@@ -142,9 +145,8 @@ public:
     char m_sceneNameBuffer[128];
     char m_llmPromptBuffer[256];
 
-    std::string currentAssetDirectory = "../assets/"; // Or wherever your assets root is
+    std::string currentAssetDirectory = "../assets/"; 
 
-    // For asset preview
     std::string selectedAssetPathForPreview = "";
     std::string selectedAssetTypeForPreview = "";
 
