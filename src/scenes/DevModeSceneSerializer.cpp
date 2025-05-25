@@ -56,6 +56,9 @@ void saveDevModeScene(DevModeScene& scene, const std::string& filepath) {
         if (scene.componentManager->hasComponent<CameraComponent>(entity)) {
             entityJson["components"]["CameraComponent"] = scene.componentManager->getComponent<CameraComponent>(entity);
         }
+        if (scene.componentManager->hasComponent<RigidbodyComponent>(entity)) {
+            entityJson["components"]["RigidbodyComponent"] = scene.componentManager->getComponent<RigidbodyComponent>(entity);
+        }
 
         if (!entityJson["components"].empty()) {
             sceneJson["entities"].push_back(entityJson);
@@ -193,6 +196,11 @@ bool loadDevModeScene(DevModeScene& scene, const std::string& filepath) {
                     from_json(componentData, comp);
                     scene.componentManager->addComponent(newEntity, comp);
                     entitySignature.set(scene.componentManager->getComponentType<CameraComponent>());
+                } else if (componentType == "RigidbodyComponent") {
+                    RigidbodyComponent comp;
+                    from_json(componentData, comp);
+                    scene.componentManager->addComponent(newEntity, comp);
+                    entitySignature.set(scene.componentManager->getComponentType<RigidbodyComponent>());
                 } else {
                     std::cerr << "Warning: Unknown component type '" << componentType << "' encountered during loading." << std::endl;
                 }

@@ -134,6 +134,8 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
                 if (!scene.componentManager->hasComponent<RigidbodyComponent>(scene.selectedEntity)) {
                     scene.componentManager->addComponent(scene.selectedEntity, RigidbodyComponent{});
                     entitySignature.set(scene.componentManager->getComponentType<RigidbodyComponent>());
+                    scene.entityManager->setSignature(scene.selectedEntity, entitySignature);
+                    scene.systemManager->entitySignatureChanged(scene.selectedEntity, entitySignature);
                     std::cout << "Added RigidbodyComponent to Entity " << scene.selectedEntity << std::endl;
                 } else {
                     std::cout << "Entity " << scene.selectedEntity << " already has RigidbodyComponent." << std::endl;
