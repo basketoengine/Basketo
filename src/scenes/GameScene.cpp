@@ -7,6 +7,7 @@
 #include "../ecs/components/SpriteComponent.h"
 #include "../ecs/components/RigidbodyComponent.h"
 #include "../ecs/components/AnimationComponent.h"
+#include "../ecs/components/ColliderComponent.h"
 #include "../ecs/systems/PhysicsSystem.h"
 #include "../ecs/systems/CollisionSystem.h"
 #include "../ecs/systems/AnimationSystem.h" 
@@ -29,6 +30,7 @@ GameScene::GameScene(SDL_Renderer* ren) : renderer(ren), cameraZoom(1.0f), camer
     componentManager->registerComponent<VelocityComponent>();
     componentManager->registerComponent<RigidbodyComponent>(); 
     componentManager->registerComponent<AnimationComponent>(); 
+    componentManager->registerComponent<ColliderComponent>();
 
     renderSystem = systemManager->registerSystem<RenderSystem>();
     Signature renderSig;
@@ -53,7 +55,7 @@ GameScene::GameScene(SDL_Renderer* ren) : renderer(ren), cameraZoom(1.0f), camer
     std::cout << "[GameScene] Registered CollisionSystem. Pointer: " << (collisionSystem ? "Valid" : "NULL") << std::endl;
     Signature collisionSig;
     collisionSig.set(componentManager->getComponentType<TransformComponent>());
-    collisionSig.set(componentManager->getComponentType<RigidbodyComponent>());
+    collisionSig.set(componentManager->getComponentType<ColliderComponent>());
     systemManager->setSignature<CollisionSystem>(collisionSig);
 
     animationSystem = systemManager->registerSystem<AnimationSystem>(); 

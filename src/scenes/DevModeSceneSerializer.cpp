@@ -209,8 +209,21 @@ bool loadDevModeScene(DevModeScene& scene, const std::string& filepath) {
             }
         }
         scene.entityManager->setSignature(newEntity, entitySignature);
+        scene.systemManager->entitySignatureChanged(newEntity, entitySignature);
         
     }
     std::cout << "Scene loaded successfully from " << filepath << std::endl;
+
+    // Debug: Print all entities and their components after loading
+    std::cout << "[Debug] Entities and their components after loading:" << std::endl;
+    for (auto entity : scene.entityManager->getActiveEntities()) {
+        std::cout << "Entity " << entity << ": ";
+        if (scene.componentManager->hasComponent<TransformComponent>(entity)) std::cout << "Transform ";
+        if (scene.componentManager->hasComponent<ColliderComponent>(entity)) std::cout << "Collider ";
+        if (scene.componentManager->hasComponent<RigidbodyComponent>(entity)) std::cout << "Rigidbody ";
+        if (scene.componentManager->hasComponent<VelocityComponent>(entity)) std::cout << "Velocity ";
+        std::cout << std::endl;
+    }
+
     return true;
 }

@@ -52,6 +52,7 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     componentManager->registerComponent<RigidbodyComponent>(); 
     componentManager->registerComponent<CameraComponent>(); 
 
+    // Register systems once
     renderSystem = systemManager->registerSystem<RenderSystem>();
     movementSystem = systemManager->registerSystem<MovementSystem>();
     scriptSystem = systemManager->registerSystem<ScriptSystem>(entityManager.get(), componentManager.get());
@@ -60,36 +61,46 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     cameraSystem = systemManager->registerSystem<CameraSystem>(componentManager.get(), entityManager.get(), renderer);
     collisionSystem = systemManager->registerSystem<CollisionSystem>();
 
-    Signature renderSig;
-    renderSig.set(componentManager->getComponentType<TransformComponent>());
-    renderSig.set(componentManager->getComponentType<SpriteComponent>());
-    systemManager->setSignature<RenderSystem>(renderSig);
-
-    scriptSystem = systemManager->registerSystem<ScriptSystem>(entityManager.get(), componentManager.get());
+    // ScriptSystem specific initialization
     scriptSystem->setLoggingFunctions(
         [this](const std::string& msg) { this->addLogToConsole(msg); },
         [this](const std::string& errMsg) { this->addLogToConsole(errMsg); }
     );
     scriptSystem->init(); 
 
-    movementSystem = systemManager->registerSystem<MovementSystem>();
+    // Set signatures for all systems
+    Signature renderSig;
+    renderSig.set(componentManager->getComponentType<TransformComponent>());
+    renderSig.set(componentManager->getComponentType<SpriteComponent>());
+    systemManager->setSignature<RenderSystem>(renderSig);
+
     Signature moveSig;
     moveSig.set(componentManager->getComponentType<TransformComponent>());
     moveSig.set(componentManager->getComponentType<VelocityComponent>());
     systemManager->setSignature<MovementSystem>(moveSig);
 
-    animationSystem = systemManager->registerSystem<AnimationSystem>();
     Signature animSig;
     animSig.set(componentManager->getComponentType<SpriteComponent>());
     animSig.set(componentManager->getComponentType<AnimationComponent>());
     systemManager->setSignature<AnimationSystem>(animSig);
 
-    audioSystem = systemManager->registerSystem<AudioSystem>();
     Signature audioSig;
     audioSig.set(componentManager->getComponentType<AudioComponent>());
     systemManager->setSignature<AudioSystem>(audioSig);
 
-    cameraSystem = systemManager->registerSystem<CameraSystem>(componentManager.get(), entityManager.get(), renderer); // Initialize CameraSystem
+    Signature scriptSig;
+    scriptSig.set(componentManager->getComponentType<ScriptComponent>());
+    systemManager->setSignature<ScriptSystem>(scriptSig);
+
+    Signature cameraSig;
+    cameraSig.set(componentManager->getComponentType<TransformComponent>());
+    cameraSig.set(componentManager->getComponentType<CameraComponent>());
+    systemManager->setSignature<CameraSystem>(cameraSig);
+
+    Signature collisionSig;
+    collisionSig.set(componentManager->getComponentType<TransformComponent>());
+    collisionSig.set(componentManager->getComponentType<ColliderComponent>());
+    systemManager->setSignature<CollisionSystem>(collisionSig);
 
     AssetManager& assets = AssetManager::getInstance();
     std::string texturePath = "../assets/Textures/";

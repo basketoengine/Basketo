@@ -6,8 +6,10 @@
 #include <unordered_map>
 #include <memory>
 #include <set>
-#include <iostream> // For logging need to be removed later
-#include <typeinfo>   // For typeid
+#include <iostream>
+#include <string> 
+#include <typeinfo> 
+#include "systems/CollisionSystem.h" 
 
 class SystemManager {
 public:
@@ -42,22 +44,52 @@ public:
 
     void entitySignatureChanged(Entity entity, Signature entitySignature) {
         for (auto const& pair : systems) {
-            auto const& type = pair.first;
+            auto const& systemTypeNameStd = pair.first; 
             auto const& system = pair.second;
             
-            auto sig_it = signatures.find(type);
+            // New debug logs to inspect system names
+            std::cout << "[SystemManager Debug] Processing system from map. Key: '" << systemTypeNameStd << "'" << std::endl;
+            std::cout << "[SystemManager Debug] Comparing with typeid(CollisionSystem).name(): '" << typeid(CollisionSystem).name() << "'" << std::endl;
+            bool namesMatch = (std::string(systemTypeNameStd) == std::string(typeid(CollisionSystem).name()));
+            std::cout << "[SystemManager Debug] Do these names match? " << (namesMatch ? "YES" : "NO") << std::endl;
+
+            auto sig_it = signatures.find(systemTypeNameStd);
             if (sig_it != signatures.end()) {
                 auto const& systemSignature = sig_it->second;
 
+                if (namesMatch) { // This was the condition for the more detailed CollisionSystem logs
+                    std::cout << "[SystemManager] Checking for CollisionSystem (Entity " << entity << "):" << std::endl;
+                    std::cout << "  Entity Current Signature (bits):      " << entitySignature.to_string() << std::endl;
+                    std::cout << "  CollisionSystem Required Sig (bits): " << systemSignature.to_string() << std::endl;
+                    Signature combined = entitySignature & systemSignature;
+                    std::cout << "  EntitySig & SystemReqSig (bits):    " << combined.to_string() << std::endl;
+                    bool signatureHolds = (combined == systemSignature);
+                    std::cout << "  Condition ((EntitySig & SystemReqSig) == SystemReqSig): " << (signatureHolds ? "MET" : "NOT MET") << std::endl;
+                    if (signatureHolds) {
+                        if (system->entities.find(entity) == system->entities.end()) {
+                            std::cout << "  >>> Entity " << entity << " WILL BE ADDED to CollisionSystem." << std::endl;
+                        } else {
+                            std::cout << "  >>> Entity " << entity << " ALREADY IN CollisionSystem (no change)." << std::endl;
+                        }
+                    } else {
+                        if (system->entities.find(entity) != system->entities.end()) {
+                            std::cout << "  >>> Entity " << entity << " WILL BE REMOVED from CollisionSystem." << std::endl;
+                        } else {
+                             std::cout << "  >>> Entity " << entity << " REMAINS NOT IN CollisionSystem (no match)." << std::endl;
+                        }
+                    }
+                }
+
                 if ((entitySignature & systemSignature) == systemSignature) {
+                    // If it's the collision system and names didn't match for debug, but signature logic is correct, it might still be added here.
+                    // We can add a log here too if needed, specific to when an entity is added to *any* system.
                     system->entities.insert(entity);
                 } else {
                     system->entities.erase(entity);
                 }
+            } else {
+                 std::cout << "[SystemManager Debug] Signature NOT FOUND in 'signatures' map for key: '" << systemTypeNameStd << "'" << std::endl;
             }
-            // If no signature is found for a system, it implies it doesn't care about component signatures
-            // or it manages its entities differently (e.g., ScriptSystem might iterate all entities with a ScriptComponent directly).
-            // Thus, we don't necessarily need an else clause here to remove entities if the signature isn't found.
         }
     }
 
