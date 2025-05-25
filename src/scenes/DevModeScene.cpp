@@ -1023,7 +1023,6 @@ void DevModeScene::processLlmPrompt(const std::string& prompt) {
         Console::Error("LLM: Unknown command '" + command + "'.");
     }
 
-    // After creating or modifying an entity, update its signature and notify the system manager
     for (auto entity : entityManager->getActiveEntities()) {
         Signature sig = entityManager->getSignature(entity);
         if (componentManager->hasComponent<TransformComponent>(entity)) {

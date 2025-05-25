@@ -12,6 +12,7 @@
 #include "../ecs/components/AnimationComponent.h" 
 #include "../ecs/components/AudioComponent.h" 
 #include "../ecs/components/CameraComponent.h"
+#include "../ecs/components/RigidbodyComponent.h"
 #include "../AssetManager.h"
 #include "../utils/FileUtils.h" 
 #include "../utils/EditorHelpers.h" 
@@ -432,6 +433,18 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
             }
         }
 
+        // RigidbodyComponent Inspector
+        if (scene.componentManager->hasComponent<RigidbodyComponent>(scene.selectedEntity)) {
+            auto& rigidbody = scene.componentManager->getComponent<RigidbodyComponent>(scene.selectedEntity);
+            ImGui::Separator();
+            ImGui::Text("RigidbodyComponent");
+            ImGui::InputFloat("Mass", &rigidbody.mass);
+            ImGui::Checkbox("Use Gravity", &rigidbody.useGravity);
+            ImGui::Checkbox("Is Static", &rigidbody.isStatic);
+            ImGui::InputFloat("Gravity Scale", &rigidbody.gravityScale);
+            ImGui::InputFloat("Drag", &rigidbody.drag);
+            ImGui::Checkbox("Is Kinematic", &rigidbody.isKinematic);
+        }
     } else {
         ImGui::Text("No entity selected.");
     }
