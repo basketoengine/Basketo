@@ -50,9 +50,16 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     componentManager->registerComponent<AnimationComponent>();
     componentManager->registerComponent<AudioComponent>(); 
     componentManager->registerComponent<RigidbodyComponent>(); 
-    componentManager->registerComponent<CameraComponent>(); // Register CameraComponent
+    componentManager->registerComponent<CameraComponent>(); 
 
     renderSystem = systemManager->registerSystem<RenderSystem>();
+    movementSystem = systemManager->registerSystem<MovementSystem>();
+    scriptSystem = systemManager->registerSystem<ScriptSystem>(entityManager.get(), componentManager.get());
+    animationSystem = systemManager->registerSystem<AnimationSystem>();
+    audioSystem = systemManager->registerSystem<AudioSystem>();
+    cameraSystem = systemManager->registerSystem<CameraSystem>(componentManager.get(), entityManager.get(), renderer);
+    collisionSystem = systemManager->registerSystem<CollisionSystem>();
+
     Signature renderSig;
     renderSig.set(componentManager->getComponentType<TransformComponent>());
     renderSig.set(componentManager->getComponentType<SpriteComponent>());

@@ -26,6 +26,7 @@
 #include "../ecs/systems/AnimationSystem.h"
 #include "../ecs/systems/AudioSystem.h"
 #include "../ecs/systems/CameraSystem.h"
+#include "../ecs/systems/CollisionSystem.h"
 #include "../AssetManager.h"
 #include "../ecs/Entity.h"
 #include "../../vendor/nlohmann/json.hpp"
@@ -86,6 +87,7 @@ public:
     std::shared_ptr<AnimationSystem> animationSystem; 
     std::shared_ptr<AudioSystem> audioSystem;
     std::shared_ptr<CameraSystem> cameraSystem;
+    std::shared_ptr<CollisionSystem> collisionSystem;
 
     std::vector<std::string> consoleLogBuffer;
 
