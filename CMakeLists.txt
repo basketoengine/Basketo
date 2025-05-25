@@ -37,6 +37,7 @@ include_directories(vendor/libtinyfiledialogs)
 add_executable(PhysicsTest
     tests/test_physics.cpp
     src/Physics.cpp
+    src/spatial/Quadtree.cpp
     utils/utility.cpp
 )
 
@@ -50,6 +51,7 @@ target_sources(BasketoGameEngine PRIVATE
     src/SceneManager.cpp
     src/AssetManager.cpp
     src/Physics.cpp
+    src/spatial/Quadtree.cpp
 
     # Scenes
     src/scenes/GameScene.cpp
