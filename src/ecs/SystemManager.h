@@ -6,14 +6,24 @@
 #include <unordered_map>
 #include <memory>
 #include <set>
+#include <iostream> // For logging need to be removed later
+#include <typeinfo>   // For typeid
 
 class SystemManager {
 public:
     template<typename T, typename... Args>  
     std::shared_ptr<T> registerSystem(Args&&... args) {
         const char* typeName = typeid(T).name();
+        std::cout << "[SystemManager] Attempting to register system: " << typeName << std::endl;
+
+        if (systems.find(typeName) != systems.end()) {
+            std::cout << "[SystemManager] System " << typeName << " already registered. Returning existing instance." << std::endl;
+            return std::static_pointer_cast<T>(systems[typeName]);
+        }
+
         auto system = std::make_shared<T>(std::forward<Args>(args)...);
         systems.insert({typeName, system});
+        std::cout << "[SystemManager] Successfully registered and created system: " << typeName << std::endl;
         return system;
     }
 

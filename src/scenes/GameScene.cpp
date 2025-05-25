@@ -13,12 +13,13 @@
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
 #include <SDL2/SDL_mixer.h>
-#include <iostream>
+#include <iostream> // For logging will be removed
 #include <memory>
 #include <algorithm>
 #include <filesystem>
 
 GameScene::GameScene(SDL_Renderer* ren) : renderer(ren), cameraZoom(1.0f), cameraX(0.0f), cameraY(0.0f) {
+    std::cout << "[GameScene] Constructor START" << std::endl;
     entityManager = std::make_unique<EntityManager>();
     componentManager = std::make_unique<ComponentManager>();
     systemManager = std::make_unique<SystemManager>();
@@ -47,7 +48,9 @@ GameScene::GameScene(SDL_Renderer* ren) : renderer(ren), cameraZoom(1.0f), camer
     physicsSig.set(componentManager->getComponentType<RigidbodyComponent>());
     systemManager->setSignature<PhysicsSystem>(physicsSig);
 
+    std::cout << "[GameScene] About to register CollisionSystem..." << std::endl;
     collisionSystem = systemManager->registerSystem<CollisionSystem>();
+    std::cout << "[GameScene] Registered CollisionSystem. Pointer: " << (collisionSystem ? "Valid" : "NULL") << std::endl;
     Signature collisionSig;
     collisionSig.set(componentManager->getComponentType<TransformComponent>());
     collisionSig.set(componentManager->getComponentType<RigidbodyComponent>());
@@ -151,9 +154,13 @@ GameScene::GameScene(SDL_Renderer* ren) : renderer(ren), cameraZoom(1.0f), camer
     InputManager::getInstance().mapAction("MoveDown", SDL_SCANCODE_S);
 
     InputManager::getInstance().mapAction("PlaySound", SDL_SCANCODE_SPACE);
+    std::cout << "[GameScene] Constructor END" << std::endl;
 }
 
 GameScene::~GameScene() {
+    std::cout << "[GameScene] Destructor START" << std::endl;
+    // Add any specific cleanup if necessary, though smart pointers should handle most
+    std::cout << "[GameScene] Destructor END" << std::endl;
 }
 
 void GameScene::handleInput(SDL_Event& event) {
@@ -180,7 +187,16 @@ void GameScene::update(float deltaTime) {
     scriptSystem->update(deltaTime);
     physicsSystem->update(componentManager.get(), deltaTime);
     movementSystem->update(componentManager.get(), deltaTime);
-    collisionSystem->update(componentManager.get(), deltaTime);
+
+    // -- Add logs for CollisionSystem --
+    if (collisionSystem) {
+        std::cout << "[GameScene] Calling CollisionSystem::update()" << std::endl;
+        collisionSystem->update(componentManager.get(), deltaTime);
+    } else {
+        std::cout << "[GameScene] Error: collisionSystem is NULL!" << std::endl;
+    }
+    // -- End logs for CollisionSystem --
+
     animationSystem->update(deltaTime, *entityManager, *componentManager);
 
     auto& playerTransform = componentManager->getComponent<TransformComponent>(playerEntity);

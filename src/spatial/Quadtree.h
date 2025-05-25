@@ -4,14 +4,16 @@
 #include <vector>
 #include <memory>
 #include <SDL2/SDL.h>
+#include <iostream> // For logging I will remove this later
 #include "../ecs/Entity.h"
 #include "../ecs/components/TransformComponent.h"
+
+using Entity = unsigned int; 
 
 class Quadtree {
 public:
     Quadtree(int level, SDL_Rect bounds);
-    ~Quadtree();
-
+    ~Quadtree(); // Add destructor declaration for logging
     void clear();
     void insert(Entity entity, const TransformComponent& transform); 
     std::vector<Entity> query(const TransformComponent& transform); 

@@ -1,12 +1,17 @@
 \
 #include "Quadtree.h"
+#include <iostream> // For logging I will remove this later
 
+// Constructor
 Quadtree::Quadtree(int level, SDL_Rect bounds)
     : currentLevel(level), nodeBounds(bounds) {
+    std::cout << "[Quadtree] Constructor called. Level: " << level << " Bounds: (" << bounds.x << "," << bounds.y << "," << bounds.w << "," << bounds.h << ")" << std::endl;
 }
 
+// Destructor
 Quadtree::~Quadtree() {
-    clear(); 
+    std::cout << "[Quadtree] Destructor called. Level: " << currentLevel << " Bounds: (" << nodeBounds.x << "," << nodeBounds.y << "," << nodeBounds.w << "," << nodeBounds.h << ")" << std::endl;
+    clear();
 }
 
 void Quadtree::clear() {
