@@ -40,7 +40,7 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
         ImGui::Separator();
 
         ImGui::PushItemWidth(-1);
-        const char* component_types[] = { "Transform", "Sprite", "Velocity", "Script", "Collider", "Animation", "Audio", "Camera" }; // Add "Camera"
+        const char* component_types[] = { "Transform", "Sprite", "Velocity", "Script", "Collider", "Animation", "Audio", "Camera", "Rigidbody" }; 
         static int current_component_type_idx = 0;
 
         if (ImGui::BeginCombo("##AddComponentCombo", component_types[current_component_type_idx])) {
@@ -129,6 +129,14 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
                     std::cout << "Added CameraComponent to Entity " << scene.selectedEntity << std::endl;
                 } else {
                     std::cout << "Entity " << scene.selectedEntity << " already has CameraComponent." << std::endl;
+                }
+            } else if (selected_component_str == "Rigidbody") {
+                if (!scene.componentManager->hasComponent<RigidbodyComponent>(scene.selectedEntity)) {
+                    scene.componentManager->addComponent(scene.selectedEntity, RigidbodyComponent{});
+                    entitySignature.set(scene.componentManager->getComponentType<RigidbodyComponent>());
+                    std::cout << "Added RigidbodyComponent to Entity " << scene.selectedEntity << std::endl;
+                } else {
+                    std::cout << "Entity " << scene.selectedEntity << " already has RigidbodyComponent." << std::endl;
                 }
             }
 
