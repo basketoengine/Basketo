@@ -178,6 +178,9 @@ void DevModeScene::update(float deltaTime) {
         if (movementSystem) {
             movementSystem->update(componentManager.get(), deltaTime);
         }
+        if (collisionSystem) {
+            collisionSystem->update(componentManager.get(), deltaTime);
+        }
         if (animationSystem) { 
             animationSystem->update(deltaTime, *entityManager, *componentManager);
         }
