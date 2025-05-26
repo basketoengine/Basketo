@@ -1,4 +1,5 @@
 #include "PhysicsSystem.h"
+#include "../components/TransformComponent.h"
 #include "../components/VelocityComponent.h"
 #include "../components/RigidbodyComponent.h"
 #include <iostream> 
@@ -18,10 +19,15 @@ void PhysicsSystem::update(ComponentManager* componentManager, float deltaTime) 
 
         auto& velocity = componentManager->getComponent<VelocityComponent>(entity);
         auto& rigidbody = componentManager->getComponent<RigidbodyComponent>(entity);
+        auto& transform = componentManager->getComponent<TransformComponent>(entity);
 
-        if (rigidbody.affectedByGravity) {
+        // Apply gravity
+        if (rigidbody.useGravity) {
             velocity.vy += GRAVITY_ACCELERATION * rigidbody.gravityScale * deltaTime;
         }
 
+        // Update position based on velocity
+        transform.x += velocity.vx * deltaTime;
+        transform.y += velocity.vy * deltaTime;
     }
 }

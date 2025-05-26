@@ -39,6 +39,7 @@ add_executable(PhysicsTest
     src/Physics.cpp
     src/spatial/Quadtree.cpp
     utils/utility.cpp
+    src/ecs/systems/PhysicsSystem.cpp
 )
 
 add_executable(BasketoGameEngine)
@@ -66,6 +67,7 @@ target_sources(BasketoGameEngine PRIVATE
     src/ecs/systems/CameraSystem.cpp
     src/ecs/systems/ScriptSystem.cpp
     src/ecs/systems/AnimationSystem.cpp
+    src/ecs/systems/PhysicsSystem.cpp
 
     # Utilities
     utils/utility.cpp

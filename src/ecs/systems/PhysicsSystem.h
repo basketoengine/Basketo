@@ -7,14 +7,7 @@
 
 class PhysicsSystem : public System {
 public:
-    float gravity = 980.0f;
-    void update(ComponentManager* componentManager, float deltaTime) {
-        for (auto const& entity : entities) {
-            auto& velocity = componentManager->getComponent<VelocityComponent>(entity);
-            auto& rigidbody = componentManager->getComponent<RigidbodyComponent>(entity);
-            if (!rigidbody.isStatic && rigidbody.useGravity) {
-                velocity.vy += gravity * rigidbody.gravityScale * deltaTime;
-            }
-        }
-    }
+    static const float GRAVITY_ACCELERATION;
+    void init();
+    void update(ComponentManager* componentManager, float deltaTime);
 };
