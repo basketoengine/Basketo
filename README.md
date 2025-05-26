@@ -4,6 +4,8 @@
 
 <h2 align="center">Create, Play, Inspire. Games Brought to Life. ✨</h2>
 
+<h1 align="center">Basketo Game Engine</h1>
+
 <div align="center">
 
 [![Discord](https://img.shields.io/discord/1373185493742911609?logo=discord&label=Discord&color=5B5BD6&logoColor=white)](https://discord.gg/F3DswRMW) <!-- Replace your_discord_server_id with your actual server ID -->
@@ -13,7 +15,7 @@
 </div>
 
 <p align="center">
-Welcome to the Basketo Engine - a passion project where I’m putting my best shot into creating something awesome and performant engine, with the exciting plan of making it an AI-Native game engine. Whether you’re here to contribute, suggest ideas, or just watch it grow, you’re part of the journey!
+Welcome to the Basketo Engine - a passion project where I’m putting my best shot into creating something awesome and performant engine, with the exciting plan of making it an AI-Native game engine. Whether you’re here to contribute, suggest ideas, or just watch it grow, you’re part of the journey! 🚀
 </p>
 
 ## 🚀 Current State of the Engine
@@ -21,14 +23,18 @@ Welcome to the Basketo Engine - a passion project where I’m putting my best sh
   <img src="readmeimgs/image3.png" alt="Current State of Basketo Engine" width="700"/>
 </p>
 
-## Click the image below to see a video demonstration:
+<p align="center">
+  <em>Check out the latest developments and features in action!</em> 🎮
+</p>
+
+## 🎬 Click the image below to see a video demonstration:
 <p align="center">
   <a href="https://x.com/BaslaelWorkneh/status/1922713614697288096">
     <img src="readmeimgs/image2.png" alt="Basketo Engine Demo" width="500"/>
   </a>
 </p>
 
-## Building the Engine (Linux)
+## 🛠️ Building the Engine (Linux) 🐧
 
 ### Prerequisites
 - CMake 3.26.0 or higher is required.
@@ -63,7 +69,7 @@ If you want to run the physics test:
 
 ```
 
-## Building the Engine (Windows)
+## 🛠️ Building the Engine (Windows) 💻
 
 ### Prerequisites
 
@@ -128,29 +134,29 @@ cmake --build . --config Release
 ./PhysicsTest.exe
 ```
 
-## Get Involved
+## 🤝 Get Involved
 
 We love contributions from our community ❤️. For details on contributing or running the project for development, check out our [Contribution Guidelines](ContributionGuidline.md). <!-- Assuming you have this file -->
 
-- Found a bug? Open an issue!
-- Have a cool feature idea? Let’s hear it!
-- Want to contribute? Fork, code, and create a pull request!
+- 🐛 Found a bug? Open an issue!
+- ✨ Have a cool feature idea? Let’s hear it!
+- 💻 Want to contribute? Fork, code, and create a pull request!
 
-Let’s build this engine together and make game dev fun and easy for everyone.
+Let’s build this engine together and make game dev fun and easy for everyone. 🌍
 
 ## 👥 Community
-Welcome with a huge hug 🤗. We are super excited for community contributions of all kinds - whether it's code improvements, documentation updates, issue reports, feature requests, and discussions in our Discord.
+Welcome with a huge hug 🤗. We are super excited for community contributions of all kinds - whether it's code improvements 📝, documentation updates 📚, issue reports 🐞, feature requests 💡, and discussions in our Discord 🗣️.
 
 Join our community here:
 
 - 👋 [Join our Discord community](https://discord.gg/F3DswRMW)
 - ⭐ [Star us on GitHub](https://github.com/basketoengine/Basketo)
 
-## Support us:
-We are constantly improving, and more features and examples are coming soon. If you love this project, please drop us a star ⭐ at GitHub repo [![GitHub](https://img.shields.io/github/stars/basketoengine/Basketo?color=5B5BD6)](https://github.com/basketoengine/Basketo) to stay tuned and help us grow.
+## 🙏 Support us:
+We are constantly improving, and more features and examples are coming soon 🌟. If you love this project, please drop us a star ⭐ at GitHub repo [![GitHub](https://img.shields.io/github/stars/basketoengine/Basketo?color=5B5BD6)](https://github.com/basketoengine/Basketo) to stay tuned and help us grow. 🌱
 
 ---
 
-Happy coding and game making!
+Happy coding and game making! 🎉🎮
 
 
