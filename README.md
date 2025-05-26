@@ -1,12 +1,12 @@
 <p align="center">
-    <img src="readmeimgs/image.png" alt="Basketo Game Engine Logo" width="200"/>
+    <img src="readmeimgs/logo.png" alt="Basketo Game Engine Logo" width="200"/>
 </p>
 
 <h1 align="center">Basketo Game Engine</h1>
 
 <div align="center">
 
-[![Discord](https://img.shields.io/discord/your_discord_server_id?logo=discord&label=Discord&color=5B5BD6&logoColor=white)](https://discord.gg/sTM6FPMH) <!-- Replace your_discord_server_id with your actual server ID -->
+[![Discord](https://img.shields.io/discord/F3DswRMW?logo=discord&label=Discord&color=5B5BD6&logoColor=white)](https://discord.gg/F3DswRMW) <!-- Replace your_discord_server_id with your actual server ID -->
 [![GitHub stars](https://img.shields.io/github/stars/basketoengine/Basketo?style=social)](https://github.com/basketoengine/Basketo)
 [![X (formerly Twitter)](https://img.shields.io/twitter/follow/BaslaelWorkneh?style=social&logo=x)](https://x.com/BaslaelWorkneh)
 
@@ -138,7 +138,7 @@ Welcome with a huge hug 🤗. We are super excited for community contributions o
 
 Join our community here:
 
-- 👋 [Join our Discord community](https://discord.gg/sTM6FPMH)
+- 👋 [Join our Discord community](https://discord.gg/F3DswRMW)
 - ⭐ [Star us on GitHub](https://github.com/basketoengine/Basketo)
 
 ## Support us:
