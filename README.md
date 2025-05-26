@@ -1,5 +1,5 @@
 <p align="center">
-    <img src="readmeimgs/logo.png" alt="Basketo Game Engine Logo" width="200"/> <!-- Assuming you have a logo, replace with actual path and alt text -->
+    <img src="readmeimgs/image.png" alt="Basketo Game Engine Logo" width="200"/>
 </p>
 
 <h1 align="center">Basketo Game Engine</h1>
@@ -8,6 +8,7 @@
 
 [![Discord](https://img.shields.io/discord/your_discord_server_id?logo=discord&label=Discord&color=5B5BD6&logoColor=white)](https://discord.gg/sTM6FPMH) <!-- Replace your_discord_server_id with your actual server ID -->
 [![GitHub stars](https://img.shields.io/github/stars/basketoengine/Basketo?style=social)](https://github.com/basketoengine/Basketo)
+[![X (formerly Twitter)](https://img.shields.io/twitter/follow/BaslaelWorkneh?style=social&logo=x)](https://x.com/BaslaelWorkneh)
 
 </div>
 
@@ -15,7 +16,7 @@
 Welcome to the Basketo Engine - a passion project where I’m putting my best shot into creating something awesome. Whether you’re here to contribute, suggest ideas, or just watch it grow, you’re part of the journey!
 </p>
 
-## Click the below image to see Video
+## Click the image below to see a video demonstration:
 <p align="center">
   <a href="https://x.com/BaslaelWorkneh/status/1922713614697288096">
     <img src="readmeimgs/image2.png" alt="Basketo Engine Demo" width="500"/>
@@ -97,7 +98,7 @@ cd vcpkg
 
 ```bash
 # Clone the Basketo repository
-git clone https://github.com/basketoengine/Basketo.git
+git clone --recurse-submodules git@github.com:basketoengine/Basketo.git
 cd Basketo
 mkdir build && cd build
 
