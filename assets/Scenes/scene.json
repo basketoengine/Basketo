@@ -1,0 +1,29 @@
+{
+    "entities": [
+        {
+            "components": {
+                "SpriteComponent": {
+                    "flip": 0,
+                    "isFixed": false,
+                    "layer": 0,
+                    "srcRect": {
+                        "h": 0,
+                        "w": 0,
+                        "x": 0,
+                        "y": 0
+                    },
+                    "textureId": "background.jpg"
+                },
+                "TransformComponent": {
+                    "height": 800.0,
+                    "rotation": 0.0,
+                    "width": 1045.0,
+                    "x": 0.0,
+                    "y": -32.0,
+                    "z_index": 0
+                }
+            },
+            "id_saved": 2
+        }
+    ]
+}

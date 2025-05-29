@@ -1,0 +1,5 @@
+{
+    "gemini_api_key": "PUT YOUR API KEY HERE"
+}
+
+put the above in config.json file in the root directory

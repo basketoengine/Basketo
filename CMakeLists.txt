@@ -33,6 +33,7 @@ include_directories(${SDL2_INCLUDE_DIRS})
 
 include_directories(vendor/imgui)
 include_directories(vendor/libtinyfiledialogs)
+include_directories(vendor/nlohmann) # Add nlohmann include directory
 
 add_executable(PhysicsTest
     tests/test_physics.cpp
@@ -53,6 +54,9 @@ target_sources(BasketoGameEngine PRIVATE
     src/AssetManager.cpp
     src/Physics.cpp
     src/spatial/Quadtree.cpp
+
+    # AI
+    src/ai/AIPromptProcessor.cpp
 
     # Scenes
     src/scenes/GameScene.cpp
@@ -90,6 +94,8 @@ if(LUA_FOUND)
     target_include_directories(BasketoGameEngine PUBLIC ${LUA_INCLUDE_DIR})
 endif()
 
+target_include_directories(BasketoGameEngine PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/vendor/nlohmann) # Ensure nlohmann is found
+
 target_link_libraries(BasketoGameEngine
     PRIVATE 
     ${SDL2_LIBRARIES}
@@ -99,6 +105,14 @@ target_link_libraries(BasketoGameEngine
     ${OpenGL_LIBRARIES}
     ${LUA_LIBRARIES}
     PUBLIC sol2 
+)
+
+# Find CURL
+find_package(CURL REQUIRED)
+
+target_link_libraries(BasketoGameEngine
+    PRIVATE
+    ${CURL_LIBRARIES}
 )
 
 target_link_libraries(PhysicsTest

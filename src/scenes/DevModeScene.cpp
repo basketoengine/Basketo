@@ -16,6 +16,7 @@
 #include <algorithm> 
 #include <SDL2/SDL_mixer.h>
 
+#include "./DevModeSceneSerializer.h"
 #include "../ecs/components/RigidbodyComponent.h" 
 #include "../ecs/components/NameComponent.h"
 #include "../ecs/components/TransformComponent.h"
@@ -27,19 +28,34 @@
 #include "../AssetManager.h" 
 #include "../ecs/systems/AudioSystem.h"
 #include "../ecs/systems/CameraSystem.h"
+#include "../ecs/systems/CollisionSystem.h" 
+#include "../ai/AIPromptProcessor.h" 
 
 
 DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
-    : Scene(), 
-      renderer(ren), window(win),
+    : renderer(ren),
+      window(win),
       assetManager(AssetManager::getInstance()),
-      m_devModeInputHandler(*this) 
-      {
-    std::cout << "Entering Dev Mode Scene" << std::endl;
+      entityManager(std::make_unique<EntityManager>()),
+      componentManager(std::make_unique<ComponentManager>()),
+      systemManager(std::make_unique<SystemManager>()),
+      m_devModeInputHandler(*this),
+      m_aiPromptProcessor(std::make_unique<AIPromptProcessor>(
+          entityManager.get(),
+          componentManager.get(),
+          systemManager.get(),
+          &assetManager,
+          [this](const std::string& name) { return this->findEntityByName(name); }
+      )) {
 
-    entityManager = std::make_unique<EntityManager>();
-    componentManager = std::make_unique<ComponentManager>();
-    systemManager = std::make_unique<SystemManager>();
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; 
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;     
+    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;   
+
+    assetManager.init(renderer);
 
     componentManager->registerComponent<TransformComponent>();
     componentManager->registerComponent<SpriteComponent>();
@@ -51,8 +67,8 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     componentManager->registerComponent<AudioComponent>(); 
     componentManager->registerComponent<RigidbodyComponent>(); 
     componentManager->registerComponent<CameraComponent>(); 
+    loadDevModeScene(*this, sceneFilePath);
 
-    // Register systems once
     renderSystem = systemManager->registerSystem<RenderSystem>();
     movementSystem = systemManager->registerSystem<MovementSystem>();
     scriptSystem = systemManager->registerSystem<ScriptSystem>(entityManager.get(), componentManager.get());
@@ -61,14 +77,20 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     cameraSystem = systemManager->registerSystem<CameraSystem>(componentManager.get(), entityManager.get(), renderer);
     collisionSystem = systemManager->registerSystem<CollisionSystem>();
 
-    // ScriptSystem specific initialization
     scriptSystem->setLoggingFunctions(
         [this](const std::string& msg) { this->addLogToConsole(msg); },
         [this](const std::string& errMsg) { this->addLogToConsole(errMsg); }
     );
     scriptSystem->init(); 
 
-    // Set signatures for all systems
+    m_aiPromptProcessor = std::make_unique<AIPromptProcessor>(
+        entityManager.get(),
+        componentManager.get(),
+        systemManager.get(),
+        &assetManager, 
+        [this](const std::string& name) { return this->findEntityByName(name); }
+    );
+
     Signature renderSig;
     renderSig.set(componentManager->getComponentType<TransformComponent>());
     renderSig.set(componentManager->getComponentType<SpriteComponent>());
@@ -158,7 +180,6 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
         }
     }
 
-    m_llmPromptBuffer[0] = '\0';
 }
 
 DevModeScene::~DevModeScene() {
@@ -172,32 +193,24 @@ void DevModeScene::handleInput(SDL_Event& event) {
 }
 
 void DevModeScene::update(float deltaTime) {
-    if (isPlaying) {
-        // Update game camera system first if playing
-        if (cameraSystem) {
-            SDL_Rect worldView;
-            float zoom;
-            // This call updates the active camera entity within cameraSystem and gets its view parameters.
-            // We don't strictly need to use worldView and zoom here in DevModeScene::update,
-            // but it ensures the cameraSystem is aware of the active camera for the current frame.
-            cameraSystem->update(worldView, zoom); 
+    if (!isPlaying) {
+        if (m_aiPromptProcessor) {
+            m_aiPromptProcessor->PollAndProcessPendingCommands();
         }
+        return; 
+    }
 
-        if (scriptSystem) {
-            scriptSystem->update(deltaTime);
-        }
-        if (movementSystem) {
-            movementSystem->update(componentManager.get(), deltaTime);
-        }
-        if (collisionSystem) {
-            collisionSystem->update(componentManager.get(), deltaTime);
-        }
-        if (animationSystem) { 
-            animationSystem->update(deltaTime, *entityManager, *componentManager);
-        }
-        if (audioSystem) {
-            audioSystem->update(deltaTime, *entityManager, *componentManager);
-        }
+    if (cameraSystem) {
+        cameraSystem->update(gameViewport, cameraZoom);
+    }
+    if (movementSystem) {
+        movementSystem->update(componentManager.get(), deltaTime); 
+    }
+    if (animationSystem) {
+        animationSystem->update(deltaTime, *entityManager, *componentManager); 
+    }
+    if (audioSystem) {
+        audioSystem->update(deltaTime, *entityManager, *componentManager);
     }
 }
 
@@ -214,15 +227,13 @@ void DevModeScene::render() {
     ImGuiIO& io = ImGui::GetIO();
     ImVec2 displaySize = io.DisplaySize;
 
-    // Determine current camera parameters for rendering
-    float currentRenderCameraX = this->cameraX; // Default to editor camera X
-    float currentRenderCameraY = this->cameraY;  // Default to editor camera Y
-    float currentRenderZoom = this->cameraZoom; // Default to editor camera Zoom
+    float currentRenderCameraX = this->cameraX;
+    float currentRenderCameraY = this->cameraY;  
+    float currentRenderZoom = this->cameraZoom; 
     
     if (isPlaying && cameraSystem) {
         SDL_Rect activeGameCameraWorldView;
         float gameCamZoom = 1.0f;
-        // This call retrieves the latest active game camera's view properties.
         cameraSystem->update(activeGameCameraWorldView, gameCamZoom);
         Entity activeCamEntity = cameraSystem->getActiveCameraEntity();
 
@@ -527,35 +538,9 @@ void DevModeScene::render() {
                 ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem("AI Prompt")) {
-                ImGui::Text("AI Prompt (Basic)");
-                if (ImGui::InputText("##llmPrompt", m_llmPromptBuffer, sizeof(m_llmPromptBuffer), ImGuiInputTextFlags_EnterReturnsTrue)) {
-                    if (strlen(m_llmPromptBuffer) > 0) {
-                        Console::Log("Executing: " + std::string(m_llmPromptBuffer));
-                        processLlmPrompt(m_llmPromptBuffer);
-                        m_llmPromptBuffer[0] = '\0';
-                    } else {
-                        Console::Warn("Prompt is empty.");
-                    }
+                if (m_aiPromptProcessor) { // Added null check
+                    m_aiPromptProcessor->renderAIPromptUI();
                 }
-                ImGui::SameLine();
-                if (ImGui::Button("Execute##llm")) {
-                    if (strlen(m_llmPromptBuffer) > 0) {
-                        Console::Log("Executing: " + std::string(m_llmPromptBuffer));
-                        processLlmPrompt(m_llmPromptBuffer);
-                        m_llmPromptBuffer[0] = '\0';
-                    } else {
-                        Console::Warn("Prompt is empty.");
-                    }
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("Clear##llm")) {
-                    m_llmPromptBuffer[0] = '\0';
-                }
-                ImGui::TextWrapped("Examples: create entity <name> at <x> <y> sprite <texture_id>");
-                ImGui::BulletText("create entity <name> at <x> <y> sprite <texture_id> [width <w>] [height <h>]");
-                ImGui::BulletText("script entity <name> with <script_path.lua>");
-                ImGui::BulletText("move entity <name> to <x> <y>");
-                ImGui::BulletText("delete entity <name>");
                 ImGui::EndTabItem();
             }
             ImGui::EndTabBar();
@@ -883,166 +868,4 @@ Entity DevModeScene::findEntityByName(const std::string& name) {
         }
     }
     return NO_ENTITY_SELECTED;
-}
-
-void DevModeScene::processLlmPrompt(const std::string& prompt) {
-    std::istringstream iss(prompt);
-    std::string command;
-    iss >> command;
-
-    if (command == "create") {
-        std::string type, entityName, at_keyword, sprite_keyword, textureId;
-        float x = 0.0f, y = 0.0f;
-        float w = 32.0f, h = 32.0f; 
-
-        iss >> type; 
-        if (type != "entity") {
-            Console::Error("LLM: Expected 'entity' after 'create'. Usage: create entity <name> at <x> <y> sprite <texture_id>");
-            return;
-        }
-        iss >> entityName >> at_keyword >> x >> y >> sprite_keyword >> textureId;
-
-        if (at_keyword != "at" || sprite_keyword != "sprite") {
-            Console::Error("LLM: Invalid 'create' syntax. Usage: create entity <name> at <x> <y> sprite <texture_id> [width <w>] [height <h>]");
-            return;
-        }
-        
-        std::string opt_param;
-        while(iss >> opt_param) {
-            if (opt_param == "width") iss >> w;
-            else if (opt_param == "height") iss >> h;
-        }
-
-        if (findEntityByName(entityName) != NO_ENTITY_SELECTED) {
-            Console::Warn("LLM: Entity with name '" + entityName + "' already exists.");
-            return;
-        }
-        
-        if (!AssetManager::getInstance().getTexture(textureId)) {
-            Console::Warn("LLM: Texture ID '" + textureId + "' not found. Entity might be invisible.");
-        }
-
-        Entity newEntity = entityManager->createEntity();
-        componentManager->addComponent<NameComponent>(newEntity, NameComponent(entityName));
-        TransformComponent transformComp(x, y, w, h, 0.0f, 0);
-        componentManager->addComponent<TransformComponent>(newEntity, transformComp);
-        componentManager->addComponent<SpriteComponent>(newEntity, SpriteComponent(textureId));
-
-        if (componentManager->isComponentRegistered<RigidbodyComponent>()) {
-            RigidbodyComponent rigidBodyComp; 
-            componentManager->addComponent<RigidbodyComponent>(newEntity, rigidBodyComp);
-        }
-
-        Signature sig;
-        sig.set(componentManager->getComponentType<NameComponent>());
-        sig.set(componentManager->getComponentType<TransformComponent>());
-        sig.set(componentManager->getComponentType<SpriteComponent>());
-        if (componentManager->isComponentRegistered<RigidbodyComponent>() && componentManager->hasComponent<RigidbodyComponent>(newEntity)) {
-            sig.set(componentManager->getComponentType<RigidbodyComponent>());
-        }
-        entityManager->setSignature(newEntity, sig);
-        systemManager->entitySignatureChanged(newEntity, sig);
-
-        Console::Log("LLM: Created entity '" + entityName + "' at (" + std::to_string(x) + "," + std::to_string(y) + ") with sprite '" + textureId + "'.");
-        selectedEntity = newEntity;
-
-    } else if (command == "script") {
-        std::string type, entityName, with_keyword, scriptPath;
-        iss >> type; 
-        if (type != "entity") {
-             Console::Error("LLM: Expected 'entity' after 'script'. Usage: script entity <name> with <script_path.lua>");
-            return;
-        }
-        iss >> entityName >> with_keyword >> scriptPath;
-
-        if (with_keyword != "with") {
-            Console::Error("LLM: Invalid 'script' syntax. Usage: script entity <name> with <script_path.lua>");
-            return;
-        }
-
-        Entity targetEntity = findEntityByName(entityName);
-        if (targetEntity == NO_ENTITY_SELECTED) {
-            Console::Error("LLM: Entity '" + entityName + "' not found for scripting.");
-            return;
-        }
-        
-        if (!componentManager->isComponentRegistered<ScriptComponent>()) {
-            Console::Error("LLM: ScriptComponent is not registered with the ComponentManager.");
-            return;
-        }
-
-        if (!componentManager->hasComponent<ScriptComponent>(targetEntity)) {
-            componentManager->addComponent<ScriptComponent>(targetEntity, ScriptComponent(scriptPath));
-            Signature sig = entityManager->getSignature(targetEntity);
-            sig.set(componentManager->getComponentType<ScriptComponent>());
-            entityManager->setSignature(targetEntity, sig);
-            systemManager->entitySignatureChanged(targetEntity, sig);
-            Console::Log("LLM: Added script '" + scriptPath + "' to entity '" + entityName + "'.");
-        } else {
-            auto& scriptComp = componentManager->getComponent<ScriptComponent>(targetEntity);
-            scriptComp.scriptPath = scriptPath; 
-            Console::Log("LLM: Updated script for entity '" + entityName + "' to '" + scriptPath + "'.");
-        }
-
-    } else if (command == "move") {
-        std::string type, entityName, to_keyword;
-        float x, y;
-        iss >> type; 
-        if (type != "entity") {
-             Console::Error("LLM: Expected 'entity' after 'move'. Usage: move entity <name> to <x> <y>");
-            return;
-        }
-        iss >> entityName >> to_keyword >> x >> y;
-
-        if (to_keyword != "to") {
-            Console::Error("LLM: Invalid 'move' syntax. Usage: move entity <name> to <x> <y>");
-            return;
-        }
-        Entity targetEntity = findEntityByName(entityName);
-        if (targetEntity == NO_ENTITY_SELECTED) {
-            Console::Error("LLM: Entity '" + entityName + "' not found to move.");
-            return;
-        }
-        if (componentManager->hasComponent<TransformComponent>(targetEntity)) {
-            auto& transform = componentManager->getComponent<TransformComponent>(targetEntity);
-            transform.x = x;
-            transform.y = y;
-            Console::Log("LLM: Moved entity '" + entityName + "' to (" + std::to_string(x) + "," + std::to_string(y) + ").");
-        } else {
-            Console::Error("LLM: Entity '" + entityName + "' does not have a TransformComponent to move.");
-        }
-    } else if (command == "delete") {
-        std::string type, entityName;
-        iss >> type; 
-         if (type != "entity") {
-             Console::Error("LLM: Expected 'entity' after 'delete'. Usage: delete entity <name>");
-            return;
-        }
-        iss >> entityName;
-        Entity targetEntity = findEntityByName(entityName);
-        if (targetEntity == NO_ENTITY_SELECTED) {
-            Console::Error("LLM: Entity '" + entityName + "' not found to delete.");
-            return;
-        }
-        entityManager->destroyEntity(targetEntity);
-        if (selectedEntity == targetEntity) {
-            selectedEntity = NO_ENTITY_SELECTED;
-        }
-        Console::Log("LLM: Deleted entity '" + entityName + "'.");
-
-    } else {
-        Console::Error("LLM: Unknown command '" + command + "'.");
-    }
-
-    for (auto entity : entityManager->getActiveEntities()) {
-        Signature sig = entityManager->getSignature(entity);
-        if (componentManager->hasComponent<TransformComponent>(entity)) {
-            sig.set(componentManager->getComponentType<TransformComponent>());
-        }
-        if (componentManager->hasComponent<RigidbodyComponent>(entity)) {
-            sig.set(componentManager->getComponentType<RigidbodyComponent>());
-        }
-        entityManager->setSignature(entity, sig);
-        systemManager->entitySignatureChanged(entity, sig);
-    }
 }

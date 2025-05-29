@@ -71,6 +71,9 @@
         "ranges": "cpp",
         "shared_mutex": "cpp",
         "valarray": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "csignal": "cpp",
+        "regex": "cpp",
+        "future": "cpp"
     }
 }

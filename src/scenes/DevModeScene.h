@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../Scene.h"
+#include "../ai/AIPromptProcessor.h" // Moved this include higher
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_rect.h> 
 #include "imgui.h"
@@ -43,8 +44,8 @@ class ScriptSystem;
 class MovementSystem;
 class AnimationSystem; 
 class CameraSystem;
+class AIPromptProcessor; // Forward declaration
 
-const Entity NO_ENTITY_SELECTED = MAX_ENTITIES;
 const int HANDLE_SIZE = 8; 
 
 enum class ResizeHandle {
@@ -109,7 +110,7 @@ public:
     char inspectorTextureIdBuffer[256] = "";
     char inspectorScriptPathBuffer[256] = ""; 
 
-    char sceneFilePath[256] = "scene.json";
+    char sceneFilePath[256] = "../assets/Scenes/scene.json"; // Default scene file path
 
     bool isDragging = false;
     float dragStartMouseX = 0.0f; 
@@ -138,14 +139,12 @@ public:
     ResizeHandle getHandleAtPosition(float worldMouseX, float worldMouseY, const TransformComponent& transform);
 
     void renderConsolePanel();
-    void renderLlmPromptPanel();
 
-    void processLlmPrompt(const std::string& prompt); 
     Entity findEntityByName(const std::string& name); 
     DevModeInputHandler m_devModeInputHandler;
 
     char m_sceneNameBuffer[128];
-    char m_llmPromptBuffer[256];
+    std::unique_ptr<AIPromptProcessor> m_aiPromptProcessor;
 
     std::string currentAssetDirectory = "../assets/"; 
 
