@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../Scene.h"
-#include "../ai/AIPromptProcessor.h" // Moved this include higher
+#include "../ai/AIPromptProcessor.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_rect.h> 
 #include "imgui.h"
@@ -28,6 +28,7 @@
 #include "../ecs/systems/AudioSystem.h"
 #include "../ecs/systems/CameraSystem.h"
 #include "../ecs/systems/CollisionSystem.h"
+#include "../ecs/systems/PhysicsSystem.h" 
 #include "../AssetManager.h"
 #include "../ecs/Entity.h"
 #include "../../vendor/nlohmann/json.hpp"
@@ -44,7 +45,9 @@ class ScriptSystem;
 class MovementSystem;
 class AnimationSystem; 
 class CameraSystem;
-class AIPromptProcessor; // Forward declaration
+class CollisionSystem;
+class PhysicsSystem;  
+class AIPromptProcessor;
 
 const int HANDLE_SIZE = 8; 
 
@@ -89,6 +92,7 @@ public:
     std::shared_ptr<AudioSystem> audioSystem;
     std::shared_ptr<CameraSystem> cameraSystem;
     std::shared_ptr<CollisionSystem> collisionSystem;
+    std::shared_ptr<PhysicsSystem> physicsSystem;
 
     std::vector<std::string> consoleLogBuffer;
 
@@ -110,7 +114,7 @@ public:
     char inspectorTextureIdBuffer[256] = "";
     char inspectorScriptPathBuffer[256] = ""; 
 
-    char sceneFilePath[256] = "../assets/Scenes/scene.json"; // Default scene file path
+    char sceneFilePath[256] = "../assets/Scenes/scene.json";
 
     bool isDragging = false;
     float dragStartMouseX = 0.0f; 

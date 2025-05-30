@@ -171,6 +171,17 @@ bool loadDevModeScene(DevModeScene& scene, const std::string& filepath) {
                     from_json(componentData, comp);
                     scene.componentManager->addComponent(newEntity, comp);
                     entitySignature.set(scene.componentManager->getComponentType<ScriptComponent>());
+                    // Ensure the script is loaded by the ScriptSystem for this entity
+                    if (scene.scriptSystem) {
+                        if (!comp.scriptPath.empty()) {
+                            std::cout << "[DevModeSceneSerializer] Loading script '" << comp.scriptPath << "' for entity " << newEntity << std::endl;
+                            scene.scriptSystem->loadScript(newEntity, comp.scriptPath);
+                        } else {
+                            std::cerr << "[DevModeSceneSerializer] Warning: Entity " << newEntity << " has ScriptComponent but scriptPath is empty." << std::endl;
+                        }
+                    } else {
+                        std::cerr << "[DevModeSceneSerializer] Error: scriptSystem is null. Cannot load script for entity " << newEntity << std::endl;
+                    }
                 } else if (componentType == "ColliderComponent") {
                     ColliderComponent comp;
                     from_json(componentData, comp); 
@@ -214,16 +225,22 @@ bool loadDevModeScene(DevModeScene& scene, const std::string& filepath) {
     }
     std::cout << "Scene loaded successfully from " << filepath << std::endl;
 
-    // Debug: Print all entities and their components after loading
-    std::cout << "[Debug] Entities and their components after loading:" << std::endl;
-    for (auto entity : scene.entityManager->getActiveEntities()) {
-        std::cout << "Entity " << entity << ": ";
-        if (scene.componentManager->hasComponent<TransformComponent>(entity)) std::cout << "Transform ";
-        if (scene.componentManager->hasComponent<ColliderComponent>(entity)) std::cout << "Collider ";
-        if (scene.componentManager->hasComponent<RigidbodyComponent>(entity)) std::cout << "Rigidbody ";
-        if (scene.componentManager->hasComponent<VelocityComponent>(entity)) std::cout << "Velocity ";
-        std::cout << std::endl;
-    }
+    // // Debug: Print all entities and their components after loading
+    // std::cout << "[Debug] Entities and their components after loading:" << std::endl;
+    // for (auto entity : scene.entityManager->getActiveEntities()) {
+    //     std::cout << "Entity " << entity << ": ";
+    //     if (scene.componentManager->hasComponent<TransformComponent>(entity)) std::cout << "Transform ";
+    //     if (scene.componentManager->hasComponent<VelocityComponent>(entity)) std::cout << "Velocity ";
+    //     if (scene.componentManager->hasComponent<SpriteComponent>(entity)) std::cout << "Sprite ";
+    //     if (scene.componentManager->hasComponent<RigidbodyComponent>(entity)) std::cout << "Rigidbody ";
+    //     if (scene.componentManager->hasComponent<ScriptComponent>(entity)) std::cout << "Script ";
+    //     if (scene.componentManager->hasComponent<ColliderComponent>(entity)) std::cout << "Collider ";
+    //     if (scene.componentManager->hasComponent<AnimationComponent>(entity)) std::cout << "Animation ";
+    //     if (scene.componentManager->hasComponent<NameComponent>(entity)) std::cout << "Name ";
+    //     if (scene.componentManager->hasComponent<AudioComponent>(entity)) std::cout << "Audio ";
+    //     if (scene.componentManager->hasComponent<CameraComponent>(entity)) std::cout << "Camera ";
+    //     std::cout << std::endl;
+    // }
 
     return true;
 }

@@ -27,11 +27,23 @@ bool ScriptSystem::init() {
 }
 
 void ScriptSystem::update(float deltaTime) {
+    std::cout << "[ScriptSystem] C++ update method CALLED. DeltaTime: " << deltaTime << std::endl; // ADDED THIS LOG
+    // Log("[ScriptSystem] Update called. Processing entities..."); // Optional: General system update log
     for (auto entity : entityManager->getActiveEntities()) {
+        // Log("[ScriptSystem] Checking entity: " + std::to_string(entity)); // Optional: Log each entity being checked
         if (componentManager->hasComponent<ScriptComponent>(entity)) {
             auto& scriptComp = componentManager->getComponent<ScriptComponent>(entity);
+            std::cout << "[ScriptSystem] Entity " << entity << " has ScriptComponent with path: '" << scriptComp.scriptPath << "'" << std::endl; // Log 1
             if (!scriptComp.scriptPath.empty()) {
-                callScriptFunction(entity, "update", entity, deltaTime);
+                // Check if the entity has a registered script environment
+                if (entityScriptEnvironments.count(entity)) {
+                    std::cout << "[ScriptSystem] Entity " << entity << " has a script environment. Attempting to call 'update'." << std::endl; // Log 2
+                    callScriptFunction(entity, "update", entity, deltaTime);
+                } else {
+                    std::cerr << "[ScriptSystem] ERROR: Entity " << entity << " has ScriptComponent but NO script environment registered. Cannot call 'update'." << std::endl; // Log 3
+                }
+            } else {
+                 std::cout << "[ScriptSystem] Entity " << entity << " has ScriptComponent but scriptPath is EMPTY." << std::endl; // Log 4
             }
         }
     }
@@ -82,6 +94,14 @@ void ScriptSystem::registerCoreAPI() {
     lua.new_usertype<InputManager>("Input",
         sol::no_constructor,
         "isKeyDown", [](const std::string& keyName) { 
+            // Convert key name string to SDL_Scancode for generic key checking
+            // This is a simplified example. You might need a more robust mapping.
+            SDL_Scancode scancode = SDL_GetScancodeFromName(keyName.c_str());
+            if (scancode != SDL_SCANCODE_UNKNOWN) {
+                const Uint8* keyboardState = SDL_GetKeyboardState(nullptr);
+                return keyboardState && keyboardState[scancode];
+            }
+            // Fallback for existing action-based checks if direct scancode lookup fails or for specific actions
             if (keyName == "W") return InputManager::getInstance().isActionPressed("MoveUp");
             if (keyName == "A") return InputManager::getInstance().isActionPressed("MoveLeft");
             if (keyName == "S") return InputManager::getInstance().isActionPressed("MoveDown");

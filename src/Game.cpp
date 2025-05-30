@@ -284,7 +284,7 @@ void Game::clean() {
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();
 
-    AssetManager::getInstance().cleanup();
+    // AssetManager::getInstance().cleanup(); // Temporarily commented out to debug segfault
 
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
@@ -299,3 +299,4 @@ void Game::clean() {
 bool Game::isRunning() const {
     return running;
 }
+

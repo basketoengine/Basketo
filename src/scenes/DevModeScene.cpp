@@ -30,6 +30,7 @@
 #include "../ecs/systems/CameraSystem.h"
 #include "../ecs/systems/CollisionSystem.h" 
 #include "../ai/AIPromptProcessor.h" 
+#include "../ecs/systems/PhysicsSystem.h" 
 
 
 DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
@@ -76,6 +77,7 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     audioSystem = systemManager->registerSystem<AudioSystem>();
     cameraSystem = systemManager->registerSystem<CameraSystem>(componentManager.get(), entityManager.get(), renderer);
     collisionSystem = systemManager->registerSystem<CollisionSystem>();
+    physicsSystem = systemManager->registerSystem<PhysicsSystem>(); 
 
     scriptSystem->setLoggingFunctions(
         [this](const std::string& msg) { this->addLogToConsole(msg); },
@@ -123,6 +125,12 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     collisionSig.set(componentManager->getComponentType<TransformComponent>());
     collisionSig.set(componentManager->getComponentType<ColliderComponent>());
     systemManager->setSignature<CollisionSystem>(collisionSig);
+
+    Signature physicsSig; 
+    physicsSig.set(componentManager->getComponentType<TransformComponent>());
+    physicsSig.set(componentManager->getComponentType<VelocityComponent>());
+    physicsSig.set(componentManager->getComponentType<RigidbodyComponent>());
+    systemManager->setSignature<PhysicsSystem>(physicsSig);
 
     AssetManager& assets = AssetManager::getInstance();
     std::string texturePath = "../assets/Textures/";
@@ -200,17 +208,40 @@ void DevModeScene::update(float deltaTime) {
         return; 
     }
 
-    if (cameraSystem) {
-        cameraSystem->update(gameViewport, cameraZoom);
+    // Recommended new order:
+    // 1. Scripts (can influence physics inputs)
+    if (scriptSystem) {
+        scriptSystem->update(deltaTime);
     }
+
+    // 2. Physics (calculates forces, updates velocities)
+    if (physicsSystem) { 
+        physicsSystem->update(componentManager.get(), deltaTime);
+    }
+
+    // 3. Movement (applies velocities to transforms)
     if (movementSystem) {
         movementSystem->update(componentManager.get(), deltaTime); 
     }
+
+    // 4. Collision (detects and resolves collisions, can alter transforms and velocities)
+    if (collisionSystem) {
+        collisionSystem->update(componentManager.get(), deltaTime);
+    }
+
+    // 5. Animation
     if (animationSystem) {
         animationSystem->update(deltaTime, *entityManager, *componentManager); 
     }
+
+    // 6. Audio
     if (audioSystem) {
         audioSystem->update(deltaTime, *entityManager, *componentManager);
+    }
+
+    // 7. Camera (often depends on final positions of entities)
+    if (cameraSystem) {
+        cameraSystem->update(gameViewport, cameraZoom);
     }
 }
 

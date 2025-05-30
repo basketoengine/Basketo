@@ -2,6 +2,27 @@
     "entities": [
         {
             "components": {
+                "ColliderComponent": {
+                    "height": 30.0,
+                    "isTrigger": false,
+                    "offsetX": 0.0,
+                    "offsetY": 0.0,
+                    "type": "aabb",
+                    "vertices": [],
+                    "width": 21.0
+                },
+                "RigidbodyComponent": {
+                    "drag": 0.0,
+                    "gravityScale": 50.0,
+                    "isGrounded": false,
+                    "isKinematic": false,
+                    "isStatic": false,
+                    "mass": 1.0,
+                    "useGravity": true
+                },
+                "ScriptComponent": {
+                    "scriptPath": "/home/basketo/Desktop/Basketo/assets/Scripts/player.lua"
+                },
                 "SpriteComponent": {
                     "flip": 0,
                     "isFixed": false,
@@ -12,18 +33,56 @@
                         "x": 0,
                         "y": 0
                     },
-                    "textureId": "background.jpg"
+                    "textureId": "mario.png"
                 },
                 "TransformComponent": {
-                    "height": 800.0,
+                    "height": 33.0,
                     "rotation": 0.0,
-                    "width": 1045.0,
+                    "width": 19.0,
                     "x": 0.0,
-                    "y": -32.0,
+                    "y": 0.14499999582767487,
+                    "z_index": 2
+                },
+                "VelocityComponent": {
+                    "vx": 0.0,
+                    "vy": 98.00000762939453
+                }
+            },
+            "id_saved": 6
+        },
+        {
+            "components": {
+                "ColliderComponent": {
+                    "height": 32.0,
+                    "isTrigger": false,
+                    "offsetX": 0.0,
+                    "offsetY": 208.8000030517578,
+                    "type": "aabb",
+                    "vertices": [],
+                    "width": 576.0
+                },
+                "SpriteComponent": {
+                    "flip": 0,
+                    "isFixed": false,
+                    "layer": 0,
+                    "srcRect": {
+                        "h": 0,
+                        "w": 0,
+                        "x": 0,
+                        "y": 0
+                    },
+                    "textureId": "mariobg.png"
+                },
+                "TransformComponent": {
+                    "height": 480.0,
+                    "rotation": 0.0,
+                    "width": 3376.0,
+                    "x": 0.0,
+                    "y": 0.0,
                     "z_index": 0
                 }
             },
-            "id_saved": 2
+            "id_saved": 7
         }
     ]
 }

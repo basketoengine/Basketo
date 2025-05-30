@@ -12,6 +12,19 @@
 #include <vector> 
 #include <iostream> 
 
+// Define a struct for float-based rectangles
+struct FloatRect {
+    float x, y, w, h;
+};
+
+// Helper function for float-based AABB collision check
+inline bool checkFloatAABBCollision(const FloatRect& r1, const FloatRect& r2) {
+    return (r1.x < r2.x + r2.w &&
+            r1.x + r1.w > r2.x &&
+            r1.y < r2.y + r2.h &&
+            r1.y + r1.h > r2.y);
+}
+
 class CollisionSystem : public System {
 public:
     std::unique_ptr<Quadtree> quadtree;
@@ -37,16 +50,16 @@ public:
         quadtree->clear();
         entitiesInsertedIntoQuadtree = 0;
 
-        std::cout << "[CollisionSystem] Populating Quadtree..." << std::endl;
+        std::cout << "[CollisionSystem] Populating Quadtree..." << std::endl; // Fixed: removed backslash before quote
 
         for (auto const& entity : entities) {
             if (componentManager->hasComponent<TransformComponent>(entity) && 
                 componentManager->hasComponent<ColliderComponent>(entity)) {
                 auto& transform = componentManager->getComponent<TransformComponent>(entity);
-                quadtree->insert(entity, transform);
+                quadtree->insert(entity, transform); 
                 entitiesInsertedIntoQuadtree++;
             } else {
-                std::cout << "[CollisionSystem] Entity " << entity << " skipped for Quadtree insertion (missing Transform or ColliderComponent)." << std::endl; // Updated log message
+                std::cout << "[CollisionSystem] Entity " << entity << " skipped for Quadtree insertion (missing Transform or ColliderComponent)." << std::endl; // Fixed: removed backslash before quote
             }
         }
         std::cout << "[CollisionSystem] Quadtree populated with " << entitiesInsertedIntoQuadtree << " entities." << std::endl;
@@ -60,21 +73,25 @@ public:
             auto& transformA = componentManager->getComponent<TransformComponent>(entityA);
             auto& colliderA = componentManager->getComponent<ColliderComponent>(entityA); 
 
+            RigidbodyComponent* rigidbodyA_ptr = nullptr;
             if (componentManager->hasComponent<RigidbodyComponent>(entityA)) {
-                auto& rigidbodyA = componentManager->getComponent<RigidbodyComponent>(entityA);
-                if (rigidbodyA.isStatic) {
+                rigidbodyA_ptr = &componentManager->getComponent<RigidbodyComponent>(entityA);
+                if (!rigidbodyA_ptr->isStatic) {
+                    rigidbodyA_ptr->isGrounded = false; // Assume not grounded until a collision proves it
+                } else {
+                    // Static bodies don't respond to collisions by moving
                     std::cout << "[CollisionSystem] Entity A: " << entityA << " is static, skipping collision response." << std::endl;
-                    continue;
+                    continue; 
                 }
             }
 
-            SDL_Rect rectA = {
-                static_cast<int>(transformA.x + colliderA.offsetX),
-                static_cast<int>(transformA.y + colliderA.offsetY),
-                static_cast<int>(colliderA.width),
-                static_cast<int>(colliderA.height)
+            FloatRect float_rectA = {
+                transformA.x + colliderA.offsetX,
+                transformA.y + colliderA.offsetY,
+                colliderA.width,
+                colliderA.height
             };
-            std::cout << "[CollisionSystem] Processing Entity A: " << entityA << " rectA: (" << rectA.x << "," << rectA.y << "," << rectA.w << "," << rectA.h << ") using collider offset/dims" << std::endl;
+            std::cout << "[CollisionSystem] Processing Entity A: " << entityA << " rectA: (" << float_rectA.x << "," << float_rectA.y << "," << float_rectA.w << "," << float_rectA.h << ")" << std::endl;
             
             std::vector<Entity> potentialColliders = quadtree->query(transformA); 
             std::cout << "[CollisionSystem] Entity A: " << entityA << " found " << potentialColliders.size() << " potential colliders from Quadtree." << std::endl;
@@ -84,22 +101,22 @@ public:
 
                 if (!componentManager->hasComponent<TransformComponent>(entityB) || 
                     !componentManager->hasComponent<ColliderComponent>(entityB)) {
-                    std::cout << "[CollisionSystem] Potential collider Entity B: " << entityB << " skipped (missing Transform or ColliderComponent)." << std::endl; // Updated log
+                    std::cout << "[CollisionSystem] Potential collider Entity B: " << entityB << " skipped (missing Transform or ColliderComponent)." << std::endl; // Fixed: removed backslash before quote
                     continue;
                 }
 
                 auto& transformB = componentManager->getComponent<TransformComponent>(entityB);
                 auto& colliderB = componentManager->getComponent<ColliderComponent>(entityB); 
                 
-                SDL_Rect rectB = {
-                    static_cast<int>(transformB.x + colliderB.offsetX),
-                    static_cast<int>(transformB.y + colliderB.offsetY),
-                    static_cast<int>(colliderB.width),
-                    static_cast<int>(colliderB.height)
+                FloatRect float_rectB = {
+                    transformB.x + colliderB.offsetX,
+                    transformB.y + colliderB.offsetY,
+                    colliderB.width,
+                    colliderB.height
                 };
-                std::cout << "[CollisionSystem]   Checking against Entity B: " << entityB << " rectB: (" << rectB.x << "," << rectB.y << "," << rectB.w << "," << rectB.h << ") using collider offset/dims" << std::endl;
+                std::cout << "[CollisionSystem]   Checking against Entity B: " << entityB << " rectB: (" << float_rectB.x << "," << float_rectB.y << "," << float_rectB.w << "," << float_rectB.h << ")" << std::endl;
 
-                if (Physics::checkCollision(rectA, rectB)) {
+                if (checkFloatAABBCollision(float_rectA, float_rectB)) {
                     std::cout << "    Collision DETECTED between Entity A: " << entityA << " and Entity B: " << entityB << std::endl;
 
                     if (colliderA.isTrigger || colliderB.isTrigger) {
@@ -116,46 +133,74 @@ public:
                     float oldTransformX_A = transformA.x; 
                     float oldTransformY_A = transformA.y;
 
-                    if (velocityA.vy > 0) {
-                        float penetration_y = (rectA.y + rectA.h) - rectB.y;
+                    if (velocityA.vy >= 0) { 
+                        float penetration_y = (float_rectA.y + float_rectA.h) - float_rectB.y;
                         if (penetration_y > 0) {
-                            // std::cout << "      Response Y (down): Entity A (" << entityA << ") into B (" << entityB << "). Penetration: " << penetration_y << std::endl;
-                            transformA.y -= penetration_y; 
-                            velocityA.vy = 0;
-                            rectA.y = static_cast<int>(transformA.y + colliderA.offsetY); // Update rectA for X-axis check
-                        }
-                    } else if (velocityA.vy < 0) { 
-                        float penetration_y = (rectB.y + rectB.h) - rectA.y;
-                        if (penetration_y > 0) {
-                            // std::cout << "      Response Y (up): Entity A (" << entityA << ") into B (" << entityB << "). Penetration: " << penetration_y << std::endl;
-                            transformA.y += penetration_y;
-                            velocityA.vy = 0;
-                            rectA.y = static_cast<int>(transformA.y + colliderA.offsetY); 
+                            bool primarily_vertical_collision = (float_rectA.x < float_rectB.x + float_rectB.w) && (float_rectA.x + float_rectA.w > float_rectB.x);
+                            
+                            if (primarily_vertical_collision) {
+                                std::cout << "      Response Y (down/on): Entity A (" << entityA << ") into B (" << entityB << "). Penetration: " << penetration_y << std::endl;
+                                transformA.y = transformB.y + colliderB.offsetY - colliderA.offsetY - colliderA.height;
+                                velocityA.vy = 0;
+                                if (rigidbodyA_ptr) {
+                                    rigidbodyA_ptr->isGrounded = true;
+                                }
+                                float_rectA.y = transformA.y + colliderA.offsetY; 
+                            }
                         }
                     }
-                    
-                    if (velocityA.vx > 0) { 
-                        float penetration_x = (rectA.x + rectA.w) - rectB.x;
-                        if (penetration_x > 0) {
-                            // std::cout << "      Response X (right): Entity A (" << entityA << ") into B (" << entityB << "). Penetration: " << penetration_x << std::endl;
-                            transformA.x -= penetration_x;
-                            velocityA.vx = 0;
-                            // rectA.x = static_cast<int>(transformA.x + colliderA.offsetX); // Update if more resolution steps followed
+                    if (velocityA.vy <= 0) { 
+                        if (!(rigidbodyA_ptr && rigidbodyA_ptr->isGrounded && velocityA.vy == 0)) {
+                            float penetration_y = (float_rectB.y + float_rectB.h) - float_rectA.y;
+                            if (penetration_y > 0) {
+                                bool primarily_vertical_collision = (float_rectA.x < float_rectB.x + float_rectB.w) && (float_rectA.x + float_rectA.w > float_rectB.x);
+                                if (primarily_vertical_collision) {
+                                    std::cout << "      Response Y (up): Entity A (" << entityA << ") into B (" << entityB << "). Penetration: " << penetration_y << std::endl;
+                                    transformA.y = transformB.y + colliderB.offsetY + colliderB.height - colliderA.offsetY;
+                                    velocityA.vy = 0;
+                                    float_rectA.y = transformA.y + colliderA.offsetY; 
+                                }
+                            }
                         }
-                    } else if (velocityA.vx < 0) { 
-                        float penetration_x = (rectB.x + rectB.w) - rectA.x;
+                    }
+
+                    FloatRect current_float_rectA_for_X = {
+                        transformA.x + colliderA.offsetX,
+                        float_rectA.y, 
+                        colliderA.width,
+                        colliderA.height
+                    };
+
+
+                    if (velocityA.vx >= 0) { 
+                        float penetration_x = (current_float_rectA_for_X.x + current_float_rectA_for_X.w) - float_rectB.x;
                         if (penetration_x > 0) {
-                            // std::cout << "      Response X (left): Entity A (" << entityA << ") into B (" << entityB << "). Penetration: " << penetration_x << std::endl;
-                            transformA.x += penetration_x; 
-                            velocityA.vx = 0;
-                            // rectA.x = static_cast<int>(transformA.x + colliderA.offsetX); // Update if more resolution steps followed
+                            bool primarily_horizontal_collision = (current_float_rectA_for_X.y < float_rectB.y + float_rectB.h) && (current_float_rectA_for_X.y + current_float_rectA_for_X.h > float_rectB.y);
+                            if(primarily_horizontal_collision){
+                                std::cout << "      Response X (right): Entity A (" << entityA << ") into B (" << entityB << "). Penetration: " << penetration_x << std::endl;
+                                transformA.x = transformB.x + colliderB.offsetX - colliderA.offsetX - colliderA.width;
+                                velocityA.vx = 0;
+                            }
+                        }
+                    }
+                     if (velocityA.vx <= 0) {
+                        if (!(velocityA.vx == 0 && ((current_float_rectA_for_X.x + current_float_rectA_for_X.w) - float_rectB.x) > 0 )) {
+                            float penetration_x = (float_rectB.x + float_rectB.w) - current_float_rectA_for_X.x;
+                            if (penetration_x > 0) {
+                                bool primarily_horizontal_collision = (current_float_rectA_for_X.y < float_rectB.y + float_rectB.h) && (current_float_rectA_for_X.y + current_float_rectA_for_X.h > float_rectB.y);
+                                if(primarily_horizontal_collision){
+                                    std::cout << "      Response X (left): Entity A (" << entityA << ") into B (" << entityB << "). Penetration: " << penetration_x << std::endl;
+                                    transformA.x = transformB.x + colliderB.offsetX + colliderB.width - colliderA.offsetX; 
+                                    velocityA.vx = 0;
+                                }
+                            }
                         }
                     }
 
                     if (oldTransformX_A != transformA.x || oldTransformY_A != transformA.y) {
-                        std::cout << "      Position CHANGED for Entity A ("" << entityA << "") from ("" << oldTransformX_A << "","" << oldTransformY_A << "") to ("" << transformA.x << "","" << transformA.y << "")" << std::endl;
+                        std::cout << "      Position CHANGED for Entity A (" << entityA << ") from (" << oldTransformX_A << "," << oldTransformY_A << ") to (" << transformA.x << "," << transformA.y << ")" << std::endl;
                     } else {
-                        std::cout << "      Position NOT CHANGED for Entity A ("" << entityA << "") despite detected collision." << std::endl;
+                        std::cout << "      Position NOT CHANGED for Entity A (" << entityA << ") despite detected collision (may be fine if velocity was already zeroed or minor overlap)." << std::endl;
                     }
                 }
             }

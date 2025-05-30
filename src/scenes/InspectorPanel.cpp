@@ -241,6 +241,15 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
                 auto& vel = scene.componentManager->getComponent<VelocityComponent>(scene.selectedEntity);
                 ImGui::DragFloat("Velocity X", &vel.vx, 0.1f);
                 ImGui::DragFloat("Velocity Y", &vel.vy, 0.1f);
+
+                if (ImGui::Button("Remove Velocity Component")) {
+                    scene.componentManager->removeComponent<VelocityComponent>(scene.selectedEntity);
+                    Signature sig = scene.entityManager->getSignature(scene.selectedEntity);
+                    sig.reset(scene.componentManager->getComponentType<VelocityComponent>());
+                    scene.entityManager->setSignature(scene.selectedEntity, sig);
+                    scene.systemManager->entitySignatureChanged(scene.selectedEntity, sig);
+                    // No specific UI buffer to clear for VelocityComponent, unlike ScriptComponent
+                }
             }
         }
 

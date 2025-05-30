@@ -7,11 +7,4 @@ struct VelocityComponent {
     float vy = 0.0f;
 };
 
-inline void to_json(nlohmann::json& j, const VelocityComponent& c) {
-    j = nlohmann::json{{"vx", c.vx}, {"vy", c.vy}};
-}
-
-inline void from_json(const nlohmann::json& j, VelocityComponent& c) {
-    c.vx = j.value("vx", 0.0f);
-    c.vy = j.value("vy", 0.0f);
-}
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(VelocityComponent, vx, vy)

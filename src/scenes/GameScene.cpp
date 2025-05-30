@@ -8,13 +8,14 @@
 #include "../ecs/components/RigidbodyComponent.h"
 #include "../ecs/components/AnimationComponent.h"
 #include "../ecs/components/ColliderComponent.h"
+#include "../ecs/components/ScriptComponent.h"
 #include "../ecs/systems/PhysicsSystem.h"
 #include "../ecs/systems/CollisionSystem.h"
 #include "../ecs/systems/AnimationSystem.h" 
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
 #include <SDL2/SDL_mixer.h>
-#include <iostream> // For logging will be removed
+#include <iostream>
 #include <memory>
 #include <algorithm>
 #include <filesystem>
@@ -31,6 +32,7 @@ GameScene::GameScene(SDL_Renderer* ren) : renderer(ren), cameraZoom(1.0f), camer
     componentManager->registerComponent<RigidbodyComponent>(); 
     componentManager->registerComponent<AnimationComponent>(); 
     componentManager->registerComponent<ColliderComponent>();
+    componentManager->registerComponent<ScriptComponent>(); // Added
 
     renderSystem = systemManager->registerSystem<RenderSystem>();
     Signature renderSig;
@@ -66,6 +68,9 @@ GameScene::GameScene(SDL_Renderer* ren) : renderer(ren), cameraZoom(1.0f), camer
 
     scriptSystem = systemManager->registerSystem<ScriptSystem>(entityManager.get(), componentManager.get());
     scriptSystem->init();
+    Signature scriptSig; // Added
+    scriptSig.set(componentManager->getComponentType<ScriptComponent>()); // Added
+    systemManager->setSignature<ScriptSystem>(scriptSig); // Added
 
     AssetManager& assets = AssetManager::getInstance();
 
@@ -122,16 +127,41 @@ GameScene::GameScene(SDL_Renderer* ren) : renderer(ren), cameraZoom(1.0f), camer
     componentManager->addComponent(playerEntity, playerTransform);
     componentManager->addComponent(playerEntity, VelocityComponent{0.0f, 0.0f});
     componentManager->addComponent(playerEntity, SpriteComponent{"player"});
-    componentManager->addComponent(playerEntity, RigidbodyComponent{1.0f, true, false, 1.0f});
+    // componentManager->addComponent(playerEntity, RigidbodyComponent{1.0f, true, false, 1.0f}); // Old version
+    RigidbodyComponent playerRigidbody;
+    playerRigidbody.isKinematic = true;
+    playerRigidbody.useGravity = false; 
+    componentManager->addComponent(playerEntity, playerRigidbody);
+    componentManager->addComponent(playerEntity, ColliderComponent{});
 
     Signature playerSignature = entityManager->getSignature(playerEntity);
     playerSignature.set(componentManager->getComponentType<TransformComponent>());
     playerSignature.set(componentManager->getComponentType<VelocityComponent>());
     playerSignature.set(componentManager->getComponentType<SpriteComponent>());
     playerSignature.set(componentManager->getComponentType<RigidbodyComponent>());
+    playerSignature.set(componentManager->getComponentType<ScriptComponent>());
+    playerSignature.set(componentManager->getComponentType<ColliderComponent>());
     entityManager->setSignature(playerEntity, playerSignature);
-    systemManager->entitySignatureChanged(playerEntity, playerSignature);
+    systemManager->entitySignatureChanged(playerEntity, playerSignature); // Notify systems
 
+    // Explicitly load the script for the player entity - Commented out as ScriptComponent addition was removed
+    // if (scriptSystem) {
+    //     std::cout << "[GameScene] Loading script '\"../assets/Scripts/player.lua\"' for playerEntity: " << playerEntity << std::endl;
+    //     bool loaded = scriptSystem->loadScript(playerEntity, "../assets/Scripts/player.lua");
+    //     if (!loaded) {
+    //         std::cerr << "[GameScene] CRITICAL: Failed to load script for playerEntity: " << playerEntity << std::endl;
+    //     }
+    // } else {
+    //     std::cerr << "[GameScene] CRITICAL: scriptSystem is null, cannot load player script!" << std::endl;
+    // }
+
+    // Example of setting up basic logging for GameScene's script system (optional, if you have a console)
+    // scriptSystem->setLoggingFunctions(
+    //     [](const std::string& message) { std::cout << message << std::endl; },
+    //     [](const std::string& error) { std::cerr << error << std::endl; }
+    // );
+
+    // Create a ground entity
     wallEntity = entityManager->createEntity();
     TransformComponent wallTransform;
     wallTransform.x = 300.0f;
@@ -190,23 +220,23 @@ void GameScene::update(float deltaTime) {
     physicsSystem->update(componentManager.get(), deltaTime);
     movementSystem->update(componentManager.get(), deltaTime);
 
-    // -- Add logs for CollisionSystem --
     if (collisionSystem) {
-        std::cout << "[GameScene] Calling CollisionSystem::update()" << std::endl;
+        // std::cout << "[GameScene] Calling CollisionSystem::update()" << std::endl; // Keep this commented unless debugging
         collisionSystem->update(componentManager.get(), deltaTime);
     } else {
         std::cout << "[GameScene] Error: collisionSystem is NULL!" << std::endl;
     }
-    // -- End logs for CollisionSystem --
 
     animationSystem->update(deltaTime, *entityManager, *componentManager);
 
-    auto& playerTransform = componentManager->getComponent<TransformComponent>(playerEntity);
-    if (playerTransform.x < 0) playerTransform.x = 0;
-    if (playerTransform.y < 0) playerTransform.y = 0;
-    if (playerTransform.x + playerTransform.width > 800) playerTransform.x = 800 - playerTransform.width;
-    if (playerTransform.y + playerTransform.height > 600) playerTransform.y = 600 - playerTransform.height;
+    // Define world bounds (could be member variables or constants)
+    SDL_Rect worldBounds = {0, 0, 800, 600}; // Example: world is 800x600, starting at (0,0)
 
+    // Confine player to world bounds
+    auto& playerTransform = componentManager->getComponent<TransformComponent>(playerEntity);
+    Physics::confineToWorldBounds(playerTransform, worldBounds);
+
+    // Camera follow logic (remains the same)
     float viewportW = 800.0f, viewportH = 600.0f;
     float targetX = playerTransform.x + playerTransform.width / 2.0f - (viewportW / 2.0f) / cameraZoom;
     float targetY = playerTransform.y + playerTransform.height / 2.0f - (viewportH / 2.0f) / cameraZoom;
