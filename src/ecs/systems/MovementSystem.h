@@ -14,15 +14,8 @@ public:
         for (auto const& entity : entities) {
             auto& transform = componentManager->getComponent<TransformComponent>(entity);
             auto& velocity = componentManager->getComponent<VelocityComponent>(entity);
-            
-            // Optional: Uncomment for debugging BEFORE state
-            // std::cout << "[MovementSystem] Entity " << entity << " BEFORE: pos(" << transform.x << "," << transform.y << ") vel(" << velocity.vx << "," << velocity.vy << ")" << std::endl;
 
             transform.x += velocity.vx * deltaTime;
-            transform.y += velocity.vy * deltaTime;
-            
-            // Optional: Uncomment for debugging AFTER state
-            // std::cout << "[MovementSystem] Entity " << entity << " AFTER: pos(" << transform.x << "," << transform.y << ")" << std::endl;
         }
     }
 };

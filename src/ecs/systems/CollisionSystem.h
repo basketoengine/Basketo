@@ -12,17 +12,31 @@
 #include <vector> 
 #include <iostream> 
 
-// Define a struct for float-based rectangles
 struct FloatRect {
     float x, y, w, h;
 };
 
-// Helper function for float-based AABB collision check
 inline bool checkFloatAABBCollision(const FloatRect& r1, const FloatRect& r2) {
     return (r1.x < r2.x + r2.w &&
             r1.x + r1.w > r2.x &&
             r1.y < r2.y + r2.h &&
             r1.y + r1.h > r2.y);
+}
+
+inline bool verticalLineIntersectsAABB(float x, float y0, float y1, const FloatRect& rect, float& outY) {
+
+    if (x < rect.x || x > rect.x + rect.w) return false;
+
+    float minY = std::min(y0, y1);
+    float maxY = std::max(y0, y1);
+    if (maxY < rect.y || minY > rect.y + rect.h) return false;
+
+    if (y1 > y0) {
+        outY = rect.y - 0.001f;
+    } else { 
+        outY = rect.y + rect.h + 0.001f;
+    }
+    return true;
 }
 
 class CollisionSystem : public System {
@@ -50,7 +64,7 @@ public:
         quadtree->clear();
         entitiesInsertedIntoQuadtree = 0;
 
-        std::cout << "[CollisionSystem] Populating Quadtree..." << std::endl; // Fixed: removed backslash before quote
+        std::cout << "[CollisionSystem] Populating Quadtree..." << std::endl; 
 
         for (auto const& entity : entities) {
             if (componentManager->hasComponent<TransformComponent>(entity) && 
@@ -77,130 +91,119 @@ public:
             if (componentManager->hasComponent<RigidbodyComponent>(entityA)) {
                 rigidbodyA_ptr = &componentManager->getComponent<RigidbodyComponent>(entityA);
                 if (!rigidbodyA_ptr->isStatic) {
-                    rigidbodyA_ptr->isGrounded = false; // Assume not grounded until a collision proves it
+                    rigidbodyA_ptr->isGrounded = false; 
                 } else {
-                    // Static bodies don't respond to collisions by moving
-                    std::cout << "[CollisionSystem] Entity A: " << entityA << " is static, skipping collision response." << std::endl;
                     continue; 
                 }
             }
 
-            FloatRect float_rectA = {
-                transformA.x + colliderA.offsetX,
-                transformA.y + colliderA.offsetY,
-                colliderA.width,
-                colliderA.height
-            };
-            std::cout << "[CollisionSystem] Processing Entity A: " << entityA << " rectA: (" << float_rectA.x << "," << float_rectA.y << "," << float_rectA.w << "," << float_rectA.h << ")" << std::endl;
+            // Clamp max fall velocity to prevent tunneling (general safety)
+            if (componentManager->hasComponent<VelocityComponent>(entityA)) {
+                auto& velocityA = componentManager->getComponent<VelocityComponent>(entityA);
+                const float MAX_FALL_SPEED = 1200.0f; 
+                if (velocityA.vy > MAX_FALL_SPEED) velocityA.vy = MAX_FALL_SPEED;
+            }
             
             std::vector<Entity> potentialColliders = quadtree->query(transformA); 
-            std::cout << "[CollisionSystem] Entity A: " << entityA << " found " << potentialColliders.size() << " potential colliders from Quadtree." << std::endl;
+            // std::cout << "[CollisionSystem] Entity A: " << entityA << " found " << potentialColliders.size() << " potential colliders from Quadtree." << std::endl; // Optional: keep for debugging
 
-            for (auto const& entityB : potentialColliders) {
-                if (entityA == entityB) continue;
+            if (componentManager->hasComponent<VelocityComponent>(entityA) && rigidbodyA_ptr && !rigidbodyA_ptr->isStatic) {
+                auto& velocityA = componentManager->getComponent<VelocityComponent>(entityA);
 
-                if (!componentManager->hasComponent<TransformComponent>(entityB) || 
-                    !componentManager->hasComponent<ColliderComponent>(entityB)) {
-                    std::cout << "[CollisionSystem] Potential collider Entity B: " << entityB << " skipped (missing Transform or ColliderComponent)." << std::endl; // Fixed: removed backslash before quote
-                    continue;
-                }
+                if (velocityA.vy != 0.0f) { 
+                    float oldY = transformA.y;
+                    float newY = transformA.y + velocityA.vy * deltaTime;
+                    float sweptY = newY; 
+                    bool sweptCollision = false;
 
-                auto& transformB = componentManager->getComponent<TransformComponent>(entityB);
-                auto& colliderB = componentManager->getComponent<ColliderComponent>(entityB); 
-                
-                FloatRect float_rectB = {
-                    transformB.x + colliderB.offsetX,
-                    transformB.y + colliderB.offsetY,
-                    colliderB.width,
-                    colliderB.height
-                };
-                std::cout << "[CollisionSystem]   Checking against Entity B: " << entityB << " rectB: (" << float_rectB.x << "," << float_rectB.y << "," << float_rectB.w << "," << float_rectB.h << ")" << std::endl;
-
-                if (checkFloatAABBCollision(float_rectA, float_rectB)) {
-                    std::cout << "    Collision DETECTED between Entity A: " << entityA << " and Entity B: " << entityB << std::endl;
-
-                    if (colliderA.isTrigger || colliderB.isTrigger) {
-                        std::cout << "    Collision involves a trigger (A:" << colliderA.isTrigger << ", B:" << colliderB.isTrigger << "). Skipping physical response." << std::endl;
-                        continue;
-                    }
-
-                    if (!componentManager->hasComponent<VelocityComponent>(entityA)) {
-                        std::cout << "    Entity A: " << entityA << " missing VelocityComponent for collision response." << std::endl;
-                        continue;
-                    }
-                    auto& velocityA = componentManager->getComponent<VelocityComponent>(entityA);
-
-                    float oldTransformX_A = transformA.x; 
-                    float oldTransformY_A = transformA.y;
-
-                    if (velocityA.vy >= 0) { 
-                        float penetration_y = (float_rectA.y + float_rectA.h) - float_rectB.y;
-                        if (penetration_y > 0) {
-                            bool primarily_vertical_collision = (float_rectA.x < float_rectB.x + float_rectB.w) && (float_rectA.x + float_rectA.w > float_rectB.x);
-                            
-                            if (primarily_vertical_collision) {
-                                std::cout << "      Response Y (down/on): Entity A (" << entityA << ") into B (" << entityB << "). Penetration: " << penetration_y << std::endl;
-                                transformA.y = transformB.y + colliderB.offsetY - colliderA.offsetY - colliderA.height;
-                                velocityA.vy = 0;
-                                if (rigidbodyA_ptr) {
-                                    rigidbodyA_ptr->isGrounded = true;
-                                }
-                                float_rectA.y = transformA.y + colliderA.offsetY; 
-                            }
+                    for (auto const& entityB : potentialColliders) {
+                        if (entityA == entityB) continue;
+                        if (!componentManager->hasComponent<TransformComponent>(entityB) ||
+                            !componentManager->hasComponent<ColliderComponent>(entityB)) continue;
+                        
+                        auto& colliderB_check = componentManager->getComponent<ColliderComponent>(entityB);
+                        if (colliderA.isTrigger || colliderB_check.isTrigger) {
+                            // std::cout << "[CCD] Entity " << entityA << " vs " << entityB << " involves a trigger. Skipping CCD solid response." << std::endl; // Optional debug
+                            continue;
                         }
-                    }
-                    if (velocityA.vy <= 0) { 
-                        if (!(rigidbodyA_ptr && rigidbodyA_ptr->isGrounded && velocityA.vy == 0)) {
-                            float penetration_y = (float_rectB.y + float_rectB.h) - float_rectA.y;
-                            if (penetration_y > 0) {
-                                bool primarily_vertical_collision = (float_rectA.x < float_rectB.x + float_rectB.w) && (float_rectA.x + float_rectA.w > float_rectB.x);
-                                if (primarily_vertical_collision) {
-                                    std::cout << "      Response Y (up): Entity A (" << entityA << ") into B (" << entityB << "). Penetration: " << penetration_y << std::endl;
-                                    transformA.y = transformB.y + colliderB.offsetY + colliderB.height - colliderA.offsetY;
-                                    velocityA.vy = 0;
-                                    float_rectA.y = transformA.y + colliderA.offsetY; 
-                                }
+
+                        auto& transformB = componentManager->getComponent<TransformComponent>(entityB);
+                        auto& colliderB = componentManager->getComponent<ColliderComponent>(entityB);
+                        
+                        FloatRect float_rectB = {
+                            transformB.x + colliderB.offsetX,
+                            transformB.y + colliderB.offsetY,
+                            colliderB.width,
+                            colliderB.height
+                        };
+                        
+                        float collisionResolutionY = 0.0f;
+                        
+                        float sweptPointX = transformA.x + colliderA.offsetX + colliderA.width / 2.0f;
+                        float startSweptY, endSweptY;
+
+                        if (velocityA.vy > 0) {
+                            startSweptY = oldY + colliderA.offsetY + colliderA.height;
+                            endSweptY = newY + colliderA.offsetY + colliderA.height; 
+                            if (verticalLineIntersectsAABB(sweptPointX, startSweptY, endSweptY, float_rectB, collisionResolutionY)) {
+                                sweptY = collisionResolutionY - (colliderA.offsetY + colliderA.height);
+                                sweptCollision = true;
+                                // std::cout << "[CCD] Falling collision: Entity " << entityA << " with " << entityB << ". New Y: " << sweptY << std::endl; // Optional debug
+                                break; 
+                            }
+                        } else if (velocityA.vy < 0) {
+                            startSweptY = oldY + colliderA.offsetY;
+                            endSweptY = newY + colliderA.offsetY; 
+                            if (verticalLineIntersectsAABB(sweptPointX, startSweptY, endSweptY, float_rectB, collisionResolutionY)) {
+                                sweptY = collisionResolutionY - colliderA.offsetY;
+                                sweptCollision = true;
+                                // std::cout << "[CCD] Jumping collision: Entity " << entityA << " with " << entityB << ". New Y: " << sweptY << std::endl; // Optional debug
+                                break;
                             }
                         }
                     }
 
-                    FloatRect current_float_rectA_for_X = {
-                        transformA.x + colliderA.offsetX,
-                        float_rectA.y, 
-                        colliderA.width,
-                        colliderA.height
-                    };
-
-
-                    if (velocityA.vx >= 0) { 
-                        float penetration_x = (current_float_rectA_for_X.x + current_float_rectA_for_X.w) - float_rectB.x;
-                        if (penetration_x > 0) {
-                            bool primarily_horizontal_collision = (current_float_rectA_for_X.y < float_rectB.y + float_rectB.h) && (current_float_rectA_for_X.y + current_float_rectA_for_X.h > float_rectB.y);
-                            if(primarily_horizontal_collision){
-                                std::cout << "      Response X (right): Entity A (" << entityA << ") into B (" << entityB << "). Penetration: " << penetration_x << std::endl;
-                                transformA.x = transformB.x + colliderB.offsetX - colliderA.offsetX - colliderA.width;
-                                velocityA.vx = 0;
-                            }
+                    if (sweptCollision) {
+                        transformA.y = sweptY;
+                        velocityA.vy = 0; 
+                        if (rigidbodyA_ptr) { 
+                           rigidbodyA_ptr->isGrounded = (sweptY < newY && velocityA.vy == 0); 
                         }
-                    }
-                     if (velocityA.vx <= 0) {
-                        if (!(velocityA.vx == 0 && ((current_float_rectA_for_X.x + current_float_rectA_for_X.w) - float_rectB.x) > 0 )) {
-                            float penetration_x = (float_rectB.x + float_rectB.w) - current_float_rectA_for_X.x;
-                            if (penetration_x > 0) {
-                                bool primarily_horizontal_collision = (current_float_rectA_for_X.y < float_rectB.y + float_rectB.h) && (current_float_rectA_for_X.y + current_float_rectA_for_X.h > float_rectB.y);
-                                if(primarily_horizontal_collision){
-                                    std::cout << "      Response X (left): Entity A (" << entityA << ") into B (" << entityB << "). Penetration: " << penetration_x << std::endl;
-                                    transformA.x = transformB.x + colliderB.offsetX + colliderB.width - colliderA.offsetX; 
-                                    velocityA.vx = 0;
-                                }
-                            }
-                        }
-                    }
-
-                    if (oldTransformX_A != transformA.x || oldTransformY_A != transformA.y) {
-                        std::cout << "      Position CHANGED for Entity A (" << entityA << ") from (" << oldTransformX_A << "," << oldTransformY_A << ") to (" << transformA.x << "," << transformA.y << ")" << std::endl;
                     } else {
-                        std::cout << "      Position NOT CHANGED for Entity A (" << entityA << ") despite detected collision (may be fine if velocity was already zeroed or minor overlap)." << std::endl;
+                        transformA.y = newY;
+                        if (rigidbodyA_ptr) {
+                            rigidbodyA_ptr->isGrounded = false;
+                        }
+                    }
+                } else {
+                    if (rigidbodyA_ptr) {
+                        bool currentlyOverlappingGround = false;
+                        FloatRect currentRectA = {
+                            transformA.x + colliderA.offsetX,
+                            transformA.y + colliderA.offsetY + 1.0f,
+                            colliderA.width,
+                            colliderA.height
+                        };
+                        for (auto const& entityB : potentialColliders) {
+                             if (entityA == entityB) continue;
+                             if (!componentManager->hasComponent<TransformComponent>(entityB) ||
+                                 !componentManager->hasComponent<ColliderComponent>(entityB)) continue;
+                             auto& colliderB_check = componentManager->getComponent<ColliderComponent>(entityB);
+                             if (colliderA.isTrigger || colliderB_check.isTrigger) continue;
+
+                             auto& transformB = componentManager->getComponent<TransformComponent>(entityB);
+                             FloatRect float_rectB = {
+                                 transformB.x + colliderB_check.offsetX,
+                                 transformB.y + colliderB_check.offsetY,
+                                 colliderB_check.width,
+                                 colliderB_check.height
+                             };
+                             if(checkFloatAABBCollision(currentRectA, float_rectB)){
+                                currentlyOverlappingGround = true;
+                                break;
+                             }
+                        }
+                        rigidbodyA_ptr->isGrounded = currentlyOverlappingGround;
                     }
                 }
             }
