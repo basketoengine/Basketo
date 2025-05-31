@@ -33,8 +33,10 @@ function update(entity, deltaTime)
 
     if a_pressed then
         new_vx = -playerSpeed
+        SetEntityFlipHorizontal(entity, true)
     elseif d_pressed then
         new_vx = playerSpeed
+        SetEntityFlipHorizontal(entity, false)
     else
         new_vx = 0
     end

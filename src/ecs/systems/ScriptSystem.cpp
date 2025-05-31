@@ -296,4 +296,11 @@ void ScriptSystem::registerEntityAPI() {
         }
         return false;
     });
+
+    registerFunction("SetEntityFlipHorizontal", [this](Entity entity, bool flip) {
+        if (componentManager->hasComponent<AnimationComponent>(entity)) {
+            auto& animComp = componentManager->getComponent<AnimationComponent>(entity);
+            animComp.flipHorizontal = flip;
+        }
+    });
 }

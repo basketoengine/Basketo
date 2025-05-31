@@ -53,6 +53,8 @@ void AnimationSystem::update(float deltaTime, EntityManager& entityManager, Comp
                 if (animComp.flipVertical) {
                     spriteComp.flip = (SDL_RendererFlip)(spriteComp.flip | SDL_FLIP_VERTICAL);
                 }
+
+                std::cout << "[AnimationSystem] Entity " << entity << " flipHorizontal: " << animComp.flipHorizontal << " spriteComp.flip: " << spriteComp.flip << std::endl;
             }
         }
     }

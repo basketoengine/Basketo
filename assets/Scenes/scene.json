@@ -183,7 +183,7 @@
                     "vy": 0.0
                 }
             },
-            "id_saved": 2
+            "id_saved": 0
         },
         {
             "components": {
@@ -218,7 +218,7 @@
                     "z_index": 0
                 }
             },
-            "id_saved": 3
+            "id_saved": 1
         }
     ]
 }

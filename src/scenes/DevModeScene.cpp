@@ -413,7 +413,7 @@ void DevModeScene::render() {
             destRect.h = (int)(transform.height * currentRenderZoom);                      
             SDL_Rect* srcRectPtr = sprite.useSrcRect ? &sprite.srcRect : nullptr;
             SDL_Point center = { (int)(transform.width * currentRenderZoom / 2), (int)(transform.height * currentRenderZoom / 2) }; 
-            SDL_RenderCopyEx(renderer, texture, srcRectPtr, &destRect, transform.rotation, &center, SDL_FLIP_NONE);
+            SDL_RenderCopyEx(renderer, texture, srcRectPtr, &destRect, transform.rotation, &center, sprite.flip);
         }
 
         if (!isPlaying) { 
