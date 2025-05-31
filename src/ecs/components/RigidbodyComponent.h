@@ -8,7 +8,6 @@ struct RigidbodyComponent {
     float gravityScale = 1.0f;
     float drag = 0.0f; 
     bool isKinematic = false; 
-    bool isGrounded = false;
 };
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(RigidbodyComponent, mass, useGravity, isStatic, gravityScale, drag, isKinematic, isGrounded) 
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(RigidbodyComponent, mass, useGravity, isStatic, gravityScale, drag, isKinematic)

@@ -90,14 +90,15 @@ public:
             RigidbodyComponent* rigidbodyA_ptr = nullptr;
             if (componentManager->hasComponent<RigidbodyComponent>(entityA)) {
                 rigidbodyA_ptr = &componentManager->getComponent<RigidbodyComponent>(entityA);
-                if (!rigidbodyA_ptr->isStatic) {
-                    rigidbodyA_ptr->isGrounded = false; 
-                } else {
+                if (rigidbodyA_ptr->isStatic) { 
                     continue; 
                 }
             }
+            if (componentManager->hasComponent<ColliderComponent>(entityA)) {
+                auto& colliderA_comp = componentManager->getComponent<ColliderComponent>(entityA);
+                colliderA_comp.contacts.clear();
+            }
 
-            // Clamp max fall velocity to prevent tunneling (general safety)
             if (componentManager->hasComponent<VelocityComponent>(entityA)) {
                 auto& velocityA = componentManager->getComponent<VelocityComponent>(entityA);
                 const float MAX_FALL_SPEED = 1200.0f; 
@@ -115,6 +116,7 @@ public:
                     float newY = transformA.y + velocityA.vy * deltaTime;
                     float sweptY = newY; 
                     bool sweptCollision = false;
+                    Entity entityB_swept_collider = NO_ENTITY;
 
                     for (auto const& entityB : potentialColliders) {
                         if (entityA == entityB) continue;
@@ -148,6 +150,7 @@ public:
                             if (verticalLineIntersectsAABB(sweptPointX, startSweptY, endSweptY, float_rectB, collisionResolutionY)) {
                                 sweptY = collisionResolutionY - (colliderA.offsetY + colliderA.height);
                                 sweptCollision = true;
+                                entityB_swept_collider = entityB;
                                 break; 
                             }
                         } else if (velocityA.vy < 0) { 
@@ -157,6 +160,7 @@ public:
 
                                 sweptY = collisionResolutionY - colliderA.offsetY;
                                 sweptCollision = true;
+                                entityB_swept_collider = entityB;
                                 break;
                             }
                         }
@@ -166,26 +170,33 @@ public:
                         float originalVy = velocityA.vy;
                         transformA.y = sweptY;
                         velocityA.vy = 0; 
-                        if (rigidbodyA_ptr) {
-                           if (originalVy > 0) {
-                               rigidbodyA_ptr->isGrounded = true;
-                               std::cout << "[CCD] Entity " << entityA << " SET TO GROUNDED (downward collision). OriginalVy: " << originalVy << ", SweptY: " << sweptY << std::endl;
-                           } else {
-                               std::cout << "[CCD] Entity " << entityA << " COLLIDED (not a grounding downward collision). OriginalVy: " << originalVy << ", SweptY: " << sweptY << std::endl;
-                           }
+
+                        if (componentManager->hasComponent<ColliderComponent>(entityA) && entityB_swept_collider != NO_ENTITY) {
+                            auto& colliderA_comp = componentManager->getComponent<ColliderComponent>(entityA);
+                            Vec2D normal = {0, 0};
+                            if (originalVy > 0) normal.y = -1;
+                            else if (originalVy < 0) normal.y = 1;
+                            colliderA_comp.contacts.push_back({entityB_swept_collider, normal});
                         }
+                        if (componentManager->hasComponent<ColliderComponent>(entityB_swept_collider)) {
+                             auto& colliderB_comp = componentManager->getComponent<ColliderComponent>(entityB_swept_collider);
+                             Vec2D normal = {0, 0};
+                             if (originalVy > 0) normal.y = 1;
+                             else if (originalVy < 0) normal.y = -1;
+                             colliderB_comp.contacts.push_back({entityA, normal});
+                        }
+                       
+                        std::cout << "[CCD] Entity " << entityA << " collided with " << entityB_swept_collider << ". SweptY: " << sweptY << ", OriginalVy: " << originalVy << std::endl;
+
                     } else {
                         transformA.y = newY;
-                        std::cout << "[CCD] Entity " << entityA << " NO swept collision. Moved to newY: " << newY << ". isGrounded remains false (from loop start)." << std::endl;
                     }
-                } else {
-                    if (rigidbodyA_ptr) {
-                        bool currentlyOverlappingGround = false;
+                } else { 
                         FloatRect checkRectA = {
                             transformA.x + colliderA.offsetX,
                             transformA.y + colliderA.offsetY + 0.5f,
                             colliderA.width,
-                            colliderA.height - 0.5f
+                            colliderA.height - 0.5f 
                         };
                         if (colliderA.height <= 0.5f) {
                             checkRectA.h = 0.1f;
@@ -195,34 +206,31 @@ public:
                              if (entityA == entityB) continue;
                              if (!componentManager->hasComponent<TransformComponent>(entityB) ||
                                  !componentManager->hasComponent<ColliderComponent>(entityB)) continue;
-                             auto& colliderB_check = componentManager->getComponent<ColliderComponent>(entityB);
-                             if (colliderA.isTrigger || colliderB_check.isTrigger) continue;
+                             
+                             auto& tB = componentManager->getComponent<TransformComponent>(entityB);
+                             auto& cB = componentManager->getComponent<ColliderComponent>(entityB);
+                             if (colliderA.isTrigger || cB.isTrigger) continue;
 
-                             auto& transformB = componentManager->getComponent<TransformComponent>(entityB);
                              FloatRect float_rectB = {
-                                 transformB.x + colliderB_check.offsetX,
-                                 transformB.y + colliderB_check.offsetY,
-                                 colliderB_check.width,
-                                 colliderB_check.height
+                                 tB.x + cB.offsetX,
+                                 tB.y + cB.offsetY,
+                                 cB.width,
+                                 cB.height
                              };
                              if(checkFloatAABBCollision(checkRectA, float_rectB)){
-                                currentlyOverlappingGround = true;
+                                if (componentManager->hasComponent<ColliderComponent>(entityA)) {
+                                    auto& colliderA_comp = componentManager->getComponent<ColliderComponent>(entityA);
+                                    colliderA_comp.contacts.push_back({entityB, {0, -1}}); 
+                                }
+                                if (componentManager->hasComponent<ColliderComponent>(entityB)) {
+                                    auto& colliderB_comp = componentManager->getComponent<ColliderComponent>(entityB);
+                                    colliderB_comp.contacts.push_back({entityA, {0, 1}});
+                                }
+                                std::cout << "[Discrete Check] Entity " << entityA << " in resting contact with " << entityB << std::endl;
+                               
                                 break;
                              }
                         }
-                        
-                        if (currentlyOverlappingGround) {
-                            rigidbodyA_ptr->isGrounded = true;
-                            std::cout << "[Discrete Ground Check] Entity " << entityA << " SET TO GROUNDED by overlap (vy=0)." << std::endl;
-                        } else {
-                            if (rigidbodyA_ptr->isGrounded) {
-                                std::cout << "[Discrete Ground Check] Entity " << entityA << " was GROUNDED by CCD, but discrete check says NO overlap. isGrounded might be set false if not already." << std::endl;
-                            }
-                            if (!rigidbodyA_ptr->isGrounded) {
-                                std::cout << "[Discrete Ground Check] Entity " << entityA << " NOT grounded by overlap (vy=0). isGrounded remains false." << std::endl;
-                            }
-                        }
-                    }
                 }
             }
         }

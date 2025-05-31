@@ -14,6 +14,12 @@ struct Vec2D {
     NLOHMANN_DEFINE_TYPE_INTRUSIVE(Vec2D, x, y)
 };
 
+struct CollisionContact {
+    Entity otherEntity = NO_ENTITY;
+    Vec2D normal;
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE(CollisionContact, otherEntity, normal)
+};
+
 struct ColliderComponent {
 
     float width = 0.0f;
@@ -26,6 +32,8 @@ struct ColliderComponent {
     std::string type = "aabb";
     bool isTrigger = false; 
 
+    std::vector<CollisionContact> contacts;
+
     ColliderComponent() = default;
 
     ColliderComponent(float w, float h, float offX = 0.0f, float offY = 0.0f, bool trigger = false)
@@ -36,5 +44,5 @@ struct ColliderComponent {
 
     }
 
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE(ColliderComponent, width, height, offsetX, offsetY, vertices, type, isTrigger)
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE(ColliderComponent, width, height, offsetX, offsetY, vertices, type, isTrigger, contacts) // Added 'contacts'
 };

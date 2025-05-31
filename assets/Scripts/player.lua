@@ -1,5 +1,5 @@
 local playerSpeed = 150.0 
-local jumpForce = 400.0 -- Adjust this value for jump height
+local jumpForce = 400.0 
 
 function init(entity)
     Log("Player script initialized for entity: " .. tostring(entity))
@@ -12,8 +12,6 @@ function init(entity)
 end
 
 function update(entity, deltaTime)
-    -- Log("Player Lua update function called. Entity: " .. tostring(entity) .. ", DeltaTime: " .. tostring(deltaTime)) -- Keep this commented unless deep debugging
-
     local current_vx, current_vy = 0, 0
     if GetEntityVelocity then
         local vel = GetEntityVelocity(entity)
@@ -21,8 +19,7 @@ function update(entity, deltaTime)
             current_vx = vel[1]
             current_vy = vel[2]
         else
-            -- GetEntityVelocity might return nil if component is missing, error already logged by C++ side
-            -- LogError("LUA: GetEntityVelocity(entity) returned nil.") 
+           
         end
     else
         LogError("LUA: GetEntityVelocity function not available. Vertical movement physics might be incorrect.")
@@ -43,35 +40,60 @@ function update(entity, deltaTime)
     end
     
     local grounded = false
-    if IsEntityGrounded then
-        grounded = IsEntityGrounded(entity)
-    else
-        LogError("LUA: IsEntityGrounded function not available. Jump will be disabled.")
+    local contacts = GetCollisionContacts(entity)
+    if contacts then
+        for i, contact in ipairs(contacts) do
+           
+            if contact.normalY and contact.normalY < -0.5 then 
+                grounded = true
+                new_vy = 0
+                break
+            end
+        end
     end
 
     local w_key_for_jump = Input.isKeyDown("W")
     local space_key_for_jump = Input.isKeyDown("Space")
     local jump_key_pressed = w_key_for_jump or space_key_for_jump
 
-    -- More detailed log for jump diagnosis
-    Log(string.format("Player Update: W_pressed=%s, Space_pressed=%s, JumpKeyActive=%s, Grounded=%s, current_vy=%.2f", 
-        tostring(w_key_for_jump), tostring(space_key_for_jump), tostring(jump_key_pressed), tostring(grounded), current_vy or 0))
-
     if jump_key_pressed and grounded then
         new_vy = -jumpForce
         Log("Player Jumped! Set new_vy to: " .. tostring(new_vy))
     end
-
+    Log("is grounded: " .. tostring(grounded))
+  
     SetEntityVelocity(entity, new_vx, new_vy)
-    -- Log(string.format("Lua set velocity: vx=%.2f, vy=%.2f", new_vx, new_vy)) -- Keep commented unless deep debugging
+    Log("HasEntityComponent: " .. tostring(HasEntityComponent(entity, "AnimationComponent")))
+    if HasEntityComponent(entity, "AnimationComponent") then
+        local current_anim_name = GetEntityAnimation(entity) 
+        local target_anim_name = "idle" 
+        Log("LUA: Current animation name: " .. tostring(current_anim_name))
+        if grounded then
+            Log("LUA: Player is grounded.")
+            if new_vx ~= 0 then
+                Log("LUA: Player is moving on the ground.")
+                target_anim_name = "walk"
+            end
+           
+        else 
+           
+            if new_vx ~= 0 then
+                target_anim_name = "walk"
+            else
+                target_anim_name = "idle"
+            end
+        end
 
-    -- Temporarily comment out SetEntityAnimation calls to prevent potential crash
-    -- if HasEntityComponent(entity, "AnimationComponent") then -- Ideal check
-    --    if vx ~= 0 or vy ~= 0 then
-    --        SetEntityAnimation(entity, "walk")
-    --    else
-    --        SetEntityAnimation(entity, "idle")
-    --    end
-    -- end
+        Log(string.format("LUA: Player anim state. Current: '%s', Target: '%s', Grounded: %s, vx: %.2f",
+            current_anim_name or "nil",
+            target_anim_name,
+            tostring(grounded),
+            new_vx))
+
+        if current_anim_name ~= target_anim_name and target_anim_name ~= "" then
+            Log(string.format("LUA: Attempting to set animation from '%s' to '%s'", current_anim_name or "nil", target_anim_name))
+            SetEntityAnimation(entity, target_anim_name)
+        end
+    end
 end
 

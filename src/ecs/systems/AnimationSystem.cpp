@@ -5,7 +5,7 @@
 #include "../components/SpriteComponent.h"
 
 void AnimationSystem::update(float deltaTime, EntityManager& entityManager, ComponentManager& componentManager) {
-    for (Entity entity : entityManager.getActiveEntities()) { // Or however you get relevant entities
+    for (Entity entity : entityManager.getActiveEntities()) { 
         if (componentManager.hasComponent<AnimationComponent>(entity) && componentManager.hasComponent<SpriteComponent>(entity)) {
             auto& animComp = componentManager.getComponent<AnimationComponent>(entity);
             auto& spriteComp = componentManager.getComponent<SpriteComponent>(entity);
@@ -19,10 +19,15 @@ void AnimationSystem::update(float deltaTime, EntityManager& entityManager, Comp
                 continue;
             }
 
-            animComp.currentFrameTime += deltaTime;
+            if (animComp.currentFrameIndex == 0 && animComp.currentFrameTime < (deltaTime + 0.001f)) { // Adding a small epsilon for float comparison
+                 std::cout << "[AnimationSystem] Entity " << entity 
+                           << ": Processing animation '" << animComp.currentAnimationName 
+                           << "' (Frame 0). TextureID: '" << currentSeq.textureId << "'" << std::endl;
+            }
 
-            if (animComp.currentFrameTime >= currentSeq.frames[animComp.currentFrameIndex].duration) {
-                animComp.currentFrameTime -= currentSeq.frames[animComp.currentFrameIndex].duration; 
+            animComp.currentFrameTime += deltaTime;
+            while (animComp.isPlaying && animComp.currentFrameTime >= currentSeq.frames[animComp.currentFrameIndex].duration) {
+                animComp.currentFrameTime -= currentSeq.frames[animComp.currentFrameIndex].duration;
                 animComp.currentFrameIndex++;
 
                 if (animComp.currentFrameIndex >= currentSeq.frames.size()) {
@@ -30,7 +35,8 @@ void AnimationSystem::update(float deltaTime, EntityManager& entityManager, Comp
                         animComp.currentFrameIndex = 0;
                     } else {
                         animComp.isPlaying = false;
-                        animComp.currentFrameIndex = currentSeq.frames.size() - 1; 
+                        animComp.currentFrameIndex = currentSeq.frames.size() - 1;
+                        break;
                     }
                 }
             }

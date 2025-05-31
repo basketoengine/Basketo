@@ -5,6 +5,8 @@
 #include "../components/ScriptComponent.h"
 #include "../components/VelocityComponent.h"
 #include "../components/RigidbodyComponent.h"
+#include "../components/AnimationComponent.h"
+#include "../components/ColliderComponent.h"
 #include "../../InputManager.h" 
 #include <iostream>
 #include <fstream>
@@ -177,9 +179,121 @@ void ScriptSystem::registerEntityAPI() {
     registerFunction("IsEntityGrounded", [this](Entity entity) -> bool {
         if (componentManager->hasComponent<RigidbodyComponent>(entity)) {
             auto& rigidbody = componentManager->getComponent<RigidbodyComponent>(entity);
-            return rigidbody.isGrounded;
+            // return rigidbody.isGrounded; // Removed direct isGrounded check
+            // This function is now deprecated in favor of GetCollisionContacts
+            if (errorLogCallback) errorLogCallback("[LUA WARNING] IsEntityGrounded is deprecated. Use GetCollisionContacts instead.");
         }
-        std::cerr << "[LUA ERROR] IsEntityGrounded: Entity " << entity << " does not have a RigidbodyComponent." << std::endl;
+        // std::cerr << "[LUA ERROR] IsEntityGrounded: Entity " << entity << " does not have a RigidbodyComponent." << std::endl;
+        // if (errorLogCallback) errorLogCallback("[LUA ERROR] IsEntityGrounded: Entity " + std::to_string(entity) + " does not have a RigidbodyComponent.");
         return false; 
+    });
+
+    registerFunction("SetEntityAnimation", [this](Entity entity, const std::string& animationName, sol::optional<bool> forceRestartOpt) {
+        if (componentManager->hasComponent<AnimationComponent>(entity)) {
+            auto& animComp = componentManager->getComponent<AnimationComponent>(entity);
+            bool forceRestart = forceRestartOpt.value_or(false); // Default to false if not provided
+            if (!animComp.play(animationName, forceRestart)) {
+                if (errorLogCallback) {
+                    errorLogCallback("[LUA ERROR] SetEntityAnimation: Animation '" + animationName + "' not found or failed to play for entity " + std::to_string(entity));
+                }
+            }
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] SetEntityAnimation: Entity " + std::to_string(entity) + " does not have an AnimationComponent.");
+            }
+        }
+    });
+
+    registerFunction("GetEntityAnimation", [this](Entity entity) -> sol::object {
+        if (componentManager->hasComponent<AnimationComponent>(entity)) {
+            auto& animComp = componentManager->getComponent<AnimationComponent>(entity);
+            return sol::make_object(lua, animComp.currentAnimationName);
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] GetEntityAnimation: Entity " + std::to_string(entity) + " does not have an AnimationComponent.");
+            }
+        }
+        return sol::nil;
+    });
+
+    registerFunction("IsAnimationPlaying", [this](Entity entity, sol::optional<std::string> animationNameOpt) -> bool {
+        if (componentManager->hasComponent<AnimationComponent>(entity)) {
+            auto& animComp = componentManager->getComponent<AnimationComponent>(entity);
+            if (animationNameOpt.has_value()) {
+                return animComp.isPlaying && animComp.currentAnimationName == animationNameOpt.value();
+            }
+            return animComp.isPlaying;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] IsAnimationPlaying: Entity " + std::to_string(entity) + " does not have an AnimationComponent.");
+            }
+        }
+        return false;
+    });
+
+    registerFunction("PlayAnimation", [this](Entity entity, const std::string& animationName) {
+        if (componentManager->hasComponent<AnimationComponent>(entity)) {
+            auto& animComp = componentManager->getComponent<AnimationComponent>(entity);
+            if (!animComp.play(animationName, true)) { 
+                 if (errorLogCallback) {
+                    errorLogCallback("[LUA ERROR] PlayAnimation: Animation '" + animationName + "' not found or failed to play for entity " + std::to_string(entity));
+                }
+            }
+        } else {
+             if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] PlayAnimation: Entity " + std::to_string(entity) + " does not have an AnimationComponent.");
+            }
+        }
+    });
+
+    registerFunction("GetCollisionContacts", [this](Entity entity) -> sol::object {
+        if (componentManager->hasComponent<ColliderComponent>(entity)) {
+            auto& collider = componentManager->getComponent<ColliderComponent>(entity);
+            sol::table contacts_table = lua.create_table();
+            int i = 1;
+            for (const auto& contact : collider.contacts) {
+                sol::table contact_table = lua.create_table();
+                contact_table["otherEntity"] = contact.otherEntity;
+                contact_table["normalX"] = contact.normal.x;
+                contact_table["normalY"] = contact.normal.y;
+                contacts_table[i++] = contact_table;
+            }
+            return contacts_table;
+        }
+        if (errorLogCallback) {
+            errorLogCallback("[LUA ERROR] GetCollisionContacts: Entity " + std::to_string(entity) + " does not have a ColliderComponent.");
+        }
+        return sol::nil; 
+    });
+
+    registerFunction("HasEntityComponent", [this](Entity entity, const std::string& componentName) -> bool {
+        if (!componentManager) {
+            if (errorLogCallback) errorLogCallback("[LUA ERROR] HasEntityComponent: ComponentManager is null.");
+            return false;
+        }
+
+        // Add checks for each component type you want to expose
+        if (componentName == "TransformComponent") {
+            return componentManager->hasComponent<TransformComponent>(entity);
+        } else if (componentName == "VelocityComponent") {
+            return componentManager->hasComponent<VelocityComponent>(entity);
+        } else if (componentName == "SpriteComponent") {
+            if (errorLogCallback) errorLogCallback("[LUA WARNING] HasEntityComponent: SpriteComponent check not fully implemented in C++ example.");
+            return false; // Placeholder
+        } else if (componentName == "AnimationComponent") {
+            return componentManager->hasComponent<AnimationComponent>(entity);
+        } else if (componentName == "RigidbodyComponent") {
+            return componentManager->hasComponent<RigidbodyComponent>(entity);
+        } else if (componentName == "ScriptComponent") {
+            return componentManager->hasComponent<ScriptComponent>(entity);
+        } else if (componentName == "ColliderComponent") {
+            return componentManager->hasComponent<ColliderComponent>(entity);
+        }
+        // Add other components as needed
+
+        if (errorLogCallback) {
+            errorLogCallback("[LUA WARNING] HasEntityComponent: Unknown component name '\" + componentName + \"' for entity \" + std::to_string(entity)");
+        }
+        return false;
     });
 }

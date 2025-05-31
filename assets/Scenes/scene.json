@@ -2,19 +2,154 @@
     "entities": [
         {
             "components": {
+                "AnimationComponent": {
+                    "animations": {
+                        "falling": {
+                            "frames": [
+                                {
+                                    "duration": 0.10000000149011612,
+                                    "sourceRect": {
+                                        "h": 220,
+                                        "w": 130,
+                                        "x": 0,
+                                        "y": 250
+                                    }
+                                }
+                            ],
+                            "loop": false,
+                            "name": "falling",
+                            "textureId": "mario.png"
+                        },
+                        "idle": {
+                            "frames": [
+                                {
+                                    "duration": 0.15000000596046448,
+                                    "sourceRect": {
+                                        "h": 210,
+                                        "w": 120,
+                                        "x": 0,
+                                        "y": 0
+                                    }
+                                }
+                            ],
+                            "loop": true,
+                            "name": "idle",
+                            "textureId": "mario.png"
+                        },
+                        "jumping": {
+                            "frames": [
+                                {
+                                    "duration": 0.10000000149011612,
+                                    "sourceRect": {
+                                        "h": 220,
+                                        "w": 130,
+                                        "x": 140,
+                                        "y": 250
+                                    }
+                                },
+                                {
+                                    "duration": 0.10000000149011612,
+                                    "sourceRect": {
+                                        "h": 220,
+                                        "w": 130,
+                                        "x": 280,
+                                        "y": 250
+                                    }
+                                }
+                            ],
+                            "loop": false,
+                            "name": "jumping",
+                            "textureId": "mario.png"
+                        },
+                        "running": {
+                            "frames": [
+                                {
+                                    "duration": 0.10000000149011612,
+                                    "sourceRect": {
+                                        "h": 210,
+                                        "w": 130,
+                                        "x": 3,
+                                        "y": 11
+                                    }
+                                },
+                                {
+                                    "duration": 0.10000000149011612,
+                                    "sourceRect": {
+                                        "h": 220,
+                                        "w": 150,
+                                        "x": 182,
+                                        "y": 1
+                                    }
+                                },
+                                {
+                                    "duration": 0.10000000149011612,
+                                    "sourceRect": {
+                                        "h": 220,
+                                        "w": 130,
+                                        "x": 363,
+                                        "y": 1
+                                    }
+                                }
+                            ],
+                            "loop": true,
+                            "name": "running",
+                            "textureId": "mario.png"
+                        },
+                        "walk": {
+                            "frames": [
+                                {
+                                    "duration": 0.10000000149011612,
+                                    "sourceRect": {
+                                        "h": 210,
+                                        "w": 130,
+                                        "x": 3,
+                                        "y": 11
+                                    }
+                                },
+                                {
+                                    "duration": 0.10000000149011612,
+                                    "sourceRect": {
+                                        "h": 220,
+                                        "w": 150,
+                                        "x": 182,
+                                        "y": 1
+                                    }
+                                },
+                                {
+                                    "duration": 0.10000000149011612,
+                                    "sourceRect": {
+                                        "h": 220,
+                                        "w": 130,
+                                        "x": 363,
+                                        "y": 1
+                                    }
+                                }
+                            ],
+                            "loop": true,
+                            "name": "walk",
+                            "textureId": "mario.png"
+                        }
+                    },
+                    "currentAnimationName": "idle",
+                    "currentFrameIndex": 0,
+                    "currentFrameTime": 0.0,
+                    "flipHorizontal": false,
+                    "flipVertical": false,
+                    "isPlaying": true
+                },
                 "ColliderComponent": {
-                    "height": 30.0,
+                    "contacts": [],
+                    "height": 32.0,
                     "isTrigger": false,
                     "offsetX": 0.0,
                     "offsetY": 0.0,
                     "type": "aabb",
                     "vertices": [],
-                    "width": 21.0
+                    "width": 18.0
                 },
                 "RigidbodyComponent": {
                     "drag": 0.0,
                     "gravityScale": 2.0,
-                    "isGrounded": true,
                     "isKinematic": false,
                     "isStatic": false,
                     "mass": 1.0,
@@ -39,8 +174,8 @@
                     "height": 33.0,
                     "rotation": 0.0,
                     "width": 19.0,
-                    "x": 193.9994659423828,
-                    "y": 178.7989959716797,
+                    "x": 192.0,
+                    "y": 160.0,
                     "z_index": 2
                 },
                 "VelocityComponent": {
@@ -53,13 +188,14 @@
         {
             "components": {
                 "ColliderComponent": {
-                    "height": 32.0,
+                    "contacts": [],
+                    "height": 115.0,
                     "isTrigger": false,
                     "offsetX": 0.0,
-                    "offsetY": 208.8000030517578,
+                    "offsetY": 209.10000610351563,
                     "type": "aabb",
                     "vertices": [],
-                    "width": 576.0
+                    "width": 884.0
                 },
                 "SpriteComponent": {
                     "flip": 0,
