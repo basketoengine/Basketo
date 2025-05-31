@@ -148,42 +148,49 @@ public:
                             if (verticalLineIntersectsAABB(sweptPointX, startSweptY, endSweptY, float_rectB, collisionResolutionY)) {
                                 sweptY = collisionResolutionY - (colliderA.offsetY + colliderA.height);
                                 sweptCollision = true;
-                                // std::cout << "[CCD] Falling collision: Entity " << entityA << " with " << entityB << ". New Y: " << sweptY << std::endl; // Optional debug
                                 break; 
                             }
-                        } else if (velocityA.vy < 0) {
+                        } else if (velocityA.vy < 0) { 
                             startSweptY = oldY + colliderA.offsetY;
-                            endSweptY = newY + colliderA.offsetY; 
+                            endSweptY = newY + colliderA.offsetY;
                             if (verticalLineIntersectsAABB(sweptPointX, startSweptY, endSweptY, float_rectB, collisionResolutionY)) {
+
                                 sweptY = collisionResolutionY - colliderA.offsetY;
                                 sweptCollision = true;
-                                // std::cout << "[CCD] Jumping collision: Entity " << entityA << " with " << entityB << ". New Y: " << sweptY << std::endl; // Optional debug
                                 break;
                             }
                         }
                     }
 
                     if (sweptCollision) {
+                        float originalVy = velocityA.vy;
                         transformA.y = sweptY;
                         velocityA.vy = 0; 
-                        if (rigidbodyA_ptr) { 
-                           rigidbodyA_ptr->isGrounded = (sweptY < newY && velocityA.vy == 0); 
+                        if (rigidbodyA_ptr) {
+                           if (originalVy > 0) {
+                               rigidbodyA_ptr->isGrounded = true;
+                               std::cout << "[CCD] Entity " << entityA << " SET TO GROUNDED (downward collision). OriginalVy: " << originalVy << ", SweptY: " << sweptY << std::endl;
+                           } else {
+                               std::cout << "[CCD] Entity " << entityA << " COLLIDED (not a grounding downward collision). OriginalVy: " << originalVy << ", SweptY: " << sweptY << std::endl;
+                           }
                         }
                     } else {
                         transformA.y = newY;
-                        if (rigidbodyA_ptr) {
-                            rigidbodyA_ptr->isGrounded = false;
-                        }
+                        std::cout << "[CCD] Entity " << entityA << " NO swept collision. Moved to newY: " << newY << ". isGrounded remains false (from loop start)." << std::endl;
                     }
                 } else {
                     if (rigidbodyA_ptr) {
                         bool currentlyOverlappingGround = false;
-                        FloatRect currentRectA = {
+                        FloatRect checkRectA = {
                             transformA.x + colliderA.offsetX,
-                            transformA.y + colliderA.offsetY + 1.0f,
+                            transformA.y + colliderA.offsetY + 0.5f,
                             colliderA.width,
-                            colliderA.height
+                            colliderA.height - 0.5f
                         };
+                        if (colliderA.height <= 0.5f) {
+                            checkRectA.h = 0.1f;
+                        }
+
                         for (auto const& entityB : potentialColliders) {
                              if (entityA == entityB) continue;
                              if (!componentManager->hasComponent<TransformComponent>(entityB) ||
@@ -198,12 +205,23 @@ public:
                                  colliderB_check.width,
                                  colliderB_check.height
                              };
-                             if(checkFloatAABBCollision(currentRectA, float_rectB)){
+                             if(checkFloatAABBCollision(checkRectA, float_rectB)){
                                 currentlyOverlappingGround = true;
                                 break;
                              }
                         }
-                        rigidbodyA_ptr->isGrounded = currentlyOverlappingGround;
+                        
+                        if (currentlyOverlappingGround) {
+                            rigidbodyA_ptr->isGrounded = true;
+                            std::cout << "[Discrete Ground Check] Entity " << entityA << " SET TO GROUNDED by overlap (vy=0)." << std::endl;
+                        } else {
+                            if (rigidbodyA_ptr->isGrounded) {
+                                std::cout << "[Discrete Ground Check] Entity " << entityA << " was GROUNDED by CCD, but discrete check says NO overlap. isGrounded might be set false if not already." << std::endl;
+                            }
+                            if (!rigidbodyA_ptr->isGrounded) {
+                                std::cout << "[Discrete Ground Check] Entity " << entityA << " NOT grounded by overlap (vy=0). isGrounded remains false." << std::endl;
+                            }
+                        }
                     }
                 }
             }

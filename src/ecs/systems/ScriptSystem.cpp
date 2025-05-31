@@ -4,6 +4,7 @@
 #include "../components/TransformComponent.h"
 #include "../components/ScriptComponent.h"
 #include "../components/VelocityComponent.h"
+#include "../components/RigidbodyComponent.h"
 #include "../../InputManager.h" 
 #include <iostream>
 #include <fstream>
@@ -94,14 +95,11 @@ void ScriptSystem::registerCoreAPI() {
     lua.new_usertype<InputManager>("Input",
         sol::no_constructor,
         "isKeyDown", [](const std::string& keyName) { 
-            // Convert key name string to SDL_Scancode for generic key checking
-            // This is a simplified example. You might need a more robust mapping.
             SDL_Scancode scancode = SDL_GetScancodeFromName(keyName.c_str());
             if (scancode != SDL_SCANCODE_UNKNOWN) {
                 const Uint8* keyboardState = SDL_GetKeyboardState(nullptr);
                 return keyboardState && keyboardState[scancode];
             }
-            // Fallback for existing action-based checks if direct scancode lookup fails or for specific actions
             if (keyName == "W") return InputManager::getInstance().isActionPressed("MoveUp");
             if (keyName == "A") return InputManager::getInstance().isActionPressed("MoveLeft");
             if (keyName == "S") return InputManager::getInstance().isActionPressed("MoveDown");
@@ -165,5 +163,23 @@ void ScriptSystem::registerEntityAPI() {
             velocity.vx = vx;
             velocity.vy = vy;
         }
+    });
+
+    registerFunction("GetEntityVelocity", [this](Entity entity) -> sol::object {
+        if (componentManager->hasComponent<VelocityComponent>(entity)) {
+            auto& velocity = componentManager->getComponent<VelocityComponent>(entity);
+            return sol::make_object(lua, sol::as_table(std::vector<float>{velocity.vx, velocity.vy}));
+        }
+        std::cerr << "[LUA ERROR] GetEntityVelocity: Entity " << entity << " does not have a VelocityComponent." << std::endl;
+        return sol::nil;
+    });
+
+    registerFunction("IsEntityGrounded", [this](Entity entity) -> bool {
+        if (componentManager->hasComponent<RigidbodyComponent>(entity)) {
+            auto& rigidbody = componentManager->getComponent<RigidbodyComponent>(entity);
+            return rigidbody.isGrounded;
+        }
+        std::cerr << "[LUA ERROR] IsEntityGrounded: Entity " << entity << " does not have a RigidbodyComponent." << std::endl;
+        return false; 
     });
 }

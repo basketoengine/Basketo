@@ -13,8 +13,8 @@
                 },
                 "RigidbodyComponent": {
                     "drag": 0.0,
-                    "gravityScale": 50.0,
-                    "isGrounded": false,
+                    "gravityScale": 2.0,
+                    "isGrounded": true,
                     "isKinematic": false,
                     "isStatic": false,
                     "mass": 1.0,
@@ -39,16 +39,16 @@
                     "height": 33.0,
                     "rotation": 0.0,
                     "width": 19.0,
-                    "x": 0.0,
-                    "y": 0.14499999582767487,
+                    "x": 193.9994659423828,
+                    "y": 178.7989959716797,
                     "z_index": 2
                 },
                 "VelocityComponent": {
                     "vx": 0.0,
-                    "vy": 98.00000762939453
+                    "vy": 0.0
                 }
             },
-            "id_saved": 6
+            "id_saved": 2
         },
         {
             "components": {
@@ -82,7 +82,7 @@
                     "z_index": 0
                 }
             },
-            "id_saved": 7
+            "id_saved": 3
         }
     ]
 }
