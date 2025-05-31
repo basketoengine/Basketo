@@ -10,7 +10,9 @@ struct CameraComponent {
     // float x = 0.0f;
     // float y = 0.0f;
     bool isActive = false;
+    bool lockX = false;
+    bool lockY = false;
 
 };
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(CameraComponent, width, height, zoom, isActive)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(CameraComponent, width, height, zoom, isActive, lockX, lockY)

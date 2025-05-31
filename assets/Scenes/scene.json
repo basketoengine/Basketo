@@ -132,13 +132,36 @@
                     },
                     "currentAnimationName": "idle",
                     "currentFrameIndex": 0,
-                    "currentFrameTime": 0.0,
+                    "currentFrameTime": 0.08199872076511383,
                     "flipHorizontal": false,
                     "flipVertical": false,
                     "isPlaying": true
                 },
+                "AudioComponent": {
+                    "audioId": "super-mario-bros-4293",
+                    "isMusic": true,
+                    "loop": true,
+                    "playOnStart": true,
+                    "volume": 128
+                },
+                "CameraComponent": {
+                    "height": 637.0,
+                    "isActive": true,
+                    "lockX": false,
+                    "lockY": true,
+                    "width": 977.0,
+                    "zoom": 3.0199999809265137
+                },
                 "ColliderComponent": {
-                    "contacts": [],
+                    "contacts": [
+                        {
+                            "normal": {
+                                "x": 0.0,
+                                "y": -1.0
+                            },
+                            "otherEntity": 1
+                        }
+                    ],
                     "height": 32.0,
                     "isTrigger": false,
                     "offsetX": 0.0,
@@ -163,8 +186,8 @@
                     "isFixed": false,
                     "layer": 0,
                     "srcRect": {
-                        "h": 0,
-                        "w": 0,
+                        "h": 210,
+                        "w": 120,
                         "x": 0,
                         "y": 0
                     },
@@ -174,7 +197,7 @@
                     "height": 33.0,
                     "rotation": 0.0,
                     "width": 19.0,
-                    "x": 192.0,
+                    "x": 128.0,
                     "y": 160.0,
                     "z_index": 2
                 },
@@ -183,19 +206,19 @@
                     "vy": 0.0
                 }
             },
-            "id_saved": 0
+            "id_saved": 10
         },
         {
             "components": {
                 "ColliderComponent": {
                     "contacts": [],
-                    "height": 115.0,
+                    "height": 100.0,
                     "isTrigger": false,
                     "offsetX": 0.0,
-                    "offsetY": 209.10000610351563,
+                    "offsetY": 210.39999389648438,
                     "type": "aabb",
                     "vertices": [],
-                    "width": 884.0
+                    "width": 967.0
                 },
                 "SpriteComponent": {
                     "flip": 0,
@@ -218,7 +241,7 @@
                     "z_index": 0
                 }
             },
-            "id_saved": 1
+            "id_saved": 11
         }
     ]
 }

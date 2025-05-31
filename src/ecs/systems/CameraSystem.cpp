@@ -36,8 +36,16 @@ void CameraSystem::update(SDL_Rect& outWorldViewTopLeft_WorldSpace, float& outZo
         float worldVisibleWidth = camComp.width / camComp.zoom;
         float worldVisibleHeight = camComp.height / camComp.zoom;
 
-        outWorldViewTopLeft_WorldSpace.x = static_cast<int>(transform.x - worldVisibleWidth / 2.0f);
-        outWorldViewTopLeft_WorldSpace.y = static_cast<int>(transform.y - worldVisibleHeight / 2.0f);
+        float camX = transform.x;
+        float camY = transform.y;
+        if (camComp.lockX) {
+            camX = worldVisibleWidth / 2.0f; // Lock to initial or center position
+        }
+        if (camComp.lockY) {
+            camY = worldVisibleHeight / 2.0f; // Lock to initial or center position
+        }
+        outWorldViewTopLeft_WorldSpace.x = static_cast<int>(camX - worldVisibleWidth / 2.0f);
+        outWorldViewTopLeft_WorldSpace.y = static_cast<int>(camY - worldVisibleHeight / 2.0f);
         outWorldViewTopLeft_WorldSpace.w = static_cast<int>(worldVisibleWidth);
         outWorldViewTopLeft_WorldSpace.h = static_cast<int>(worldVisibleHeight);
         outZoom = camComp.zoom;

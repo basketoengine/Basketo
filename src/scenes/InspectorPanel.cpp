@@ -426,6 +426,9 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
                     cameraComp.isActive = isActive;
                 }
 
+                ImGui::Checkbox("Lock X##Camera", &cameraComp.lockX);
+                ImGui::Checkbox("Lock Y##Camera", &cameraComp.lockY);
+
                 if (ImGui::Button("Remove Camera Component")) {
                     bool wasActive = cameraComp.isActive;
                     scene.componentManager->removeComponent<CameraComponent>(scene.selectedEntity);
