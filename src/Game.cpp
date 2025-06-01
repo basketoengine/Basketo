@@ -6,6 +6,7 @@
 #include "./scenes/GameScene.h"
 #include "./scenes/MenuScene.h"
 #include "./scenes/DevModeScene.h"
+
 #include "AssetManager.h"
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_mixer.h>
@@ -214,7 +215,8 @@ bool Game::init(const char* title, int width, int height) {
     ImGui_ImplSDL2_InitForSDLRenderer(window, renderer);
     ImGui_ImplSDLRenderer2_Init(renderer);
 
-    // TODO: Decide initial scene (DevMode or Menu)
+    // TODO: For now, let's use the original approach and enhance it later
+    // We'll modify DevModeScene to support multiple windows in a future iteration
     SceneManager::getInstance().changeScene(std::make_unique<DevModeScene>(renderer, window));
     //SceneManager::getInstance().changeScene(std::make_unique<MenuScene>(renderer));
 

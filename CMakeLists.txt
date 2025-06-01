@@ -66,6 +66,10 @@ target_sources(BasketoGameEngine PRIVATE
     src/scenes/DevModeSceneSerializer.cpp
     src/scenes/InspectorPanel.cpp
 
+    # Editor utilities
+    src/utils/EditorUI.cpp
+    src/utils/EditorUtils.cpp
+
     # ECS Systems
     src/ecs/systems/AudioSystem.cpp
     src/ecs/systems/CameraSystem.cpp

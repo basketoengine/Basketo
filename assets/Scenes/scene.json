@@ -132,7 +132,7 @@
                     },
                     "currentAnimationName": "idle",
                     "currentFrameIndex": 0,
-                    "currentFrameTime": 0.08199872076511383,
+                    "currentFrameTime": 0.017000466585159302,
                     "flipHorizontal": false,
                     "flipVertical": false,
                     "isPlaying": true
@@ -145,12 +145,12 @@
                     "volume": 128
                 },
                 "CameraComponent": {
-                    "height": 637.0,
+                    "height": 624.0,
                     "isActive": true,
                     "lockX": false,
                     "lockY": true,
-                    "width": 977.0,
-                    "zoom": 3.0199999809265137
+                    "width": 733.0,
+                    "zoom": 2.5299999713897705
                 },
                 "ColliderComponent": {
                     "contacts": [
@@ -159,7 +159,7 @@
                                 "x": 0.0,
                                 "y": -1.0
                             },
-                            "otherEntity": 1
+                            "otherEntity": 5
                         }
                     ],
                     "height": 32.0,
@@ -197,8 +197,8 @@
                     "height": 33.0,
                     "rotation": 0.0,
                     "width": 19.0,
-                    "x": 128.0,
-                    "y": 160.0,
+                    "x": 276.9480285644531,
+                    "y": 178.39898681640625,
                     "z_index": 2
                 },
                 "VelocityComponent": {
@@ -206,7 +206,7 @@
                     "vy": 0.0
                 }
             },
-            "id_saved": 0
+            "id_saved": 4
         },
         {
             "components": {
@@ -241,7 +241,28 @@
                     "z_index": 0
                 }
             },
-            "id_saved": 1
+            "id_saved": 5
+        },
+        {
+            "components": {
+                "CameraComponent": {
+                    "height": 600.0,
+                    "isActive": false,
+                    "lockX": false,
+                    "lockY": false,
+                    "width": 800.0,
+                    "zoom": 1.0
+                },
+                "TransformComponent": {
+                    "height": 128.0,
+                    "rotation": 0.0,
+                    "width": 256.0,
+                    "x": 0.0,
+                    "y": 96.0,
+                    "z_index": 0
+                }
+            },
+            "id_saved": 6
         }
     ]
 }

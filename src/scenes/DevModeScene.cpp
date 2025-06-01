@@ -36,6 +36,8 @@
 DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     : renderer(ren),
       window(win),
+      gameWindow(nullptr),
+      gameRenderer(nullptr),
       assetManager(AssetManager::getInstance()),
       entityManager(std::make_unique<EntityManager>()),
       componentManager(std::make_unique<ComponentManager>()),
@@ -188,15 +190,45 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
         }
     }
 
+    // Initialize separate game window if enabled
+    if (useSeperateGameWindow) {
+        if (!initGameWindow()) {
+            std::cerr << "Failed to initialize separate game window, falling back to integrated view" << std::endl;
+            useSeperateGameWindow = false;
+        }
+    }
+
 }
 
 DevModeScene::~DevModeScene() {
     Mix_HaltMusic();
     Mix_HaltChannel(-1);
+
+    // Cleanup separate game window
+    if (useSeperateGameWindow) {
+        cleanupGameWindow();
+    }
+
     std::cout << "Exiting Dev Mode Scene" << std::endl;
 }
 
 void DevModeScene::handleInput(SDL_Event& event) {
+    // Handle game window events
+    if (useSeperateGameWindow && gameWindow && event.type == SDL_WINDOWEVENT) {
+        Uint32 gameWindowID = SDL_GetWindowID(gameWindow);
+        if (event.window.windowID == gameWindowID) {
+            switch (event.window.event) {
+                case SDL_WINDOWEVENT_CLOSE:
+                    // User closed game window, disable separate window mode
+                    useSeperateGameWindow = false;
+                    cleanupGameWindow();
+                    addLogToConsole("Game window closed, switching to integrated view");
+                    break;
+            }
+            return; // Don't process this event further
+        }
+    }
+
     handleDevModeInput(*this, event);
 }
 
@@ -239,10 +271,8 @@ void DevModeScene::update(float deltaTime) {
         audioSystem->update(deltaTime, *entityManager, *componentManager);
     }
 
-    // 7. Camera (often depends on final positions of entities)
-    if (cameraSystem) {
-        cameraSystem->update(gameViewport, cameraZoom);
-    }
+    // Camera system is only updated in game view, not in scene editor
+    // Scene editor uses its own independent camera (cameraX, cameraY, cameraZoom)
 }
 
 void DevModeScene::addLogToConsole(const std::string& message) {
@@ -258,27 +288,11 @@ void DevModeScene::render() {
     ImGuiIO& io = ImGui::GetIO();
     ImVec2 displaySize = io.DisplaySize;
 
+    // Scene editor always uses its own independent camera (never affected by game camera)
+    // This allows editing even during play mode - scene view and game view are completely separate
     float currentRenderCameraX = this->cameraX;
-    float currentRenderCameraY = this->cameraY;  
-    float currentRenderZoom = this->cameraZoom; 
-    
-    if (isPlaying && cameraSystem) {
-        SDL_Rect activeGameCameraWorldView;
-        float gameCamZoom = 1.0f;
-        cameraSystem->update(activeGameCameraWorldView, gameCamZoom);
-        Entity activeCamEntity = cameraSystem->getActiveCameraEntity();
-
-        if (activeCamEntity != NO_ENTITY) {
-            // If a game camera is active and we are playing, use its properties for rendering.
-            // The CameraSystem::update gives us the top-left of the world view (activeGameCameraWorldView.x, .y)
-            // and the zoom level (gameCamZoom).
-            // The width/height from activeGameCameraWorldView (activeGameCameraWorldView.w, .h) 
-            // represent the amount of world space visible through that camera.
-            currentRenderCameraX = static_cast<float>(activeGameCameraWorldView.x);
-            currentRenderCameraY = static_cast<float>(activeGameCameraWorldView.y);
-            currentRenderZoom = gameCamZoom;
-        }
-    }
+    float currentRenderCameraY = this->cameraY;
+    float currentRenderZoom = this->cameraZoom;
 
     const float hierarchyWidth = displaySize.x * hierarchyWidthRatio;
     const float inspectorWidth = displaySize.x * inspectorWidthRatio;
@@ -295,13 +309,17 @@ void DevModeScene::render() {
 
     ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
 
+    // Always create the scene viewport in the main window (this is the Scene Editor view)
     ImGui::SetNextWindowPos(ImVec2(static_cast<float>(gameViewport.x), static_cast<float>(gameViewport.y)), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(static_cast<float>(gameViewport.w), static_cast<float>(gameViewport.h)), ImGuiCond_Always);
     ImGuiWindowFlags viewportFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoBackground;
     if (!ImGui::IsDragDropActive()) {
         viewportFlags |= ImGuiWindowFlags_NoInputs;
     }
-    ImGui::Begin("GameViewport", nullptr, viewportFlags);
+
+    // Change window title based on mode
+    const char* windowTitle = useSeperateGameWindow ? "Scene Editor" : "GameViewport";
+    ImGui::Begin(windowTitle, nullptr, viewportFlags);
     if (ImGui::IsDragDropActive()) {
         ImGui::InvisibleButton("##GameViewportDropTarget", ImVec2(static_cast<float>(gameViewport.w), static_cast<float>(gameViewport.h)));
         if (ImGui::BeginDragDropTarget()) {
@@ -355,10 +373,14 @@ void DevModeScene::render() {
     ImGui::End();
     SDL_SetRenderDrawColor(renderer, (Uint8)(clear_color.x * 255), (Uint8)(clear_color.y * 255), (Uint8)(clear_color.z * 255), (Uint8)(clear_color.w * 255));
     SDL_RenderClear(renderer);
+
+    // Always render scene content in main window (this is the Scene Editor view)
+    // Scene editor always shows grid and editing tools, regardless of play state
     if (gameViewport.w > 0 && gameViewport.h > 0) {
         SDL_RenderSetViewport(renderer, &gameViewport);
 
-        if (!isPlaying && showGrid) {
+        // Always show grid in scene editor (not affected by play mode)
+        if (showGrid) {
             SDL_SetRenderDrawColor(renderer, 70, 70, 80, 255); 
 
             float worldViewLeft = currentRenderCameraX; 
@@ -416,44 +438,44 @@ void DevModeScene::render() {
             SDL_RenderCopyEx(renderer, texture, srcRectPtr, &destRect, transform.rotation, &center, sprite.flip);
         }
 
-        if (!isPlaying) { 
-            SDL_SetRenderDrawColor(renderer, 0, 255, 0, 150); 
-            if (entityManager && componentManager) { 
-                for (auto entity : entityManager->getActiveEntities()) {
-                    if (componentManager->hasComponent<TransformComponent>(entity) && componentManager->hasComponent<ColliderComponent>(entity)) {
-                        auto& transform = componentManager->getComponent<TransformComponent>(entity);
-                        auto& collider = componentManager->getComponent<ColliderComponent>(entity);
-                        if (!collider.vertices.empty()) {
-                            for (size_t i = 0; i < collider.vertices.size(); ++i) {
-                                size_t j = (i + 1) % collider.vertices.size();
-                                float x1 = (transform.x + collider.offsetX + collider.vertices[i].x - currentRenderCameraX) * currentRenderZoom; 
-                                float y1 = (transform.y + collider.offsetY + collider.vertices[i].y - currentRenderCameraY) * currentRenderZoom; 
-                                float x2 = (transform.x + collider.offsetX + collider.vertices[j].x - currentRenderCameraX) * currentRenderZoom; 
-                                float y2 = (transform.y + collider.offsetY + collider.vertices[j].y - currentRenderCameraY) * currentRenderZoom; 
-                                SDL_RenderDrawLine(renderer, (int)x1, (int)y1, (int)x2, (int)y2);
-                            }
-                        } else {
-                            SDL_Rect colliderRect = {
-                                (int)(((transform.x + collider.offsetX) - currentRenderCameraX) * currentRenderZoom), 
-                                (int)(((transform.y + collider.offsetY) - currentRenderCameraY) * currentRenderZoom), 
-                                (int)(collider.width * currentRenderZoom),                                         
-                                (int)(collider.height * currentRenderZoom)                                        
-                            };
-                            SDL_RenderDrawRect(renderer, &colliderRect);
+        // Always show colliders in scene editor (for editing purposes, regardless of play mode)
+        SDL_SetRenderDrawColor(renderer, 0, 255, 0, 150);
+        if (entityManager && componentManager) {
+            for (auto entity : entityManager->getActiveEntities()) {
+                if (componentManager->hasComponent<TransformComponent>(entity) && componentManager->hasComponent<ColliderComponent>(entity)) {
+                    auto& transform = componentManager->getComponent<TransformComponent>(entity);
+                    auto& collider = componentManager->getComponent<ColliderComponent>(entity);
+                    if (!collider.vertices.empty()) {
+                        for (size_t i = 0; i < collider.vertices.size(); ++i) {
+                            size_t j = (i + 1) % collider.vertices.size();
+                            float x1 = (transform.x + collider.offsetX + collider.vertices[i].x - currentRenderCameraX) * currentRenderZoom;
+                            float y1 = (transform.y + collider.offsetY + collider.vertices[i].y - currentRenderCameraY) * currentRenderZoom;
+                            float x2 = (transform.x + collider.offsetX + collider.vertices[j].x - currentRenderCameraX) * currentRenderZoom;
+                            float y2 = (transform.y + collider.offsetY + collider.vertices[j].y - currentRenderCameraY) * currentRenderZoom;
+                            SDL_RenderDrawLine(renderer, (int)x1, (int)y1, (int)x2, (int)y2);
                         }
+                    } else {
+                        SDL_Rect colliderRect = {
+                            (int)(((transform.x + collider.offsetX) - currentRenderCameraX) * currentRenderZoom),
+                            (int)(((transform.y + collider.offsetY) - currentRenderCameraY) * currentRenderZoom),
+                            (int)(collider.width * currentRenderZoom),
+                            (int)(collider.height * currentRenderZoom)
+                        };
+                        SDL_RenderDrawRect(renderer, &colliderRect);
                     }
                 }
             }
         }
 
 
-        if (!isPlaying && selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<TransformComponent>(selectedEntity)) {
+        // Always show selection in scene editor (for editing purposes, regardless of play mode)
+        if (selectedEntity != NO_ENTITY_SELECTED && componentManager->hasComponent<TransformComponent>(selectedEntity)) {
             auto& transform = componentManager->getComponent<TransformComponent>(selectedEntity);
             SDL_Rect selectionRect = {
-                (int)((transform.x - currentRenderCameraX) * currentRenderZoom), 
-                (int)((transform.y - currentRenderCameraY) * currentRenderZoom), 
-                (int)(transform.width * currentRenderZoom),                     
-                (int)(transform.height * currentRenderZoom)                    
+                (int)((transform.x - currentRenderCameraX) * currentRenderZoom),
+                (int)((transform.y - currentRenderCameraY) * currentRenderZoom),
+                (int)(transform.width * currentRenderZoom),
+                (int)(transform.height * currentRenderZoom)
             };
             SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255);
             SDL_RenderDrawRect(renderer, &selectionRect);
@@ -461,10 +483,10 @@ void DevModeScene::render() {
             for (const auto& handlePair : getResizeHandles(transform)) {
                 SDL_Rect handleRect = handlePair.second;
 
-                handleRect.x = (int)((handleRect.x - currentRenderCameraX) * currentRenderZoom); 
-                handleRect.y = (int)((handleRect.y - currentRenderCameraY) * currentRenderZoom); 
-                handleRect.w = (int)(handleRect.w * currentRenderZoom);                         
-                handleRect.h = (int)(handleRect.h * currentRenderZoom);                         
+                handleRect.x = (int)((handleRect.x - currentRenderCameraX) * currentRenderZoom);
+                handleRect.y = (int)((handleRect.y - currentRenderCameraY) * currentRenderZoom);
+                handleRect.w = (int)(handleRect.w * currentRenderZoom);
+                handleRect.h = (int)(handleRect.h * currentRenderZoom);
                 SDL_RenderFillRect(renderer, &handleRect);
             }
         }
@@ -547,7 +569,21 @@ void DevModeScene::render() {
     ImGui::SameLine(); ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical); ImGui::SameLine();
     
     ImGui::Checkbox("Show Grid", &showGrid);
-    ImGui::SameLine(); ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical); 
+    ImGui::SameLine(); ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical); ImGui::SameLine();
+
+    // Toggle for separate game window
+    if (ImGui::Checkbox("Separate Game Window", &useSeperateGameWindow)) {
+        if (useSeperateGameWindow) {
+            if (!initGameWindow()) {
+                addLogToConsole("Failed to create separate game window");
+                useSeperateGameWindow = false;
+            }
+        } else {
+            cleanupGameWindow();
+            addLogToConsole("Separate game window disabled");
+        }
+    }
+    ImGui::SameLine(); ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
 
     if (ImGui::CollapsingHeader("Spawn Entity", ImGuiTreeNodeFlags_None)) {
         ImGui::Text("Spawn Pos:"); ImGui::SameLine(); ImGui::PushItemWidth(40); ImGui::InputFloat("X", &spawnPosX, 0, 0, "%.0f"); ImGui::SameLine(); ImGui::InputFloat("Y", &spawnPosY, 0, 0, "%.0f"); ImGui::PopItemWidth();
@@ -587,13 +623,19 @@ void DevModeScene::render() {
                     if (componentManager->hasComponent<NameComponent>(entity)) {
                         label = componentManager->getComponent<NameComponent>(entity).name;
                     }
+
+                    // Special label for game camera
+                    if (entity == gameCameraEntity) {
+                        label = "🎥 Game Camera (" + std::to_string(entity) + ")";
+                    }
+
                     if (componentManager->hasComponent<TransformComponent>(entity)) {
                         label += " (Z: " + std::to_string(componentManager->getComponent<TransformComponent>(entity).z_index) + ")";
                     }
                     if (ImGui::Selectable(label.c_str(), selectedEntity == entity)) {
                         selectedEntity = entity;
                         inspectorTextureIdBuffer[0] = '\0';
-                        inspectorScriptPathBuffer[0] = '\0'; 
+                        inspectorScriptPathBuffer[0] = '\0';
                     }
                 }
                 if (ImGui::Button("Deselect")) {
@@ -874,6 +916,11 @@ void DevModeScene::render() {
     }
 
     SDL_RenderPresent(renderer);
+
+    // Render to separate game window if enabled
+    if (useSeperateGameWindow) {
+        renderGameWindow();
+    }
 }
 
 bool DevModeScene::isMouseOverEntity(float worldMouseX, float worldMouseY, Entity entity) {
@@ -995,4 +1042,253 @@ void DevModeScene::createNewScene() {
         sceneFilePath[sizeof(sceneFilePath) -1] = '\0';
         loadDevModeScene(*this, sceneFilePath);
     }
+}
+
+bool DevModeScene::initGameWindow() {
+    // Create the game window positioned to the right of the main editor window
+    int editorX, editorY, editorW, editorH;
+    SDL_GetWindowPosition(window, &editorX, &editorY);
+    SDL_GetWindowSize(window, &editorW, &editorH);
+
+    int gameWindowX = editorX + editorW + 10; // Position to the right with some spacing
+    int gameWindowY = editorY;
+    int gameWindowW = 800;
+    int gameWindowH = 600;
+
+    gameWindow = SDL_CreateWindow("Game View",
+                                  gameWindowX, gameWindowY,
+                                  gameWindowW, gameWindowH,
+                                  SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+
+    if (!gameWindow) {
+        std::cerr << "Failed to create game window: " << SDL_GetError() << std::endl;
+        return false;
+    }
+
+    gameRenderer = SDL_CreateRenderer(gameWindow, -1, SDL_RENDERER_ACCELERATED);
+    if (!gameRenderer) {
+        std::cerr << "Failed to create game renderer: " << SDL_GetError() << std::endl;
+        SDL_DestroyWindow(gameWindow);
+        gameWindow = nullptr;
+        return false;
+    }
+
+    // Load textures for the game renderer
+    loadTexturesForGameRenderer();
+
+    // Create default camera for game view
+    createDefaultGameCamera();
+
+    addLogToConsole("Separate game window initialized successfully");
+    return true;
+}
+
+void DevModeScene::cleanupGameWindow() {
+    // Clean up game textures
+    for (auto& pair : gameTextures) {
+        if (pair.second) {
+            SDL_DestroyTexture(pair.second);
+        }
+    }
+    gameTextures.clear();
+
+    if (gameRenderer) {
+        SDL_DestroyRenderer(gameRenderer);
+        gameRenderer = nullptr;
+    }
+
+    if (gameWindow) {
+        SDL_DestroyWindow(gameWindow);
+        gameWindow = nullptr;
+    }
+}
+
+void DevModeScene::renderGameWindow() {
+    if (!gameWindow || !gameRenderer) return;
+
+    int gameWindowW, gameWindowH;
+    SDL_GetWindowSize(gameWindow, &gameWindowW, &gameWindowH);
+
+    // Set up game viewport to fill the entire game window
+    SDL_Rect gameViewportRect = {0, 0, gameWindowW, gameWindowH};
+    SDL_RenderSetViewport(gameRenderer, &gameViewportRect);
+
+    // Use the game camera for rendering (independent of scene editor camera)
+    float currentRenderCameraX = 0.0f;
+    float currentRenderCameraY = 0.0f;
+    float currentRenderZoom = 1.0f;
+
+    // Get camera settings from game camera entity
+    if (gameCameraEntity != 0 &&
+        componentManager->hasComponent<TransformComponent>(gameCameraEntity) &&
+        componentManager->hasComponent<CameraComponent>(gameCameraEntity)) {
+
+        auto& cameraTransform = componentManager->getComponent<TransformComponent>(gameCameraEntity);
+        auto& cameraComp = componentManager->getComponent<CameraComponent>(gameCameraEntity);
+
+        if (cameraComp.isActive) {
+            currentRenderCameraX = cameraTransform.x;
+            currentRenderCameraY = cameraTransform.y;
+            currentRenderZoom = cameraComp.zoom;
+        }
+    }
+
+    // In play mode, also check for active camera from camera system
+    if (isPlaying && cameraSystem) {
+        SDL_Rect activeGameCameraWorldView;
+        float gameCamZoom = 1.0f;
+        cameraSystem->update(activeGameCameraWorldView, gameCamZoom);
+        Entity activeCamEntity = cameraSystem->getActiveCameraEntity();
+
+        if (activeCamEntity != NO_ENTITY) {
+            currentRenderCameraX = static_cast<float>(activeGameCameraWorldView.x);
+            currentRenderCameraY = static_cast<float>(activeGameCameraWorldView.y);
+            currentRenderZoom = gameCamZoom;
+        }
+    }
+
+    // Clear the game window
+    SDL_SetRenderDrawColor(gameRenderer,
+                          (Uint8)(clear_color.x * 255),
+                          (Uint8)(clear_color.y * 255),
+                          (Uint8)(clear_color.z * 255),
+                          (Uint8)(clear_color.w * 255));
+    SDL_RenderClear(gameRenderer);
+
+    // Game view never shows grid - it's a clean game view
+
+    // Render entities
+    std::vector<Entity> entitiesToRender;
+    if (entityManager) {
+        for (auto entity : entityManager->getActiveEntities()) {
+            if (componentManager && componentManager->hasComponent<TransformComponent>(entity) && componentManager->hasComponent<SpriteComponent>(entity)) {
+                entitiesToRender.push_back(entity);
+            }
+        }
+    }
+
+    // Debug: Log how many entities we're trying to render
+    static int debugCounter = 0;
+    if (debugCounter % 60 == 0) { // Log every 60 frames (roughly once per second)
+        std::cout << "Game window rendering " << entitiesToRender.size() << " entities" << std::endl;
+    }
+    debugCounter++;
+
+    std::sort(entitiesToRender.begin(), entitiesToRender.end(),
+        [&](Entity a, Entity b) {
+            if (!componentManager || !componentManager->hasComponent<TransformComponent>(a) || !componentManager->hasComponent<TransformComponent>(b)) {
+                return false;
+            }
+            auto& transformA = componentManager->getComponent<TransformComponent>(a);
+            auto& transformB = componentManager->getComponent<TransformComponent>(b);
+            return transformA.z_index < transformB.z_index;
+        }
+    );
+
+    for (auto entity : entitiesToRender) {
+        auto& transform = componentManager->getComponent<TransformComponent>(entity);
+        auto& sprite = componentManager->getComponent<SpriteComponent>(entity);
+
+        // Try to get texture from game textures first, then fallback to main AssetManager
+        SDL_Texture* texture = nullptr;
+        auto gameTextureIt = gameTextures.find(sprite.textureId);
+        if (gameTextureIt != gameTextures.end()) {
+            texture = gameTextureIt->second;
+        } else {
+            // Fallback to main AssetManager (this won't work but we'll try)
+            texture = AssetManager::getInstance().getTexture(sprite.textureId);
+        }
+
+        // Debug: Log texture loading issues
+        if (!texture) {
+            static std::set<std::string> loggedMissingTextures;
+            if (loggedMissingTextures.find(sprite.textureId) == loggedMissingTextures.end()) {
+                std::cout << "Game window: Missing texture for entity " << entity << " with textureId: '" << sprite.textureId << "'" << std::endl;
+                loggedMissingTextures.insert(sprite.textureId);
+            }
+            continue;
+        }
+
+        SDL_Rect destRect;
+        destRect.x = (int)((transform.x - currentRenderCameraX) * currentRenderZoom);
+        destRect.y = (int)((transform.y - currentRenderCameraY) * currentRenderZoom);
+        destRect.w = (int)(transform.width * currentRenderZoom);
+        destRect.h = (int)(transform.height * currentRenderZoom);
+
+        if (entity == entitiesToRender[0] && debugCounter % 120 == 0) {
+            std::cout << "Game window: Rendering entity " << entity << " at (" << destRect.x << "," << destRect.y << ") size (" << destRect.w << "," << destRect.h << ")" << std::endl;
+            std::cout << "  Transform: (" << transform.x << "," << transform.y << ") Camera: (" << currentRenderCameraX << "," << currentRenderCameraY << ") Zoom: " << currentRenderZoom << std::endl;
+        }
+
+        SDL_Rect* srcRectPtr = sprite.useSrcRect ? &sprite.srcRect : nullptr;
+        SDL_Point center = { (int)(transform.width * currentRenderZoom / 2), (int)(transform.height * currentRenderZoom / 2) };
+        SDL_RenderCopyEx(gameRenderer, texture, srcRectPtr, &destRect, transform.rotation, &center, sprite.flip);
+    }
+
+    SDL_RenderSetViewport(gameRenderer, nullptr);
+    SDL_RenderPresent(gameRenderer);
+}
+
+void DevModeScene::loadTexturesForGameRenderer() {
+    if (!gameRenderer) return;
+
+    addLogToConsole("Loading textures for game window renderer...");
+
+    auto& mainAssetManager = AssetManager::getInstance();
+
+    std::vector<std::string> textureFiles = {
+        "../assets/Textures/background.jpg",
+        "../assets/Textures/mario.png",
+        "../assets/Textures/running.png",
+        "../assets/Textures/mariobg.png",
+        "../assets/Textures/player.png",
+        "../assets/Textures/mario obstacle.png",
+        "../assets/Textures/marioblock.png",
+        "../assets/Textures/marioground.jpg"
+    };
+
+    for (const auto& filePath : textureFiles) {
+        std::string textureId = filePath.substr(filePath.find_last_of("/\\") + 1);
+
+        SDL_Surface* surface = IMG_Load(filePath.c_str());
+        if (surface) {
+            SDL_Texture* gameTexture = SDL_CreateTextureFromSurface(gameRenderer, surface);
+            if (gameTexture) {
+                gameTextures[textureId] = gameTexture;
+                std::cout << "Loaded texture '" << textureId << "' for game renderer" << std::endl;
+            } else {
+                std::cerr << "Failed to create game texture from surface: " << SDL_GetError() << std::endl;
+            }
+            SDL_FreeSurface(surface);
+        } else {
+            std::string baseId = textureId;
+            if (baseId.find('.') != std::string::npos) {
+                baseId = baseId.substr(0, baseId.find_last_of('.'));
+            }
+            gameTextures[textureId] = nullptr; 
+        }
+    }
+
+    addLogToConsole("Finished loading textures for game window");
+}
+
+void DevModeScene::createDefaultGameCamera() {
+    if (gameCameraEntity != 0 && componentManager->hasComponent<TransformComponent>(gameCameraEntity)) {
+        return;
+    }
+
+    gameCameraEntity = entityManager->createEntity();
+
+    TransformComponent cameraTransform;
+    cameraTransform.x = 0.0f;
+    cameraTransform.y = 0.0f;
+    cameraTransform.z_index = 0;
+    componentManager->addComponent(gameCameraEntity, cameraTransform);
+
+    CameraComponent cameraComp;
+    cameraComp.zoom = 1.0f;
+    cameraComp.isActive = true;
+    componentManager->addComponent(gameCameraEntity, cameraComp);
+
+    addLogToConsole("Created default game camera entity: " + std::to_string(gameCameraEntity));
 }

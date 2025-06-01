@@ -70,12 +70,45 @@ public:
 
     void addLogToConsole(const std::string& message);
 
+    /**
+     * @brief Initialize the separate game window
+     * @return true if successful
+     */
+    bool initGameWindow();
+
+    /**
+     * @brief Cleanup the separate game window
+     */
+    void cleanupGameWindow();
+
+    /**
+     * @brief Render the game content to the separate window
+     */
+    void renderGameWindow();
+
+    /**
+     * @brief Load textures for the game window renderer
+     */
+    void loadTexturesForGameRenderer();
+
+    /**
+     * @brief Create default camera entity for game view
+     */
+    void createDefaultGameCamera();
+
 public:
     friend void handleDevModeInput(DevModeScene& scene, SDL_Event& event);
 
     SDL_Renderer* renderer;
     SDL_Window* window;
-    SDL_Rect gameViewport; 
+    SDL_Rect gameViewport;
+
+    // Separate game window for Unity-like layout
+    SDL_Window* gameWindow;
+    SDL_Renderer* gameRenderer;
+    bool useSeperateGameWindow = true;
+    std::unordered_map<std::string, SDL_Texture*> gameTextures; // Textures for game renderer
+    Entity gameCameraEntity = 0; // Default camera entity for game view
 
     float cameraX = 0.0f;
     float cameraY = 0.0f;
@@ -159,6 +192,8 @@ public:
     void renderDevModeUI();
     std::string getComponentNameForDisplay(Entity entity);
 
-private:
+public:
     void createNewScene();
+
+private:
 };
