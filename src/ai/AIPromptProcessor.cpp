@@ -449,7 +449,7 @@ void AIPromptProcessor::renderAIPromptUI() {
         if (strlen(m_llmPromptBuffer) > 0) {
             Console::Log("User input: " + std::string(m_llmPromptBuffer));
             HandlePrompt(m_llmPromptBuffer, false); 
-            m_llmPromptBuffer[0] = '\\0'; 
+            m_llmPromptBuffer[0] = '\0'; 
         } else {
             Console::Warn("Prompt is empty.");
         }
@@ -459,7 +459,7 @@ void AIPromptProcessor::renderAIPromptUI() {
         if (strlen(m_llmPromptBuffer) > 0) {
             Console::Log("User input: " + std::string(m_llmPromptBuffer));
             HandlePrompt(m_llmPromptBuffer, false); 
-            m_llmPromptBuffer[0] = '\\0'; 
+            m_llmPromptBuffer[0] = '\0'; 
         } else {
             Console::Warn("Prompt is empty.");
         }

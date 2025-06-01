@@ -39,6 +39,15 @@ public:
         return activeEntities;
     }
 
+    void clear() {
+        for (Entity entity : activeEntities) {
+            signatures[entity].reset();
+            availableEntities.push(entity);
+        }
+        livingEntityCount = 0;
+        activeEntities.clear();
+    }
+
 private:
     std::queue<Entity> availableEntities;
     std::array<Signature, MAX_ENTITIES> signatures;

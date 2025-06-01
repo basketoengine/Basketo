@@ -158,4 +158,7 @@ public:
 
     void renderDevModeUI();
     std::string getComponentNameForDisplay(Entity entity);
+
+private:
+    void createNewScene();
 };

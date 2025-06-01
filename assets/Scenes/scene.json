@@ -206,7 +206,7 @@
                     "vy": 0.0
                 }
             },
-            "id_saved": 10
+            "id_saved": 0
         },
         {
             "components": {
@@ -241,7 +241,7 @@
                     "z_index": 0
                 }
             },
-            "id_saved": 11
+            "id_saved": 1
         }
     ]
 }

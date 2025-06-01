@@ -481,6 +481,7 @@ void DevModeScene::render() {
     if (ImGui::Button("Save")) saveDevModeScene(*this, sceneFilePath); 
     ImGui::SameLine(); if (ImGui::Button("Save As...")) { /* TODO */ }
     ImGui::SameLine(); if (ImGui::Button("Load")) loadDevModeScene(*this, sceneFilePath); 
+    ImGui::SameLine(); if (ImGui::Button("New Scene")) { createNewScene(); }
     ImGui::SameLine(); ImGui::PushItemWidth(120); ImGui::InputText("##Filename", sceneFilePath, sizeof(sceneFilePath)); ImGui::PopItemWidth();
     ImGui::SameLine(); if (ImGui::Button("Import...")) {}
     ImGui::SameLine(); if (ImGui::Button("Export...")) {}
@@ -496,10 +497,11 @@ void DevModeScene::render() {
         if (ImGui::Button("Play")) {
             isPlaying = true;
             selectedEntity = NO_ENTITY_SELECTED;
+            // Reload scripts to ensure they are initialized for the play session
             for (auto entity : entityManager->getActiveEntities()) {
                 if (componentManager->hasComponent<ScriptComponent>(entity)) {
                     auto& scriptComp = componentManager->getComponent<ScriptComponent>(entity);
-                    if (!scriptComp.scriptPath.empty()) {
+                    if (!scriptComp.scriptPath.empty() && scriptSystem) {
                         scriptSystem->loadScript(entity, scriptComp.scriptPath);
                     }
                 }
@@ -899,4 +901,65 @@ Entity DevModeScene::findEntityByName(const std::string& name) {
         }
     }
     return NO_ENTITY_SELECTED;
+}
+
+void DevModeScene::createNewScene() {
+    const char* title = "New Scene";
+    const char* message = "Enter new scene name (e.g., my_scene). It will be saved in ../assets/Scenes/ with .json extension.";
+    const char* defaultInput = "new_scene";
+    const char* inputSceneName = tinyfd_inputBox(title, message, defaultInput);
+
+    std::string sceneNameStr;
+    if (inputSceneName == NULL || strlen(inputSceneName) == 0) {
+        addLogToConsole("New scene name cancelled or empty, using default 'new_scene.json'.");
+        sceneNameStr = "new_scene";
+    } else {
+        sceneNameStr = inputSceneName;
+    }
+
+    std::string baseName = sceneNameStr;
+    if (baseName.length() > 5 && baseName.substr(baseName.length() - 5) == ".json") {
+        baseName = baseName.substr(0, baseName.length() - 5);
+    }
+    std::string newScenePath = "../assets/Scenes/" + baseName + ".json";
+
+    if (entityManager) entityManager->clear();
+  
+    // Reset scene state variables
+    selectedEntity = NO_ENTITY_SELECTED;
+    inspectorTextureIdBuffer[0] = '\0';
+    inspectorScriptPathBuffer[0] = '\0';
+    cameraX = 0.0f;
+    cameraY = 0.0f;
+    cameraZoom = 1.0f;
+    consoleLogBuffer.clear(); 
+    addLogToConsole("Cleared current scene data for new scene.");
+
+    strncpy(sceneFilePath, newScenePath.c_str(), sizeof(sceneFilePath) - 1);
+    sceneFilePath[sizeof(sceneFilePath) - 1] = '\0';
+
+    nlohmann::json emptySceneJson;
+    emptySceneJson["entities"] = nlohmann::json::array();
+    std::ofstream outFile(sceneFilePath);
+    if (outFile.is_open()) {
+        outFile << emptySceneJson.dump(4);
+        outFile.close();
+        addLogToConsole("Created new empty scene: " + std::string(sceneFilePath));
+    } else {
+        addLogToConsole("Error: Could not create new scene file: " + std::string(sceneFilePath));
+        // Fallback to a default scene if creation fails, or handle error differently
+        const char* fallbackScene = "../assets/Scenes/scene.json";
+        strncpy(sceneFilePath, fallbackScene, sizeof(sceneFilePath) -1);
+        sceneFilePath[sizeof(sceneFilePath) -1] = '\0';
+        loadDevModeScene(*this, sceneFilePath); 
+        return;
+    }
+
+    if (!loadDevModeScene(*this, sceneFilePath)) {
+        addLogToConsole("Error: Failed to load the new scene: " + std::string(sceneFilePath) + ". Check console for details.");
+        const char* fallbackScene = "../assets/Scenes/scene.json";
+        strncpy(sceneFilePath, fallbackScene, sizeof(sceneFilePath) -1);
+        sceneFilePath[sizeof(sceneFilePath) -1] = '\0';
+        loadDevModeScene(*this, sceneFilePath);
+    }
 }
