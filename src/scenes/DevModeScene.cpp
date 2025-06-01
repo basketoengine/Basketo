@@ -478,14 +478,33 @@ void DevModeScene::render() {
     ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(displaySize.x, topToolbarHeight), ImGuiCond_Always);
     ImGui::Begin("Toolbar", nullptr, fixedPanelFlags | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    if (ImGui::Button("Save")) saveDevModeScene(*this, sceneFilePath); 
-    ImGui::SameLine(); if (ImGui::Button("Save As...")) { /* TODO */ }
-    ImGui::SameLine(); if (ImGui::Button("Load")) loadDevModeScene(*this, sceneFilePath); 
-    ImGui::SameLine(); if (ImGui::Button("New Scene")) { createNewScene(); }
-    ImGui::SameLine(); ImGui::PushItemWidth(120); ImGui::InputText("##Filename", sceneFilePath, sizeof(sceneFilePath)); ImGui::PopItemWidth();
-    ImGui::SameLine(); if (ImGui::Button("Import...")) {}
-    ImGui::SameLine(); if (ImGui::Button("Export...")) {}
-    ImGui::SameLine(); ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical); ImGui::SameLine();
+
+    // "⋮" button for file operations popup menu (vertical ellipsis)
+    if (ImGui::Button("\u22EE")) { // Unicode U+22EE Vertical Ellipsis
+        ImGui::OpenPopup("file_operations_popup");
+    }
+    // Popup menu for file operations (except Load)
+    if (ImGui::BeginPopup("file_operations_popup")) {
+        if (ImGui::MenuItem("Save")) { saveDevModeScene(*this, sceneFilePath); }
+        if (ImGui::MenuItem("Save As...")) { /* TODO: Implement Save As */ }
+        if (ImGui::MenuItem("New Scene")) { createNewScene(); }
+        ImGui::Separator();
+        if (ImGui::MenuItem("Import...")) { /* TODO: Implement Import */ }
+        if (ImGui::MenuItem("Export...")) { /* TODO: Implement Export */ }
+        ImGui::EndPopup();
+    }
+    ImGui::SameLine();
+    // Filename input
+    ImGui::PushItemWidth(120);
+    ImGui::InputText("##Filename", sceneFilePath, sizeof(sceneFilePath));
+    ImGui::PopItemWidth();
+    ImGui::SameLine();
+    // Load button directly in toolbar
+    if (ImGui::Button("Load")) { loadDevModeScene(*this, sceneFilePath); }
+    ImGui::SameLine();
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical); ImGui::SameLine();
+
+    // Play/Stop button
     if (isPlaying) {
         if (ImGui::Button("Stop")) {
             isPlaying = false;
@@ -495,6 +514,8 @@ void DevModeScene::render() {
         }
     } else {
         if (ImGui::Button("Play")) {
+            // Restore all components from the scene file before entering play mode
+            loadDevModeScene(*this, sceneFilePath);
             isPlaying = true;
             selectedEntity = NO_ENTITY_SELECTED;
             // Reload scripts to ensure they are initialized for the play session
@@ -506,15 +527,27 @@ void DevModeScene::render() {
                     }
                 }
             }
+            // Reset animation states
+            if (animationSystem && entityManager && componentManager) {
+                for (auto entity : entityManager->getActiveEntities()) {
+                    if (componentManager->hasComponent<AnimationComponent>(entity)) {
+                        auto& animComp = componentManager->getComponent<AnimationComponent>(entity);
+                        animComp.currentFrameTime = 0.0f;
+                        animComp.currentFrameIndex = 0;
+                    }
+                }
+            }
         }
     }
     ImGui::SameLine(); ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical); ImGui::SameLine();
+    
     ImGui::BeginDisabled(isPlaying);
     ImGui::Checkbox("Snap", &snapToGrid); ImGui::SameLine(); ImGui::PushItemWidth(60); ImGui::DragFloat("Grid", &gridSize, 1.0f, 1.0f, 256.0f, "%.0f"); ImGui::PopItemWidth();
     ImGui::EndDisabled();
     ImGui::SameLine(); ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical); ImGui::SameLine();
+    
     ImGui::Checkbox("Show Grid", &showGrid);
-    ImGui::SameLine(); ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical); ImGui::SameLine();
+    ImGui::SameLine(); ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical); 
 
     if (ImGui::CollapsingHeader("Spawn Entity", ImGuiTreeNodeFlags_None)) {
         ImGui::Text("Spawn Pos:"); ImGui::SameLine(); ImGui::PushItemWidth(40); ImGui::InputFloat("X", &spawnPosX, 0, 0, "%.0f"); ImGui::SameLine(); ImGui::InputFloat("Y", &spawnPosY, 0, 0, "%.0f"); ImGui::PopItemWidth();
