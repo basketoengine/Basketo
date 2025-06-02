@@ -29,6 +29,11 @@ public:
     void HandlePrompt(const std::string& prompt, bool isTranslatedCommand = false);
     void PollAndProcessPendingCommands();
 
+    // API Key management
+    void setApiKey(const std::string& apiKey);
+    bool isApiKeyConfigured() const;
+    void saveApiKeyToConfig(const std::string& apiKey);
+
 private:
     std::string ProcessGeminiPrompt(const std::string& promptText);
     void GenerateScriptFromGemini(const std::string& scriptPrompt, std::string& outScriptPath);
@@ -41,7 +46,9 @@ private:
     AssetManager* m_assetManager;
     std::function<Entity(const std::string&)> m_findEntityByNameFunc;
     char m_llmPromptBuffer[1024];
-    std::string m_apiKey; 
+    char m_apiKeyBuffer[512];  // Buffer for API key input
+    std::string m_apiKey;
+    bool m_showApiKeyInput = false;  // Toggle for showing API key input section
 
     std::future<std::string> m_geminiFuture;
 

@@ -5,9 +5,10 @@
 #include <vector>
 #include <fstream> 
 #include <curl/curl.h> 
-#include <ctime> 
-#include <thread> 
+#include <ctime>
+#include <thread>
 #include <chrono>
+#include <cstring>
 #include "../../vendor/nlohmann/json.hpp" // Add this include
 #include <filesystem>
 
@@ -40,6 +41,7 @@ AIPromptProcessor::AIPromptProcessor(
     m_assetManager(assetManager),
     m_findEntityByNameFunc(findEntityByNameFunc) {
     m_llmPromptBuffer[0] = '\0';
+    m_apiKeyBuffer[0] = '\0';
     // Try to load API key from config.json first
     std::string configPath = "config.json";
     if (std::filesystem::exists(configPath)) {
@@ -470,4 +472,156 @@ void AIPromptProcessor::renderAIPromptUI() {
     }
     ImGui::TextWrapped("Local Commands: create entity <name> at <x> <y> sprite <id> | script entity <name> with <path.lua> | move <name> to <x> <y> | delete <name>");
     ImGui::TextWrapped("Gemini: gemini_script <prompt for lua script> | gemini_modify <entity_name> <modification prompt>");
+
+    // Gemini API Key Configuration Section
+    ImGui::Separator();
+    ImGui::Text("🤖 Gemini AI Configuration");
+
+    // API Key status indicator and direct input
+    if (isApiKeyConfigured()) {
+        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Gemini API Key Configured");
+        ImGui::SameLine();
+        if (ImGui::Button("Change Key##gemini")) {
+            m_showApiKeyInput = !m_showApiKeyInput;
+            if (m_showApiKeyInput) {
+                // Pre-fill with current API key (masked)
+                std::string maskedKey = std::string(m_apiKey.length(), '*');
+                strncpy(m_apiKeyBuffer, maskedKey.c_str(), sizeof(m_apiKeyBuffer) - 1);
+                m_apiKeyBuffer[sizeof(m_apiKeyBuffer) - 1] = '\0';
+            }
+        }
+    } else {
+        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "✗ Gemini API Key Required");
+
+        // Always show input field when not configured
+        ImGui::Text("🔑 Enter Gemini API Key:");
+        ImGui::SetNextItemWidth(-100); // Leave space for buttons
+        if (ImGui::InputText("##gemini_api_key_main", m_apiKeyBuffer, sizeof(m_apiKeyBuffer), ImGuiInputTextFlags_Password)) {
+            // Real-time validation could go here
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Save##apikey_main")) {
+            if (strlen(m_apiKeyBuffer) > 0) {
+                std::string newApiKey = std::string(m_apiKeyBuffer);
+                setApiKey(newApiKey);
+                saveApiKeyToConfig(newApiKey);
+                Console::Log("Gemini API Key saved successfully!");
+                m_apiKeyBuffer[0] = '\0';
+            } else {
+                Console::Warn("Gemini API Key cannot be empty.");
+            }
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Help##apikey_help")) {
+            m_showApiKeyInput = !m_showApiKeyInput;
+        }
+    }
+
+    if (m_showApiKeyInput) {
+        ImGui::Indent();
+        ImGui::Spacing();
+
+        // Instructions
+        ImGui::TextColored(ImVec4(0.7f, 0.7f, 1.0f, 1.0f), "📋 How to get your Gemini API Key:");
+        ImGui::BulletText("1. Visit: https://aistudio.google.com/app/apikey");
+        ImGui::BulletText("2. Sign in with your Google account");
+        ImGui::BulletText("3. Click 'Create API Key' and copy it");
+        ImGui::BulletText("4. Paste it in the field below");
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // API Key input field
+        ImGui::Text("🔑 Gemini API Key:");
+        ImGui::SetNextItemWidth(-100); // Leave space for buttons
+        if (ImGui::InputText("##gemini_api_key", m_apiKeyBuffer, sizeof(m_apiKeyBuffer), ImGuiInputTextFlags_Password)) {
+            // Real-time validation could go here
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Save##apikey")) {
+            if (strlen(m_apiKeyBuffer) > 0) {
+                std::string newApiKey = std::string(m_apiKeyBuffer);
+                setApiKey(newApiKey);
+                saveApiKeyToConfig(newApiKey);
+                Console::Log("Gemini API Key saved successfully!");
+                m_showApiKeyInput = false;
+                m_apiKeyBuffer[0] = '\0';
+            } else {
+                Console::Warn("Gemini API Key cannot be empty.");
+            }
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Clear##apikey")) {
+            m_apiKeyBuffer[0] = '\0';
+        }
+
+        ImGui::Spacing();
+        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "💡 Your API key is stored securely in config.json");
+
+        if (isApiKeyConfigured()) {
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.6f, 1.0f), "⚠️ Danger Zone");
+            if (ImGui::Button("🗑️ Remove Gemini API Key")) {
+                setApiKey("");
+                saveApiKeyToConfig("");
+                Console::Log("Gemini API Key removed.");
+                m_showApiKeyInput = false;
+                m_apiKeyBuffer[0] = '\0';
+            }
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "(This will disable AI features)");
+        }
+
+        ImGui::Unindent();
+    }
+}
+
+// API Key management methods
+void AIPromptProcessor::setApiKey(const std::string& apiKey) {
+    m_apiKey = apiKey;
+}
+
+bool AIPromptProcessor::isApiKeyConfigured() const {
+    return !m_apiKey.empty();
+}
+
+void AIPromptProcessor::saveApiKeyToConfig(const std::string& apiKey) {
+    std::string configPath = "config.json";
+    nlohmann::json configJson;
+
+    // Load existing config if it exists
+    if (std::filesystem::exists(configPath)) {
+        try {
+            std::ifstream configFile(configPath);
+            configFile >> configJson;
+        } catch (const std::exception& e) {
+            Console::Warn("Failed to read existing config.json, creating new one: " + std::string(e.what()));
+            configJson = nlohmann::json::object();
+        }
+    } else {
+        configJson = nlohmann::json::object();
+    }
+
+    // Update or remove the API key
+    if (apiKey.empty()) {
+        configJson.erase("gemini_api_key");
+    } else {
+        configJson["gemini_api_key"] = apiKey;
+    }
+
+    // Save the config
+    try {
+        std::ofstream configFile(configPath);
+        configFile << configJson.dump(4) << std::endl;
+        Console::Log("Configuration saved to " + configPath);
+    } catch (const std::exception& e) {
+        Console::Error("Failed to save config.json: " + std::string(e.what()));
+    }
 }
