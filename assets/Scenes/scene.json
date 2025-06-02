@@ -206,7 +206,7 @@
                     "vy": 0.0
                 }
             },
-            "id_saved": 4
+            "id_saved": 9
         },
         {
             "components": {
@@ -241,28 +241,32 @@
                     "z_index": 0
                 }
             },
-            "id_saved": 5
+            "id_saved": 10
         },
         {
             "components": {
-                "CameraComponent": {
-                    "height": 600.0,
-                    "isActive": false,
-                    "lockX": false,
-                    "lockY": false,
-                    "width": 800.0,
-                    "zoom": 1.0
+                "SpriteComponent": {
+                    "flip": 0,
+                    "isFixed": false,
+                    "layer": 0,
+                    "srcRect": {
+                        "h": 0,
+                        "w": 0,
+                        "x": 0,
+                        "y": 0
+                    },
+                    "textureId": "ball.png"
                 },
                 "TransformComponent": {
-                    "height": 128.0,
+                    "height": 360.0,
                     "rotation": 0.0,
-                    "width": 256.0,
-                    "x": 0.0,
-                    "y": 96.0,
+                    "width": 360.0,
+                    "x": 160.0,
+                    "y": 128.0,
                     "z_index": 0
                 }
             },
-            "id_saved": 6
+            "id_saved": 12
         }
     ]
 }

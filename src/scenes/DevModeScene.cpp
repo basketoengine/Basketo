@@ -213,7 +213,7 @@ DevModeScene::~DevModeScene() {
 }
 
 void DevModeScene::handleInput(SDL_Event& event) {
-    // Handle game window events
+    // Handle game window events - game window is read-only, only handle window management events
     if (useSeperateGameWindow && gameWindow && event.type == SDL_WINDOWEVENT) {
         Uint32 gameWindowID = SDL_GetWindowID(gameWindow);
         if (event.window.windowID == gameWindowID) {
@@ -225,10 +225,37 @@ void DevModeScene::handleInput(SDL_Event& event) {
                     addLogToConsole("Game window closed, switching to integrated view");
                     break;
             }
-            return; // Don't process this event further
+            return; // Don't process this event further - game window is read-only
         }
     }
 
+    // Filter out any mouse/keyboard events that target the game window
+    if (useSeperateGameWindow && gameWindow &&
+        (event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP ||
+         event.type == SDL_MOUSEMOTION || event.type == SDL_MOUSEWHEEL ||
+         event.type == SDL_KEYDOWN || event.type == SDL_KEYUP)) {
+
+        Uint32 gameWindowID = SDL_GetWindowID(gameWindow);
+        Uint32 eventWindowID = 0;
+
+        // Get the window ID for mouse events
+        if (event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP) {
+            eventWindowID = event.button.windowID;
+        } else if (event.type == SDL_MOUSEMOTION) {
+            eventWindowID = event.motion.windowID;
+        } else if (event.type == SDL_MOUSEWHEEL) {
+            eventWindowID = event.wheel.windowID;
+        } else if (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP) {
+            eventWindowID = event.key.windowID;
+        }
+
+        // If the event is targeting the game window, ignore it (game window is read-only)
+        if (eventWindowID == gameWindowID) {
+            return;
+        }
+    }
+
+    // Only process input for the main editor window
     handleDevModeInput(*this, event);
 }
 
@@ -320,6 +347,9 @@ void DevModeScene::render() {
     // Change window title based on mode
     const char* windowTitle = useSeperateGameWindow ? "Scene Editor" : "GameViewport";
     ImGui::Begin(windowTitle, nullptr, viewportFlags);
+
+    // Allow drag-and-drop in scene editor - this is where you edit the scene
+    // The game view window (separate window) is the one that should be read-only
     if (ImGui::IsDragDropActive()) {
         ImGui::InvisibleButton("##GameViewportDropTarget", ImVec2(static_cast<float>(gameViewport.w), static_cast<float>(gameViewport.h)));
         if (ImGui::BeginDragDropTarget()) {
@@ -366,10 +396,22 @@ void DevModeScene::render() {
                 systemManager->entitySignatureChanged(newEntity, entitySignature);
                 selectedEntity = newEntity;
                 inspectorTextureIdBuffer[0] = '\0';
+
+                // Reload game textures to ensure new sprites appear in game view
+                reloadGameTextures();
             }
             ImGui::EndDragDropTarget();
         }
     }
+
+    // Add visual indicator when using separate game window
+    if (useSeperateGameWindow) {
+        ImGui::SetCursorPos(ImVec2(10, 30));
+        ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "SCENE EDITOR");
+        ImGui::SetCursorPos(ImVec2(10, 45));
+        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Game view in separate window");
+    }
+
     ImGui::End();
     SDL_SetRenderDrawColor(renderer, (Uint8)(clear_color.x * 255), (Uint8)(clear_color.y * 255), (Uint8)(clear_color.z * 255), (Uint8)(clear_color.w * 255));
     SDL_RenderClear(renderer);
@@ -601,6 +643,8 @@ void DevModeScene::render() {
             if (strlen(spawnTextureId) > 0 && AssetManager::getInstance().getTexture(textureIdStr)) {
                 componentManager->addComponent(newEntity, SpriteComponent{textureIdStr});
                 entitySignature.set(componentManager->getComponentType<SpriteComponent>());
+                // Reload game textures to ensure new sprites appear in game view
+                reloadGameTextures();
             } else if (strlen(spawnTextureId) > 0) {
                 std::cerr << "Spawn Warning: Texture ID '" << textureIdStr << "' not found. Sprite not added." << std::endl;
             }
@@ -785,8 +829,7 @@ void DevModeScene::render() {
                         } else if (ext == ".lua") {
                             destDir = std::filesystem::absolute("../assets/Scripts/");
                             assetTypeToImport = "script";
-                        } else if (ext == ".json") { // Assuming .json for animations for now
-                            // Check if it's in an 'animations' subdirectory or has a typical animation name
+                        } else if (ext == ".json") {
                             if (p.parent_path().filename() == "animations" || filename.find("anim") != std::string::npos) {
                                 destDir = std::filesystem::absolute("../assets/Animations/");
                                 assetTypeToImport = "animation";
@@ -854,8 +897,10 @@ void DevModeScene::render() {
                             }
 
                             if (assetType == "texture" && ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
-                                ImGui::SetDragDropPayload("ASSET_TEXTURE_ID", filename.c_str(), filename.length() + 1);
-                                ImGui::Text("%s", filename.c_str()); // Display item name while dragging
+                                // Use texture ID without extension for consistency with AssetManager
+                                std::string textureId = std::filesystem::path(filename).stem().string();
+                                ImGui::SetDragDropPayload("ASSET_TEXTURE_ID", textureId.c_str(), textureId.length() + 1);
+                                ImGui::Text("%s", filename.c_str()); // Display full filename while dragging
                                 ImGui::EndDragDropSource();
                             }
                         }
@@ -1005,7 +1050,6 @@ void DevModeScene::createNewScene() {
 
     if (entityManager) entityManager->clear();
   
-    // Reset scene state variables
     selectedEntity = NO_ENTITY_SELECTED;
     inspectorTextureIdBuffer[0] = '\0';
     inspectorScriptPathBuffer[0] = '\0';
@@ -1027,7 +1071,6 @@ void DevModeScene::createNewScene() {
         addLogToConsole("Created new empty scene: " + std::string(sceneFilePath));
     } else {
         addLogToConsole("Error: Could not create new scene file: " + std::string(sceneFilePath));
-        // Fallback to a default scene if creation fails, or handle error differently
         const char* fallbackScene = "../assets/Scenes/scene.json";
         strncpy(sceneFilePath, fallbackScene, sizeof(sceneFilePath) -1);
         sceneFilePath[sizeof(sceneFilePath) -1] = '\0';
@@ -1045,17 +1088,16 @@ void DevModeScene::createNewScene() {
 }
 
 bool DevModeScene::initGameWindow() {
-    // Create the game window positioned to the right of the main editor window
     int editorX, editorY, editorW, editorH;
     SDL_GetWindowPosition(window, &editorX, &editorY);
     SDL_GetWindowSize(window, &editorW, &editorH);
 
-    int gameWindowX = editorX + editorW + 10; // Position to the right with some spacing
+    int gameWindowX = editorX + editorW + 10; 
     int gameWindowY = editorY;
     int gameWindowW = 800;
     int gameWindowH = 600;
 
-    gameWindow = SDL_CreateWindow("Game View",
+    gameWindow = SDL_CreateWindow("🎮 Game View (Read-Only)",
                                   gameWindowX, gameWindowY,
                                   gameWindowW, gameWindowH,
                                   SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
@@ -1084,11 +1126,15 @@ bool DevModeScene::initGameWindow() {
 }
 
 void DevModeScene::cleanupGameWindow() {
-    // Clean up game textures
+    // Clean up game textures (avoid destroying same texture multiple times)
+    std::set<SDL_Texture*> uniqueTextures;
     for (auto& pair : gameTextures) {
         if (pair.second) {
-            SDL_DestroyTexture(pair.second);
+            uniqueTextures.insert(pair.second);
         }
+    }
+    for (SDL_Texture* texture : uniqueTextures) {
+        SDL_DestroyTexture(texture);
     }
     gameTextures.clear();
 
@@ -1109,16 +1155,13 @@ void DevModeScene::renderGameWindow() {
     int gameWindowW, gameWindowH;
     SDL_GetWindowSize(gameWindow, &gameWindowW, &gameWindowH);
 
-    // Set up game viewport to fill the entire game window
     SDL_Rect gameViewportRect = {0, 0, gameWindowW, gameWindowH};
     SDL_RenderSetViewport(gameRenderer, &gameViewportRect);
 
-    // Use the game camera for rendering (independent of scene editor camera)
     float currentRenderCameraX = 0.0f;
     float currentRenderCameraY = 0.0f;
     float currentRenderZoom = 1.0f;
 
-    // Get camera settings from game camera entity
     if (gameCameraEntity != 0 &&
         componentManager->hasComponent<TransformComponent>(gameCameraEntity) &&
         componentManager->hasComponent<CameraComponent>(gameCameraEntity)) {
@@ -1133,7 +1176,6 @@ void DevModeScene::renderGameWindow() {
         }
     }
 
-    // In play mode, also check for active camera from camera system
     if (isPlaying && cameraSystem) {
         SDL_Rect activeGameCameraWorldView;
         float gameCamZoom = 1.0f;
@@ -1147,7 +1189,6 @@ void DevModeScene::renderGameWindow() {
         }
     }
 
-    // Clear the game window
     SDL_SetRenderDrawColor(gameRenderer,
                           (Uint8)(clear_color.x * 255),
                           (Uint8)(clear_color.y * 255),
@@ -1155,9 +1196,6 @@ void DevModeScene::renderGameWindow() {
                           (Uint8)(clear_color.w * 255));
     SDL_RenderClear(gameRenderer);
 
-    // Game view never shows grid - it's a clean game view
-
-    // Render entities
     std::vector<Entity> entitiesToRender;
     if (entityManager) {
         for (auto entity : entityManager->getActiveEntities()) {
@@ -1167,9 +1205,8 @@ void DevModeScene::renderGameWindow() {
         }
     }
 
-    // Debug: Log how many entities we're trying to render
     static int debugCounter = 0;
-    if (debugCounter % 60 == 0) { // Log every 60 frames (roughly once per second)
+    if (debugCounter % 60 == 0) {
         std::cout << "Game window rendering " << entitiesToRender.size() << " entities" << std::endl;
     }
     debugCounter++;
@@ -1189,17 +1226,14 @@ void DevModeScene::renderGameWindow() {
         auto& transform = componentManager->getComponent<TransformComponent>(entity);
         auto& sprite = componentManager->getComponent<SpriteComponent>(entity);
 
-        // Try to get texture from game textures first, then fallback to main AssetManager
         SDL_Texture* texture = nullptr;
         auto gameTextureIt = gameTextures.find(sprite.textureId);
         if (gameTextureIt != gameTextures.end()) {
             texture = gameTextureIt->second;
         } else {
-            // Fallback to main AssetManager (this won't work but we'll try)
             texture = AssetManager::getInstance().getTexture(sprite.textureId);
         }
 
-        // Debug: Log texture loading issues
         if (!texture) {
             static std::set<std::string> loggedMissingTextures;
             if (loggedMissingTextures.find(sprite.textureId) == loggedMissingTextures.end()) {
@@ -1234,42 +1268,58 @@ void DevModeScene::loadTexturesForGameRenderer() {
 
     addLogToConsole("Loading textures for game window renderer...");
 
-    auto& mainAssetManager = AssetManager::getInstance();
+    // Clear existing game textures (avoid destroying same texture multiple times)
+    std::set<SDL_Texture*> uniqueTextures;
+    for (auto& pair : gameTextures) {
+        if (pair.second) {
+            uniqueTextures.insert(pair.second);
+        }
+    }
+    for (SDL_Texture* texture : uniqueTextures) {
+        SDL_DestroyTexture(texture);
+    }
+    gameTextures.clear();
 
-    std::vector<std::string> textureFiles = {
-        "../assets/Textures/background.jpg",
-        "../assets/Textures/mario.png",
-        "../assets/Textures/running.png",
-        "../assets/Textures/mariobg.png",
-        "../assets/Textures/player.png",
-        "../assets/Textures/mario obstacle.png",
-        "../assets/Textures/marioblock.png",
-        "../assets/Textures/marioground.jpg"
-    };
+    std::string texturesRoot = "../assets/Textures/";
+    namespace fs = std::filesystem;
+    if (fs::exists(texturesRoot)) {
+        for (const auto& entry : fs::recursive_directory_iterator(texturesRoot)) {
+            if (entry.is_regular_file()) {
+                std::string fullPath = entry.path().string();
+                std::string relPath = fs::relative(entry.path(), texturesRoot).string();
 
-    for (const auto& filePath : textureFiles) {
-        std::string textureId = filePath.substr(filePath.find_last_of("/\\") + 1);
+                // Load the texture for the game renderer
+                SDL_Surface* surface = IMG_Load(fullPath.c_str());
+                if (surface) {
+                    SDL_Texture* gameTexture = SDL_CreateTextureFromSurface(gameRenderer, surface);
+                    if (gameTexture) {
+                        // Store texture with both full filename (with extension) and stem (without extension)
+                        // This handles both texture ID formats used by different loading paths
+                        std::string filenameWithExt = relPath;
+                        std::string filenameWithoutExt = std::filesystem::path(relPath).stem().string();
 
-        SDL_Surface* surface = IMG_Load(filePath.c_str());
-        if (surface) {
-            SDL_Texture* gameTexture = SDL_CreateTextureFromSurface(gameRenderer, surface);
-            if (gameTexture) {
-                gameTextures[textureId] = gameTexture;
-                std::cout << "Loaded texture '" << textureId << "' for game renderer" << std::endl;
-            } else {
-                std::cerr << "Failed to create game texture from surface: " << SDL_GetError() << std::endl;
+                        gameTextures[filenameWithExt] = gameTexture;
+                        gameTextures[filenameWithoutExt] = gameTexture; // Same texture, different key
+
+                        std::cout << "Loaded texture '" << filenameWithExt << "' (also as '" << filenameWithoutExt << "') for game renderer" << std::endl;
+                    } else {
+                        std::cerr << "Failed to create game texture from surface: " << SDL_GetError() << std::endl;
+                    }
+                    SDL_FreeSurface(surface);
+                } else {
+                    std::cerr << "Failed to load surface for game renderer: " << fullPath << " - " << IMG_GetError() << std::endl;
+                }
             }
-            SDL_FreeSurface(surface);
-        } else {
-            std::string baseId = textureId;
-            if (baseId.find('.') != std::string::npos) {
-                baseId = baseId.substr(0, baseId.find_last_of('.'));
-            }
-            gameTextures[textureId] = nullptr; 
         }
     }
 
     addLogToConsole("Finished loading textures for game window");
+}
+
+void DevModeScene::reloadGameTextures() {
+    if (useSeperateGameWindow && gameRenderer) {
+        loadTexturesForGameRenderer();
+    }
 }
 
 void DevModeScene::createDefaultGameCamera() {

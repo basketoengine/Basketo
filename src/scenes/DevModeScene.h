@@ -92,6 +92,11 @@ public:
     void loadTexturesForGameRenderer();
 
     /**
+     * @brief Reload textures for game window when new sprites are added
+     */
+    void reloadGameTextures();
+
+    /**
      * @brief Create default camera entity for game view
      */
     void createDefaultGameCamera();
@@ -103,11 +108,10 @@ public:
     SDL_Window* window;
     SDL_Rect gameViewport;
 
-    // Separate game window for Unity-like layout
     SDL_Window* gameWindow;
     SDL_Renderer* gameRenderer;
     bool useSeperateGameWindow = true;
-    std::unordered_map<std::string, SDL_Texture*> gameTextures; // Textures for game renderer
+    std::unordered_map<std::string, SDL_Texture*> gameTextures;
     Entity gameCameraEntity = 0; // Default camera entity for game view
 
     float cameraX = 0.0f;

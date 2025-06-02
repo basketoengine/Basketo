@@ -186,6 +186,8 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
                     AssetManager& assets = AssetManager::getInstance();
                     if (assets.getTexture(newTextureId) || assets.loadTexture(newTextureId, newTextureId)) {
                         sprite.textureId = newTextureId;
+                        // Reload game textures to ensure texture appears in game view
+                        scene.reloadGameTextures();
                     } else {
                         std::cerr << "Inspector Error: Failed to find or load texture: '" << newTextureId << "'. Reverting." << std::endl;
                         strncpy(scene.inspectorTextureIdBuffer, sprite.textureId.c_str(), IM_ARRAYSIZE(scene.inspectorTextureIdBuffer) - 1);
@@ -206,7 +208,7 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
                         std::string filename = getFilenameFromPath(selectedPath);
                         if (!filename.empty()) {
                             std::string assetId = getFilenameWithoutExtension(filename);
-                            std::filesystem::path destDir = std::filesystem::absolute("../assets/Image/");
+                            std::filesystem::path destDir = std::filesystem::absolute("../assets/Textures/");
                             std::filesystem::path destPath = destDir / filename;
 
                             try {
@@ -220,6 +222,9 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
                                     strncpy(scene.inspectorTextureIdBuffer, assetId.c_str(), IM_ARRAYSIZE(scene.inspectorTextureIdBuffer) - 1);
                                     scene.inspectorTextureIdBuffer[IM_ARRAYSIZE(scene.inspectorTextureIdBuffer) - 1] = '\0';
                                     std::cout << "Texture loaded and assigned: " << assetId << std::endl;
+
+                                    // Reload game textures to ensure new texture appears in game view
+                                    scene.reloadGameTextures();
                                 } else {
                                     tinyfd_messageBox("Error", "Failed to load texture into AssetManager.", "ok", "error", 1);
                                 }
