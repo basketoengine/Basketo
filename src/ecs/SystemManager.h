@@ -47,7 +47,6 @@ public:
             auto const& systemTypeNameStd = pair.first; 
             auto const& system = pair.second;
             
-            // New debug logs to inspect system names
             std::cout << "[SystemManager Debug] Processing system from map. Key: '" << systemTypeNameStd << "'" << std::endl;
             std::cout << "[SystemManager Debug] Comparing with typeid(CollisionSystem).name(): '" << typeid(CollisionSystem).name() << "'" << std::endl;
             bool namesMatch = (std::string(systemTypeNameStd) == std::string(typeid(CollisionSystem).name()));
@@ -57,7 +56,7 @@ public:
             if (sig_it != signatures.end()) {
                 auto const& systemSignature = sig_it->second;
 
-                if (namesMatch) { // This was the condition for the more detailed CollisionSystem logs
+                if (namesMatch) { 
                     std::cout << "[SystemManager] Checking for CollisionSystem (Entity " << entity << "):" << std::endl;
                     std::cout << "  Entity Current Signature (bits):      " << entitySignature.to_string() << std::endl;
                     std::cout << "  CollisionSystem Required Sig (bits): " << systemSignature.to_string() << std::endl;
@@ -81,8 +80,6 @@ public:
                 }
 
                 if ((entitySignature & systemSignature) == systemSignature) {
-                    // If it's the collision system and names didn't match for debug, but signature logic is correct, it might still be added here.
-                    // We can add a log here too if needed, specific to when an entity is added to *any* system.
                     system->entities.insert(entity);
                 } else {
                     system->entities.erase(entity);

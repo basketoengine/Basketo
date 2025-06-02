@@ -155,6 +155,9 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
                 scene.inspectorTextureIdBuffer[0] = '\0';
                 scene.inspectorScriptPathBuffer[0] = '\0';
 
+                // Properly notify systems and components before destroying entity
+                scene.systemManager->entityDestroyed(entityToDelete);
+                scene.componentManager->entityDestroyed(entityToDelete);
                 scene.entityManager->destroyEntity(entityToDelete);
                 std::cout << "Deleted Entity " << entityToDelete << std::endl;
             }

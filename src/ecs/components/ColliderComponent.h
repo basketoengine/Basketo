@@ -44,5 +44,5 @@ struct ColliderComponent {
 
     }
 
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE(ColliderComponent, width, height, offsetX, offsetY, vertices, type, isTrigger, contacts) // Added 'contacts'
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE(ColliderComponent, width, height, offsetX, offsetY, vertices, type, isTrigger) // Removed 'contacts' - runtime data should not be serialized
 };

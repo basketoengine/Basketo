@@ -99,6 +99,9 @@ bool loadDevModeScene(DevModeScene& scene, const std::string& filepath) {
 
     std::set<Entity> entitiesToDestroy = scene.entityManager->getActiveEntities();
     for (Entity entity : entitiesToDestroy) {
+        // Properly notify systems and components before destroying entity
+        scene.systemManager->entityDestroyed(entity);
+        scene.componentManager->entityDestroyed(entity);
         scene.entityManager->destroyEntity(entity);
     }
     if (!scene.entityManager->getActiveEntities().empty()) {
