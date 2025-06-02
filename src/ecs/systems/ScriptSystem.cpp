@@ -7,7 +7,8 @@
 #include "../components/RigidbodyComponent.h"
 #include "../components/AnimationComponent.h"
 #include "../components/ColliderComponent.h"
-#include "../../InputManager.h" 
+#include "../components/AudioComponent.h"
+#include "../../InputManager.h"
 #include <iostream>
 #include <fstream>
 
@@ -288,6 +289,10 @@ void ScriptSystem::registerEntityAPI() {
             return componentManager->hasComponent<ScriptComponent>(entity);
         } else if (componentName == "ColliderComponent") {
             return componentManager->hasComponent<ColliderComponent>(entity);
+        } else if (componentName == "SoundEffectsComponent") {
+            return componentManager->hasComponent<SoundEffectsComponent>(entity);
+        } else if (componentName == "AudioComponent") {
+            return componentManager->hasComponent<AudioComponent>(entity);
         }
         // Add other components as needed
 
@@ -302,5 +307,51 @@ void ScriptSystem::registerEntityAPI() {
             auto& animComp = componentManager->getComponent<AnimationComponent>(entity);
             animComp.flipHorizontal = flip;
         }
+    });
+
+    // Sound Effects API
+    registerFunction("PlaySound", [this](Entity entity, const std::string& actionName) {
+        if (componentManager->hasComponent<SoundEffectsComponent>(entity)) {
+            auto& soundEffectsComp = componentManager->getComponent<SoundEffectsComponent>(entity);
+            soundEffectsComp.playSound(actionName);
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] PlaySound: Entity " + std::to_string(entity) + " does not have a SoundEffectsComponent.");
+            }
+        }
+    });
+
+    registerFunction("AddSoundEffect", [this](Entity entity, const std::string& actionName, const std::string& audioId) {
+        if (componentManager->hasComponent<SoundEffectsComponent>(entity)) {
+            auto& soundEffectsComp = componentManager->getComponent<SoundEffectsComponent>(entity);
+            soundEffectsComp.addSoundEffect(actionName, audioId);
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] AddSoundEffect: Entity " + std::to_string(entity) + " does not have a SoundEffectsComponent.");
+            }
+        }
+    });
+
+    registerFunction("RemoveSoundEffect", [this](Entity entity, const std::string& actionName) {
+        if (componentManager->hasComponent<SoundEffectsComponent>(entity)) {
+            auto& soundEffectsComp = componentManager->getComponent<SoundEffectsComponent>(entity);
+            soundEffectsComp.removeSoundEffect(actionName);
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] RemoveSoundEffect: Entity " + std::to_string(entity) + " does not have a SoundEffectsComponent.");
+            }
+        }
+    });
+
+    registerFunction("HasSoundEffect", [this](Entity entity, const std::string& actionName) -> bool {
+        if (componentManager->hasComponent<SoundEffectsComponent>(entity)) {
+            auto& soundEffectsComp = componentManager->getComponent<SoundEffectsComponent>(entity);
+            return !soundEffectsComp.getAudioId(actionName).empty();
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] HasSoundEffect: Entity " + std::to_string(entity) + " does not have a SoundEffectsComponent.");
+            }
+        }
+        return false;
     });
 }

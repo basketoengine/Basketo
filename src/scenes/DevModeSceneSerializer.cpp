@@ -53,6 +53,9 @@ void saveDevModeScene(DevModeScene& scene, const std::string& filepath) {
         if (scene.componentManager->hasComponent<AudioComponent>(entity)) {
             entityJson["components"]["AudioComponent"] = scene.componentManager->getComponent<AudioComponent>(entity);
         }
+        if (scene.componentManager->hasComponent<SoundEffectsComponent>(entity)) {
+            entityJson["components"]["SoundEffectsComponent"] = scene.componentManager->getComponent<SoundEffectsComponent>(entity);
+        }
         if (scene.componentManager->hasComponent<CameraComponent>(entity)) {
             entityJson["components"]["CameraComponent"] = scene.componentManager->getComponent<CameraComponent>(entity);
         }
@@ -205,6 +208,11 @@ bool loadDevModeScene(DevModeScene& scene, const std::string& filepath) {
                     from_json(componentData, comp);
                     scene.componentManager->addComponent(newEntity, comp);
                     entitySignature.set(scene.componentManager->getComponentType<AudioComponent>());
+                } else if (componentType == "SoundEffectsComponent") {
+                    SoundEffectsComponent comp;
+                    from_json(componentData, comp);
+                    scene.componentManager->addComponent(newEntity, comp);
+                    entitySignature.set(scene.componentManager->getComponentType<SoundEffectsComponent>());
                 } else if (componentType == "CameraComponent") { // Deserialize CameraComponent
                     CameraComponent comp;
                     from_json(componentData, comp);

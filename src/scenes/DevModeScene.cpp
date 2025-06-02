@@ -64,12 +64,13 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     componentManager->registerComponent<SpriteComponent>();
     componentManager->registerComponent<VelocityComponent>();
     componentManager->registerComponent<ScriptComponent>();
-    componentManager->registerComponent<ColliderComponent>(); 
+    componentManager->registerComponent<ColliderComponent>();
     componentManager->registerComponent<NameComponent>();
     componentManager->registerComponent<AnimationComponent>();
-    componentManager->registerComponent<AudioComponent>(); 
-    componentManager->registerComponent<RigidbodyComponent>(); 
-    componentManager->registerComponent<CameraComponent>(); 
+    componentManager->registerComponent<AudioComponent>();
+    componentManager->registerComponent<SoundEffectsComponent>();
+    componentManager->registerComponent<RigidbodyComponent>();
+    componentManager->registerComponent<CameraComponent>();
     loadDevModeScene(*this, sceneFilePath);
 
     renderSystem = systemManager->registerSystem<RenderSystem>();

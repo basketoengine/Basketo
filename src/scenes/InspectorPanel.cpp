@@ -40,7 +40,7 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
         ImGui::Separator();
 
         ImGui::PushItemWidth(-1);
-        const char* component_types[] = { "Transform", "Sprite", "Velocity", "Script", "Collider", "Animation", "Audio", "Camera", "Rigidbody" }; 
+        const char* component_types[] = { "Transform", "Sprite", "Velocity", "Script", "Collider", "Animation", "Audio", "SoundEffects", "Camera", "Rigidbody" };
         static int current_component_type_idx = 0;
 
         if (ImGui::BeginCombo("##AddComponentCombo", component_types[current_component_type_idx])) {
@@ -112,6 +112,14 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
                     std::cout << "Added AudioComponent to Entity " << scene.selectedEntity << std::endl;
                 } else {
                     std::cout << "Entity " << scene.selectedEntity << " already has AudioComponent." << std::endl;
+                }
+            } else if (selected_component_str == "SoundEffects") {
+                if (!scene.componentManager->hasComponent<SoundEffectsComponent>(scene.selectedEntity)) {
+                    scene.componentManager->addComponent(scene.selectedEntity, SoundEffectsComponent{});
+                    entitySignature.set(scene.componentManager->getComponentType<SoundEffectsComponent>());
+                    std::cout << "Added SoundEffectsComponent to Entity " << scene.selectedEntity << std::endl;
+                } else {
+                    std::cout << "Entity " << scene.selectedEntity << " already has SoundEffectsComponent." << std::endl;
                 }
             } else if (selected_component_str == "Camera") {
                 if (!scene.componentManager->hasComponent<CameraComponent>(scene.selectedEntity)) {
@@ -387,7 +395,7 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
                 }
 
                 // Audio asset browser for AudioComponent
-                if (ImGui::Button("Browse Audio...")) {
+                if (ImGui::Button("Browse Audio...##AudioComponent")) {
                     const char* filterPatterns[] = { "*.mp3", "*.wav", "*.ogg", "*.flac" };
                     const char* filePath = tinyfd_openFileDialog("Select Audio File", "../assets/Audio/", 4, filterPatterns, "Audio Files", 0);
                     if (filePath != NULL) {
@@ -412,7 +420,90 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
                     }
                 }
             }
-        } 
+        }
+
+        if (scene.componentManager->hasComponent<SoundEffectsComponent>(scene.selectedEntity)) {
+            if (ImGui::CollapsingHeader("Sound Effects Component", ImGuiTreeNodeFlags_DefaultOpen)) {
+                auto& soundEffectsComp = scene.componentManager->getComponent<SoundEffectsComponent>(scene.selectedEntity);
+
+                ImGui::SliderInt("Default Volume", &soundEffectsComp.defaultVolume, 0, 128);
+
+                ImGui::Separator();
+                ImGui::Text("Sound Effects:");
+
+                // Display existing sound effects
+                static std::string toRemove = "";
+                for (auto& [actionName, audioId] : soundEffectsComp.soundEffects) {
+                    ImGui::PushID(actionName.c_str());
+                    ImGui::Text("%s: %s", actionName.c_str(), audioId.c_str());
+                    ImGui::SameLine();
+                    if (ImGui::Button("Test")) {
+                        soundEffectsComp.playSound(actionName);
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("Remove")) {
+                        toRemove = actionName;
+                    }
+                    ImGui::PopID();
+                }
+
+                // Remove sound effect if requested
+                if (!toRemove.empty()) {
+                    soundEffectsComp.removeSoundEffect(toRemove);
+                    toRemove = "";
+                }
+
+                ImGui::Separator();
+
+                // Add new sound effect
+                static char newActionName[64] = "";
+                static char newAudioId[64] = "";
+
+                ImGui::InputText("Action Name##SoundEffects", newActionName, sizeof(newActionName));
+                ImGui::InputText("Audio ID##SoundEffects", newAudioId, sizeof(newAudioId));
+
+                if (ImGui::Button("Add Sound Effect") && strlen(newActionName) > 0 && strlen(newAudioId) > 0) {
+                    soundEffectsComp.addSoundEffect(std::string(newActionName), std::string(newAudioId));
+                    newActionName[0] = '\0';
+                    newAudioId[0] = '\0';
+                }
+
+                ImGui::SameLine();
+                if (ImGui::Button("Browse Audio...##SoundEffects")) {
+                    const char* filterPatterns[] = { "*.mp3", "*.wav", "*.ogg", "*.flac" };
+                    const char* filePath = tinyfd_openFileDialog("Select Audio File", "../assets/Audio/", 4, filterPatterns, "Audio Files", 0);
+                    if (filePath != NULL) {
+                        std::filesystem::path selectedPath = filePath;
+                        std::string filename = selectedPath.filename().string();
+                        std::string assetId = selectedPath.stem().string();
+                        std::filesystem::path destDir = std::filesystem::absolute("../assets/Audio/");
+                        std::filesystem::path destPath = destDir / filename;
+                        try {
+                            std::filesystem::create_directories(destDir);
+                            std::filesystem::copy_file(selectedPath, destPath, std::filesystem::copy_options::overwrite_existing);
+                            AssetManager& assets = AssetManager::getInstance();
+                            if (assets.loadSound(assetId, destPath.string())) {
+                                strncpy(newAudioId, assetId.c_str(), sizeof(newAudioId) - 1);
+                                newAudioId[sizeof(newAudioId) - 1] = '\0';
+                            } else {
+                                tinyfd_messageBox("Error", "Failed to load audio into AssetManager.", "ok", "error", 1);
+                            }
+                        } catch (const std::filesystem::filesystem_error& e) {
+                            std::cerr << "Filesystem Error: " << e.what() << std::endl;
+                            tinyfd_messageBox("Error", ("Failed to copy file: " + std::string(e.what())).c_str(), "ok", "error", 1);
+                        }
+                    }
+                }
+
+                if (ImGui::Button("Remove Sound Effects Component")) {
+                    scene.componentManager->removeComponent<SoundEffectsComponent>(scene.selectedEntity);
+                    Signature sig = scene.entityManager->getSignature(scene.selectedEntity);
+                    sig.reset(scene.componentManager->getComponentType<SoundEffectsComponent>());
+                    scene.entityManager->setSignature(scene.selectedEntity, sig);
+                    scene.systemManager->entitySignatureChanged(scene.selectedEntity, sig);
+                }
+            }
+        }
 
         if (scene.componentManager->hasComponent<CameraComponent>(scene.selectedEntity)) {
             if (ImGui::CollapsingHeader("Camera Component", ImGuiTreeNodeFlags_DefaultOpen)) {
