@@ -1,0 +1,37 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/vendor/**",
+                "${vcpkgRoot}/installed/x64-windows/include",
+                "${vcpkgRoot}/installed/x64-windows/include/SDL2",
+                "${vcpkgRoot}/installed/x64-windows/include/gtest",
+                "${vcpkgRoot}/installed/x64-windows/include/boost",
+                "${vcpkgRoot}/installed/x64-windows/include/assimp",
+                "${vcpkgRoot}/installed/x64-windows/include/freetype2",
+                "${vcpkgRoot}/installed/x64-windows/include/glm",
+                "${vcpkgRoot}/installed/x64-windows/include/imgui",
+                "${vcpkgRoot}/installed/x64-windows/include/jsoncpp",
+                "${vcpkgRoot}/installed/x64-windows/include/lua",
+                "${vcpkgRoot}/installed/x64-windows/include/rapidjson",
+                "${vcpkgRoot}/installed/x64-windows/include/spdlog",
+                "${vcpkgRoot}/installed/x64-windows/include/stb",
+                "${vcpkgRoot}/installed/x64-windows/include/tinyfiledialogs",
+                "${vcpkgRoot}/installed/x64-windows/include/tinyxml2",
+                "${vcpkgRoot}/installed/x64-windows/include/vulkan"
+            ],
+            "browse": {
+                "path": [
+                    "${workspaceFolder}/**",
+                    "${vcpkgRoot}/installed/x64-windows/include"
+                ],
+                "limitSymbolsToIncludedHeaders": true,
+                "databaseFilename": ""
+            },
+            "intelliSenseMode": "gcc-x64"
+        }
+    ],
+    "version": 4
+}

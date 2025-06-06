@@ -1,10 +1,17 @@
 #pragma once
 #include <SDL2/SDL.h>
+#include "MemoryTracker.h"
 
 class Game {
 public:
-    Game();
-    ~Game();
+    Game() {
+        window = (SDL_Window*)MemoryTracker::allocate(sizeof(SDL_Window), __FILE__, __LINE__);
+        renderer = (SDL_Renderer*)MemoryTracker::allocate(sizeof(SDL_Renderer), __FILE__, __LINE__);
+    };
+    ~Game() {
+        MemoryTracker::deallocate(window);
+        MemoryTracker::deallocate(renderer);
+    };
 
     bool init(const char* title, int width, int height);
     void handleEvents();
@@ -19,6 +26,7 @@ public:
 
 private:
     SDL_Window* window = nullptr;
+    SDL_Renderer* renderer = nullptr;
     SDL_Renderer* renderer = nullptr;
     bool running = false;
 };
