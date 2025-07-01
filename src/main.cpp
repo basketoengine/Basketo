@@ -6,9 +6,9 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    Uint32 frameStart = SDL_GetTicks();
-
     while (game.isRunning()) {
+        Uint32 frameStart = SDL_GetTicks();
+        
         game.handleEvents();
         game.update();
         game.render();
