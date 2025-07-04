@@ -39,6 +39,7 @@ private:
     void GenerateScriptFromGemini(const std::string& scriptPrompt, std::string& outScriptPath);
     void ModifyComponentFromGemini(Entity entity, const std::string& modificationPrompt); 
     std::string TranslateNaturalLanguageToCommand(const std::string& naturalLanguageInput);
+    std::string ListAssets();
 
     EntityManager* m_entityManager;
     ComponentManager* m_componentManager;

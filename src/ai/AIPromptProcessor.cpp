@@ -144,10 +144,38 @@ void AIPromptProcessor::PollAndProcessPendingCommands() {
     }
 }
 
+std::string AIPromptProcessor::ListAssets() {
+    std::string asset_list = "Available assets:\n";
+    asset_list += "Textures (use the name without extension as textureId, e.g., 'mario' for 'mario.png'):\n";
+    try {
+        for (const auto& entry : std::filesystem::recursive_directory_iterator("assets/Textures")) {
+            if (entry.is_regular_file()) {
+                asset_list += "- " + entry.path().stem().string() + "\n";
+            }
+        }
+    } catch (const std::filesystem::filesystem_error& e) {
+        // Ignore error if directory doesn't exist, etc.
+    }
+
+    asset_list += "Scripts (use the full path like 'assets/Scripts/player.lua'):\n";
+    try {
+        for (const auto& entry : std::filesystem::recursive_directory_iterator("assets/Scripts")) {
+            if (entry.is_regular_file() && entry.path().extension() == ".lua") {
+                asset_list += "- " + entry.path().string() + "\n";
+            }
+        }
+    } catch (const std::filesystem::filesystem_error& e) {
+        // Ignore error
+    }
+    return asset_list;
+}
+
 std::string AIPromptProcessor::TranslateNaturalLanguageToCommand(const std::string& natural_language_query) {
     Console::Log("Translating natural language: " + natural_language_query);
+    std::string asset_context = ListAssets();
     std::string system_prompt = 
         "You are an AI assistant that translates natural language into structured game engine commands. "
+        "You are fully autonomous. When asked to create something, do it completely. Create entities, assign components, position them, write scripts, create the script files, and assign them to the entities."
         "The available commands are: \n"
         "1. create entity <name> at <x> <y> sprite <texture_id> [width <w>] [height <h>]\n"
         "2. script entity <name> with <script_path.lua>\n"
@@ -155,10 +183,12 @@ std::string AIPromptProcessor::TranslateNaturalLanguageToCommand(const std::stri
         "4. delete entity <name>\n"
         "5. gemini_script <prompt for lua script> (Use this if the user asks to generate a script or code)\n"
         "6. gemini_modify <entity_name> <modification prompt> (Use this if the user asks to change an existing entity in a complex way not covered by other commands)\n"
-        "Based on the user's input, provide ONLY the corresponding structured command. "
-        "If the input doesn't match any command try to find the closer one, or if it is very very ambiguous, output 'UNKNOWN_COMMAND'. "
+        "Based on the user's input, provide a sequence of structured commands to achieve the goal. Each command should be on a new line. "
+        "IMPORTANT: All scripts MUST be in Lua (ending in .lua) and saved in the 'assets/Scripts/' directory. You MUST call gemini_script to create the script file BEFORE using the 'script' command to assign it."
+        "If the input is ambiguous, output 'UNKNOWN_COMMAND'. "
         "For 'create', if width/height are not specified, they can be omitted. Assume common game object names if not specified (e.g., 'player', 'enemy', 'block'). "
         "For 'script', the path should be a valid .lua path, if the user just gives a script name, assume it's in 'assets/Scripts/'."
+        "Here is the current asset context:\n" + asset_context +
         "User input: " + natural_language_query;
 
     std::string geminiResponse = ProcessGeminiPrompt(system_prompt);
@@ -190,34 +220,64 @@ std::string AIPromptProcessor::TranslateNaturalLanguageToCommand(const std::stri
 
 void AIPromptProcessor::GenerateScriptFromGemini(const std::string& scriptPrompt, std::string& outScriptPath) {
     Console::Log("Generating script with prompt: " + scriptPrompt);
+
+    // Extract the script name from the prompt, assuming the last word is the name.
+    std::string scriptName;
+    size_t last_space = scriptPrompt.find_last_of(" 	");
+    if (last_space != std::string::npos) {
+        scriptName = scriptPrompt.substr(last_space + 1);
+    } else {
+        scriptName = scriptPrompt; // Assume the whole prompt is the name if no spaces
+    }
+    // Ensure it ends with .lua
+    if (scriptName.size() < 4 || scriptName.substr(scriptName.size() - 4) != ".lua") {
+        scriptName += ".lua";
+    }
+
     std::string geminiResponse = ProcessGeminiPrompt("Generate a Lua script for a game entity based on this description: " + scriptPrompt + ". The script should be self-contained and primarily define an update(deltaTime) function if applicable, and an init() function. Only output the Lua code itself, no explanations or markdown.");
     
     std::string script_content = "-- Failed to parse Gemini response or extract script.";
 
-    size_t text_start = geminiResponse.find("\\\"text\\\": \\\""); 
-    if (text_start != std::string::npos) {
-        text_start += 8; 
-        size_t text_end = geminiResponse.find("\\\"", text_start); 
-        if (text_end != std::string::npos) {
-            script_content = geminiResponse.substr(text_start, text_end - text_start);
-            size_t pos = 0;
-            while((pos = script_content.find("\\\\n", pos)) != std::string::npos) { 
-                script_content.replace(pos, 2, "\\n");
-                pos += 1;
-            }
-            pos = 0;
-            while((pos = script_content.find("\\\\\\\"", pos)) != std::string::npos) { 
-                script_content.replace(pos, 2, "\\\"");
-                pos += 1;
+    try {
+        auto json = nlohmann::json::parse(geminiResponse);
+        if (json.contains("candidates") && !json["candidates"].empty() &&
+            json["candidates"][0].contains("content") && json["candidates"][0]["content"].contains("parts") &&
+            !json["candidates"][0]["content"]["parts"].empty() && json["candidates"][0]["content"]["parts"][0].contains("text")) {
+            script_content = json["candidates"][0]["content"]["parts"][0]["text"].get<std::string>();
+        }
+    } catch (const nlohmann::json::parse_error& e) {
+        Console::Error(std::string("Failed to parse Gemini script response JSON: ") + e.what());
+        // Fallback to raw string search if JSON parsing fails
+        size_t text_start = geminiResponse.find("\"text\": \"");
+        if (text_start != std::string::npos) {
+            text_start += 8; // length of \"text\": \"
+            size_t text_end = geminiResponse.find("\"", text_start);
+            if (text_end != std::string::npos) {
+                script_content = geminiResponse.substr(text_start, text_end - text_start);
+                // Unescape newlines and quotes
+                size_t pos = 0;
+                while ((pos = script_content.find("\\n", pos)) != std::string::npos) {
+                    script_content.replace(pos, 2, "\n");
+                    pos += 1;
+                }
+                pos = 0;
+                while ((pos = script_content.find("\\\"", pos)) != std::string::npos) {
+                    script_content.replace(pos, 2, "\"");
+                    pos += 1;
+                }
             }
         }
     }
 
-    std::string dirPath = "assets/Scripts/generated/";
-    outScriptPath = dirPath + "generated_script_" + std::to_string(time(0)) + ".lua";
+
+    std::string dirPath = "assets/Scripts/";
+    if (!std::filesystem::exists(dirPath)) {
+        std::filesystem::create_directories(dirPath);
+    }
+    outScriptPath = dirPath + scriptName;
     std::ofstream file(outScriptPath);
     if (file.is_open()) {
-        file << "-- Script generated by Gemini from prompt: " << scriptPrompt << "\\n";
+        file << "-- Script generated by Gemini from prompt: " << scriptPrompt << "\n";
         file << script_content;
         file.close();
         Console::Log("Script generated and saved to: " + outScriptPath);
@@ -248,201 +308,234 @@ void AIPromptProcessor::HandlePrompt(const std::string& prompt, bool isTranslate
         return;
     }
 
-    Console::Log("Executing translated/direct command: " + prompt);
+    Console::Log("Executing translated/direct command(s):\n" + prompt);
     std::istringstream iss(prompt);
-    std::string command;
-    iss >> command;
+    std::string line;
 
-    if (command == "gemini_script") {
-        std::string script_prompt_parts;
-        std::string part;
-        while(iss >> part) {
-            script_prompt_parts += part + " ";
+    while (std::getline(iss, line)) {
+        // Trim leading/trailing whitespace from the line
+        line.erase(0, line.find_first_not_of(" \t\n\r"));
+        line.erase(line.find_last_not_of(" \t\n\r") + 1);
+
+        if (line.empty()) {
+            continue; // Skip empty lines
         }
-        if (!script_prompt_parts.empty()) {
-            script_prompt_parts.pop_back(); 
-            std::string generatedPath;
-            GenerateScriptFromGemini(script_prompt_parts, generatedPath);
-            if (!generatedPath.empty()) {
-                 Console::Log("Gemini generated script at: " + generatedPath);
+
+        Console::Log("Executing command: " + line);
+        std::istringstream line_iss(line);
+        std::string command;
+        line_iss >> command;
+
+        if (command == "gemini_script") {
+            std::string script_prompt_parts;
+            std::string part;
+            while(line_iss >> part) {
+                script_prompt_parts += part + " ";
             }
+            if (!script_prompt_parts.empty()) {
+                script_prompt_parts.pop_back(); 
+                std::string generatedPath;
+                GenerateScriptFromGemini(script_prompt_parts, generatedPath);
+                if (!generatedPath.empty()) {
+                     Console::Log("Gemini generated script at: " + generatedPath);
+                     // This is a bit of a hack. We assume the next command will be `script entity`
+                     // and we will inject the generated path.
+                     // A better solution would be a more robust command queue or context.
+                     if (std::getline(iss, line)) {
+                        // Trim and process the next line
+                        line.erase(0, line.find_first_not_of(" \t\n\r"));
+                        line.erase(line.find_last_not_of(" \t\n\r") + 1);
+                        if (!line.empty()) {
+                            std::string next_command;
+                            std::istringstream next_line_iss(line);
+                            next_line_iss >> next_command;
+                            if (next_command == "script") {
+                                std::string type, entityName, with_keyword, scriptPath;
+                                next_line_iss >> type >> entityName >> with_keyword >> scriptPath;
+                                // Replace the placeholder script path with the generated one.
+                                line.replace(line.find(scriptPath), scriptPath.length(), generatedPath);
+                            }
+                        }
+                     }
+                }
+            } else {
+                Console::Warn("Gemini script prompt is empty. Usage: gemini_script <your detailed prompt for a lua script>");
+            }
+            // We've processed the gemini_script and the following script command, so continue.
+            continue;
+        } else if (command == "gemini_modify") {
+            std::string entityName;
+            line_iss >> entityName;
+            Entity targetEntity = m_findEntityByNameFunc(entityName);
+            if (targetEntity == NO_ENTITY_SELECTED) {
+                Console::Error("LLM/Gemini: Entity '" + entityName + "' not found for modification.");
+                continue; // Continue to next command
+            }
+            std::string modification_prompt_parts;
+            std::string part;
+            while(line_iss >> part) {
+                modification_prompt_parts += part + " ";
+            }
+            if (!modification_prompt_parts.empty()) {
+                modification_prompt_parts.pop_back(); 
+                ModifyComponentFromGemini(targetEntity, modification_prompt_parts);
+            } else {
+                Console::Warn("Gemini modification prompt is empty. Usage: gemini_modify <entity_name> <your detailed modification request>");
+            }
+            continue; // Continue to next command
+        }
+        
+        if (command == "create") {
+            std::string type, entityName, at_keyword, sprite_keyword, textureId;
+            float x = 0.0f, y = 0.0f; 
+            float w = 32.0f, h = 32.0f; 
+
+            line_iss >> type;
+            if (type != "entity") {
+                Console::Error("LLM: Expected 'entity' after 'create'. Usage: create entity <name> at <x> <y> sprite <texture_id>");
+                continue;
+            }
+            line_iss >> entityName >> at_keyword >> x >> y >> sprite_keyword >> textureId;
+
+            if (at_keyword != "at" || sprite_keyword != "sprite") {
+                Console::Error("LLM: Invalid 'create' syntax. Usage: create entity <name> at <x> <y> sprite <texture_id> [width <w>] [height <h>]");
+                continue;
+            }
+
+            std::string opt_param;
+            while(line_iss >> opt_param) {
+                if (opt_param == "width") line_iss >> w;
+                else if (opt_param == "height") line_iss >> h;
+            }
+
+            if (m_findEntityByNameFunc(entityName) != NO_ENTITY_SELECTED) {
+                Console::Warn("LLM: Entity with name '" + entityName + "' already exists.");
+                continue;
+            }
+
+            if (!m_assetManager->getTexture(textureId)) { 
+                Console::Warn("LLM: Texture ID '" + textureId + "' not found. Entity might be invisible.");
+            }
+
+            Entity newEntity = m_entityManager->createEntity();
+            m_componentManager->addComponent<NameComponent>(newEntity, NameComponent(entityName));
+            TransformComponent transformComp(x, y, w, h, 0.0f, 0);
+            m_componentManager->addComponent<TransformComponent>(newEntity, transformComp);
+            m_componentManager->addComponent<SpriteComponent>(newEntity, SpriteComponent{textureId});
+
+            if (m_componentManager->isComponentRegistered<RigidbodyComponent>()) {
+                RigidbodyComponent rigidBodyComp; 
+                m_componentManager->addComponent<RigidbodyComponent>(newEntity, rigidBodyComp);
+            }
+
+            if (m_componentManager->isComponentRegistered<ColliderComponent>()) {
+
+                m_componentManager->addComponent<ColliderComponent>(newEntity, ColliderComponent(w, h)); 
+                Console::Log("LLM: Added ColliderComponent to '" + entityName + "' with width: " + std::to_string(w) + ", height: " + std::to_string(h));
+            } else {
+                Console::Warn("LLM: ColliderComponent not registered. Entity '" + entityName + "' will not have collision.");
+            }
+
+
+            Signature sig;
+            sig.set(m_componentManager->getComponentType<NameComponent>());
+            sig.set(m_componentManager->getComponentType<TransformComponent>());
+            sig.set(m_componentManager->getComponentType<SpriteComponent>());
+            if (m_componentManager->isComponentRegistered<RigidbodyComponent>() && m_componentManager->hasComponent<RigidbodyComponent>(newEntity)) {
+                sig.set(m_componentManager->getComponentType<RigidbodyComponent>());
+            }
+            if (m_componentManager->isComponentRegistered<ColliderComponent>() && m_componentManager->hasComponent<ColliderComponent>(newEntity)) {
+                sig.set(m_componentManager->getComponentType<ColliderComponent>());
+            }
+            m_entityManager->setSignature(newEntity, sig);
+            m_systemManager->entitySignatureChanged(newEntity, sig);
+            Console::Log("LLM: Created entity '" + entityName + "' at (" + std::to_string(x) + "," + std::to_string(y) + ") with sprite '" + textureId + "'.");
+
+        } else if (command == "script") {
+            std::string type, entityName, with_keyword, scriptPath;
+            line_iss >> type;
+            if (type != "entity") {
+                 Console::Error("LLM: Expected 'entity' after 'script'. Usage: script entity <name> with <script_path.lua>");
+                continue;
+            }
+            line_iss >> entityName >> with_keyword >> scriptPath;
+
+            if (with_keyword != "with") {
+                Console::Error("LLM: Invalid 'script' syntax. Usage: script entity <name> with <script_path.lua>");
+                continue;
+            }
+
+            Entity targetEntity = m_findEntityByNameFunc(entityName);
+            if (targetEntity == NO_ENTITY_SELECTED) {
+                Console::Error("LLM: Entity '" + entityName + "' not found for scripting.");
+                continue;
+            }
+
+            if (!m_componentManager->isComponentRegistered<ScriptComponent>()) {
+                Console::Error("LLM: ScriptComponent is not registered with the ComponentManager.");
+                continue;
+            }
+
+            if (!m_componentManager->hasComponent<ScriptComponent>(targetEntity)) {
+                m_componentManager->addComponent<ScriptComponent>(targetEntity, ScriptComponent(scriptPath));
+                Signature sig = m_entityManager->getSignature(targetEntity);
+                sig.set(m_componentManager->getComponentType<ScriptComponent>());
+                m_entityManager->setSignature(targetEntity, sig);
+                m_systemManager->entitySignatureChanged(targetEntity, sig);
+                Console::Log("LLM: Added script '" + scriptPath + "' to entity '" + entityName + "'.");
+            } else {
+                auto& scriptComp = m_componentManager->getComponent<ScriptComponent>(targetEntity);
+                scriptComp.scriptPath = scriptPath;
+                Console::Log("LLM: Updated script for entity '" + entityName + "' to '" + scriptPath + "'.");
+            }
+
+        } else if (command == "move") {
+            std::string type, entityName, to_keyword;
+            float x, y; 
+            line_iss >> type;
+            if (type != "entity") {
+                 Console::Error("LLM: Expected 'entity' after 'move'. Usage: move entity <name> to <x> <y>");
+                continue;
+            }
+            line_iss >> entityName >> to_keyword >> x >> y;
+
+            if (to_keyword != "to") {
+                Console::Error("LLM: Invalid 'move' syntax. Usage: move entity <name> to <x> <y>");
+                continue;
+            }
+            Entity targetEntity = m_findEntityByNameFunc(entityName);
+            if (targetEntity == NO_ENTITY_SELECTED) {
+                Console::Error("LLM: Entity '" + entityName + "' not found to move.");
+                continue;
+            }
+            if (m_componentManager->hasComponent<TransformComponent>(targetEntity)) {
+                auto& transform = m_componentManager->getComponent<TransformComponent>(targetEntity);
+                transform.x = x;
+                transform.y = y;
+                Console::Log("LLM: Moved entity '" + entityName + "' to (" + std::to_string(x) + "," + std::to_string(y) + ").");
+            } else {
+                Console::Error("LLM: Entity '" + entityName + "' does not have a TransformComponent to move.");
+            }
+        } else if (command == "delete") {
+            std::string type, entityName;
+            line_iss >> type;
+             if (type != "entity") {
+                 Console::Error("LLM: Expected 'entity' after 'delete'. Usage: delete entity <name>");
+                continue;
+            }
+            line_iss >> entityName;
+            Entity targetEntity = m_findEntityByNameFunc(entityName);
+            if (targetEntity == NO_ENTITY_SELECTED) {
+                Console::Error("LLM: Entity '" + entityName + "' not found to delete.");
+                continue;
+            }
+            m_entityManager->destroyEntity(targetEntity);
+            Console::Log("LLM: Deleted entity '" + entityName + "'.");
+
         } else {
-            Console::Warn("Gemini script prompt is empty. Usage: gemini_script <your detailed prompt for a lua script>");
+            Console::Error("LLM: Unknown command '" + command + "'. Supported: create, script, move, delete, gemini_script, gemini_modify");
         }
-        return;
-    } else if (command == "gemini_modify") {
-        std::string entityName;
-        iss >> entityName;
-        Entity targetEntity = m_findEntityByNameFunc(entityName);
-        if (targetEntity == NO_ENTITY_SELECTED) {
-            Console::Error("LLM/Gemini: Entity '" + entityName + "' not found for modification.");
-            return;
-        }
-        std::string modification_prompt_parts;
-        std::string part;
-        while(iss >> part) {
-            modification_prompt_parts += part + " ";
-        }
-        if (!modification_prompt_parts.empty()) {
-            modification_prompt_parts.pop_back(); 
-            ModifyComponentFromGemini(targetEntity, modification_prompt_parts);
-        } else {
-            Console::Warn("Gemini modification prompt is empty. Usage: gemini_modify <entity_name> <your detailed modification request>");
-        }
-        return;
     }
-    
-    if (command == "create") {
-        std::string type, entityName, at_keyword, sprite_keyword, textureId;
-        float x = 0.0f, y = 0.0f; 
-        float w = 32.0f, h = 32.0f; 
-
-        iss >> type;
-        if (type != "entity") {
-            Console::Error("LLM: Expected 'entity' after 'create'. Usage: create entity <name> at <x> <y> sprite <texture_id>");
-            return;
-        }
-        iss >> entityName >> at_keyword >> x >> y >> sprite_keyword >> textureId;
-
-        if (at_keyword != "at" || sprite_keyword != "sprite") {
-            Console::Error("LLM: Invalid 'create' syntax. Usage: create entity <name> at <x> <y> sprite <texture_id> [width <w>] [height <h>]");
-            return;
-        }
-
-        std::string opt_param;
-        while(iss >> opt_param) {
-            if (opt_param == "width") iss >> w;
-            else if (opt_param == "height") iss >> h;
-        }
-
-        if (m_findEntityByNameFunc(entityName) != NO_ENTITY_SELECTED) {
-            Console::Warn("LLM: Entity with name '" + entityName + "' already exists.");
-            return;
-        }
-
-        if (!m_assetManager->getTexture(textureId)) { 
-            Console::Warn("LLM: Texture ID '" + textureId + "' not found. Entity might be invisible.");
-        }
-
-        Entity newEntity = m_entityManager->createEntity();
-        m_componentManager->addComponent<NameComponent>(newEntity, NameComponent(entityName));
-        TransformComponent transformComp(x, y, w, h, 0.0f, 0);
-        m_componentManager->addComponent<TransformComponent>(newEntity, transformComp);
-        m_componentManager->addComponent<SpriteComponent>(newEntity, SpriteComponent{textureId});
-
-        if (m_componentManager->isComponentRegistered<RigidbodyComponent>()) {
-            RigidbodyComponent rigidBodyComp; 
-            m_componentManager->addComponent<RigidbodyComponent>(newEntity, rigidBodyComp);
-        }
-
-        if (m_componentManager->isComponentRegistered<ColliderComponent>()) {
-
-            m_componentManager->addComponent<ColliderComponent>(newEntity, ColliderComponent(w, h)); 
-            Console::Log("LLM: Added ColliderComponent to '" + entityName + "' with width: " + std::to_string(w) + ", height: " + std::to_string(h));
-        } else {
-            Console::Warn("LLM: ColliderComponent not registered. Entity '" + entityName + "' will not have collision.");
-        }
-
-
-        Signature sig;
-        sig.set(m_componentManager->getComponentType<NameComponent>());
-        sig.set(m_componentManager->getComponentType<TransformComponent>());
-        sig.set(m_componentManager->getComponentType<SpriteComponent>());
-        if (m_componentManager->isComponentRegistered<RigidbodyComponent>() && m_componentManager->hasComponent<RigidbodyComponent>(newEntity)) {
-            sig.set(m_componentManager->getComponentType<RigidbodyComponent>());
-        }
-        if (m_componentManager->isComponentRegistered<ColliderComponent>() && m_componentManager->hasComponent<ColliderComponent>(newEntity)) {
-            sig.set(m_componentManager->getComponentType<ColliderComponent>());
-        }
-        m_entityManager->setSignature(newEntity, sig);
-        m_systemManager->entitySignatureChanged(newEntity, sig);
-        Console::Log("LLM: Created entity '" + entityName + "' at (" + std::to_string(x) + "," + std::to_string(y) + ") with sprite '" + textureId + "'.");
-
-    } else if (command == "script") {
-        std::string type, entityName, with_keyword, scriptPath;
-        iss >> type;
-        if (type != "entity") {
-             Console::Error("LLM: Expected 'entity' after 'script'. Usage: script entity <name> with <script_path.lua>");
-            return;
-        }
-        iss >> entityName >> with_keyword >> scriptPath;
-
-        if (with_keyword != "with") {
-            Console::Error("LLM: Invalid 'script' syntax. Usage: script entity <name> with <script_path.lua>");
-            return;
-        }
-
-        Entity targetEntity = m_findEntityByNameFunc(entityName);
-        if (targetEntity == NO_ENTITY_SELECTED) {
-            Console::Error("LLM: Entity '" + entityName + "' not found for scripting.");
-            return;
-        }
-
-        if (!m_componentManager->isComponentRegistered<ScriptComponent>()) {
-            Console::Error("LLM: ScriptComponent is not registered with the ComponentManager.");
-            return;
-        }
-
-        if (!m_componentManager->hasComponent<ScriptComponent>(targetEntity)) {
-            m_componentManager->addComponent<ScriptComponent>(targetEntity, ScriptComponent(scriptPath));
-            Signature sig = m_entityManager->getSignature(targetEntity);
-            sig.set(m_componentManager->getComponentType<ScriptComponent>());
-            m_entityManager->setSignature(targetEntity, sig);
-            m_systemManager->entitySignatureChanged(targetEntity, sig);
-            Console::Log("LLM: Added script '" + scriptPath + "' to entity '" + entityName + "'.");
-        } else {
-            auto& scriptComp = m_componentManager->getComponent<ScriptComponent>(targetEntity);
-            scriptComp.scriptPath = scriptPath;
-            Console::Log("LLM: Updated script for entity '" + entityName + "' to '" + scriptPath + "'.");
-        }
-
-    } else if (command == "move") {
-        std::string type, entityName, to_keyword;
-        float x, y; 
-        iss >> type;
-        if (type != "entity") {
-             Console::Error("LLM: Expected 'entity' after 'move'. Usage: move entity <name> to <x> <y>");
-            return;
-        }
-        iss >> entityName >> to_keyword >> x >> y;
-
-        if (to_keyword != "to") {
-            Console::Error("LLM: Invalid 'move' syntax. Usage: move entity <name> to <x> <y>");
-            return;
-        }
-        Entity targetEntity = m_findEntityByNameFunc(entityName);
-        if (targetEntity == NO_ENTITY_SELECTED) {
-            Console::Error("LLM: Entity '" + entityName + "' not found to move.");
-            return;
-        }
-        if (m_componentManager->hasComponent<TransformComponent>(targetEntity)) {
-            auto& transform = m_componentManager->getComponent<TransformComponent>(targetEntity);
-            transform.x = x;
-            transform.y = y;
-            Console::Log("LLM: Moved entity '" + entityName + "' to (" + std::to_string(x) + "," + std::to_string(y) + ").");
-        } else {
-            Console::Error("LLM: Entity '" + entityName + "' does not have a TransformComponent to move.");
-        }
-    } else if (command == "delete") {
-        std::string type, entityName;
-        iss >> type;
-         if (type != "entity") {
-             Console::Error("LLM: Expected 'entity' after 'delete'. Usage: delete entity <name>");
-            return;
-        }
-        iss >> entityName;
-        Entity targetEntity = m_findEntityByNameFunc(entityName);
-        if (targetEntity == NO_ENTITY_SELECTED) {
-            Console::Error("LLM: Entity '" + entityName + "' not found to delete.");
-            return;
-        }
-        m_entityManager->destroyEntity(targetEntity);
-        Console::Log("LLM: Deleted entity '" + entityName + "'.");
-
-    } else {
-        Console::Error("LLM: Unknown command '" + command + "'. Supported: create, script, move, delete, gemini_script, gemini_modify");
-    }
-
 }
 
 void AIPromptProcessor::renderAIPromptUI() {
