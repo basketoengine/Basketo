@@ -322,9 +322,14 @@ void DevModeScene::render() {
     float currentRenderCameraY = this->cameraY;
     float currentRenderZoom = this->cameraZoom;
 
-    const float hierarchyWidth = displaySize.x * hierarchyWidthRatio;
-    const float inspectorWidth = displaySize.x * inspectorWidthRatio;
-    const float bottomPanelHeight = displaySize.y * bottomPanelHeightRatio;
+    // Ensure panel sizes are within reasonable bounds
+    float maxHierarchyWidth = displaySize.x - minGameViewWidth - minInspectorWidth;
+    float maxInspectorWidth = displaySize.x - minGameViewWidth - minHierarchyWidth;
+    float maxBottomPanelHeight = displaySize.y - topToolbarHeight - minGameViewHeight;
+
+    hierarchyWidth = std::max(minHierarchyWidth, std::min(maxHierarchyWidth, hierarchyWidth));
+    inspectorWidth = std::max(minInspectorWidth, std::min(maxInspectorWidth, inspectorWidth));
+    bottomPanelHeight = std::max(minBottomPanelHeight, std::min(maxBottomPanelHeight, bottomPanelHeight));
 
     gameViewport = {
         static_cast<int>(hierarchyWidth),
@@ -335,7 +340,41 @@ void DevModeScene::render() {
     if (gameViewport.w < 0) gameViewport.w = 0;
     if (gameViewport.h < 0) gameViewport.h = 0;
 
-    ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
+    // Create dockspace for proper panel management
+    ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
+    ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
+
+    // Initialize docking layout asynchronously after a few frames
+    static int frameCount = 0;
+    frameCount++;
+
+    if (!dockingLayoutInitialized && frameCount > 3) {
+        dockingLayoutInitialized = true;
+
+        // Only initialize if the dockspace exists and is valid
+        if (ImGui::DockBuilderGetNode(dockspace_id) != nullptr) {
+            // Clear any existing layout
+            ImGui::DockBuilderRemoveNode(dockspace_id);
+        }
+
+        // Add the main dockspace node
+        ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
+        ImGui::DockBuilderSetNodeSize(dockspace_id, displaySize);
+
+        // Split the dockspace into regions with proper ratios
+        ImGuiID dock_left = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Left, 0.25f, nullptr, &dockspace_id);
+        ImGuiID dock_right = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Right, 0.35f, nullptr, &dockspace_id);
+        ImGuiID dock_bottom = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Down, 0.25f, nullptr, &dockspace_id);
+
+        // Dock windows to their respective areas
+        ImGui::DockBuilderDockWindow("Hierarchy", dock_left);
+        ImGui::DockBuilderDockWindow("Inspector", dock_right);
+        ImGui::DockBuilderDockWindow("Assets", dock_bottom);
+        ImGui::DockBuilderDockWindow("GameViewport", dockspace_id); // Center
+
+        // Finish the docking setup
+        ImGui::DockBuilderFinish(dockspace_id);
+    }
 
     // Always create the scene viewport in the main window (this is the Scene Editor view)
     ImGui::SetNextWindowPos(ImVec2(static_cast<float>(gameViewport.x), static_cast<float>(gameViewport.y)), ImGuiCond_Always);
@@ -701,9 +740,20 @@ void DevModeScene::render() {
         ImGui::End();
     }
 
-    EditorUI::renderInspectorPanel(*this, io); 
+    // Render hierarchy splitter - ensure it's in the main window context
+    ImGui::SetCurrentContext(ImGui::GetCurrentContext());
+    float maxHierarchyWidthForSplitter = displaySize.x - minGameViewWidth - minInspectorWidth;
+    renderVerticalSplitter("HierarchySplitter", hierarchyWidth, minHierarchyWidth, maxHierarchyWidthForSplitter,
+                          hierarchyWidth, topToolbarHeight, displaySize.y - topToolbarHeight - bottomPanelHeight);
 
-    // Asset Preview Panel (Bottom Right)  NEEEEED TO BE FIXED
+    EditorUI::renderInspectorPanel(*this, io);
+
+    // Render inspector splitter - ensure it's in the main window context
+    float maxInspectorWidthForSplitter = displaySize.x - minGameViewWidth - minHierarchyWidth;
+    renderVerticalSplitter("InspectorSplitter", inspectorWidth, minInspectorWidth, maxInspectorWidthForSplitter,
+                          hierarchyWidth + gameViewport.w, topToolbarHeight, displaySize.y - topToolbarHeight - bottomPanelHeight);
+
+    // Asset Preview Panel (Bottom Right)
     ImGui::SetNextWindowPos(ImVec2(hierarchyWidth + gameViewport.w, displaySize.y - bottomPanelHeight), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(inspectorWidth, bottomPanelHeight), ImGuiCond_Always);
     ImGui::Begin("AssetPreview", nullptr, fixedPanelFlags | ImGuiWindowFlags_NoScrollbar);
@@ -951,6 +1001,11 @@ void DevModeScene::render() {
     }
     ImGui::End();
 
+    // Render bottom panel splitter
+    float maxBottomPanelHeightForSplitter = displaySize.y - topToolbarHeight - minGameViewHeight;
+    renderHorizontalSplitter("BottomSplitter", bottomPanelHeight, minBottomPanelHeight, maxBottomPanelHeightForSplitter,
+                            0, displaySize.y - bottomPanelHeight, displaySize.x);
+
     ImGui::Render();
     ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
 
@@ -1098,7 +1153,7 @@ bool DevModeScene::initGameWindow() {
     int gameWindowW = 800;
     int gameWindowH = 600;
 
-    gameWindow = SDL_CreateWindow("🎮 Game View (Read-Only)",
+    gameWindow = SDL_CreateWindow("Game View (Read-Only)",
                                   gameWindowX, gameWindowY,
                                   gameWindowW, gameWindowH,
                                   SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
@@ -1342,4 +1397,67 @@ void DevModeScene::createDefaultGameCamera() {
     componentManager->addComponent(gameCameraEntity, cameraComp);
 
     addLogToConsole("Created default game camera entity: " + std::to_string(gameCameraEntity));
+}
+
+// Panel resizing helpers
+bool DevModeScene::renderVerticalSplitter(const char* id, float& size, float minSize, float maxSize, float x, float y, float height) {
+    // Use foreground draw list to ensure splitter is always visible
+    ImDrawList* drawList = ImGui::GetForegroundDrawList();
+
+    // Create invisible button for interaction
+    ImGui::SetCursorScreenPos(ImVec2(x - 2, y));
+    ImGui::InvisibleButton(id, ImVec2(4, height));
+
+    bool isHovered = ImGui::IsItemHovered();
+    bool isActive = ImGui::IsItemActive();
+
+    if (isHovered || isActive) {
+        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+    }
+
+    if (isActive && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+        float delta = ImGui::GetIO().MouseDelta.x;
+        size += delta;
+        size = std::max(minSize, std::min(maxSize, size));
+        return true;
+    }
+
+    // Draw splitter line with more visible colors
+    ImU32 color = isActive ? IM_COL32(150, 150, 255, 255) :
+                  isHovered ? IM_COL32(120, 120, 120, 255) :
+                  IM_COL32(80, 80, 80, 255);
+    drawList->AddLine(ImVec2(x, y), ImVec2(x, y + height), color, 2.0f);
+
+    return false;
+}
+
+bool DevModeScene::renderHorizontalSplitter(const char* id, float& size, float minSize, float maxSize, float x, float y, float width) {
+    // Use foreground draw list to ensure splitter is always visible
+    ImDrawList* drawList = ImGui::GetForegroundDrawList();
+
+    // Create invisible button for interaction
+    ImGui::SetCursorScreenPos(ImVec2(x, y - 2));
+    ImGui::InvisibleButton(id, ImVec2(width, 4));
+
+    bool isHovered = ImGui::IsItemHovered();
+    bool isActive = ImGui::IsItemActive();
+
+    if (isHovered || isActive) {
+        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
+    }
+
+    if (isActive && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+        float delta = ImGui::GetIO().MouseDelta.y;
+        size -= delta; // Subtract because we're measuring from bottom
+        size = std::max(minSize, std::min(maxSize, size));
+        return true;
+    }
+
+    // Draw splitter line with more visible colors
+    ImU32 color = isActive ? IM_COL32(150, 150, 255, 255) :
+                  isHovered ? IM_COL32(120, 120, 120, 255) :
+                  IM_COL32(80, 80, 80, 255);
+    drawList->AddLine(ImVec2(x, y), ImVec2(x + width, y), color, 2.0f);
+
+    return false;
 }

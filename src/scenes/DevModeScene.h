@@ -114,6 +114,9 @@ public:
     std::unordered_map<std::string, SDL_Texture*> gameTextures;
     Entity gameCameraEntity = 0; // Default camera entity for game view
 
+    // Docking layout management
+    bool dockingLayoutInitialized = false;
+
     float cameraX = 0.0f;
     float cameraY = 0.0f;
     float cameraZoom = 1.0f;
@@ -135,10 +138,23 @@ public:
 
     AssetManager& assetManager;
 
-    float hierarchyWidthRatio = 0.18f;
-    float inspectorWidthRatio = 0.22f;
-    float bottomPanelHeightRatio = 0.25f;
+    // Panel sizing - now using absolute values instead of ratios for better control
+    float hierarchyWidth = 600.0f;
+    float inspectorWidth = 600.0f;  // Increased to 600 for much better AI prompt panel space
+    float bottomPanelHeight = 200.0f;
     float topToolbarHeight = 40.0f;
+
+    // Splitter state tracking
+    bool isDraggingHierarchySplitter = false;
+    bool isDraggingInspectorSplitter = false;
+    bool isDraggingBottomSplitter = false;
+
+    // Minimum panel sizes
+    const float minHierarchyWidth = 400.0f;
+    const float minInspectorWidth = 400.0f;  // Increased to 400 for AI prompt panel
+    const float minBottomPanelHeight = 100.0f;
+    const float minGameViewWidth = 400.0f;
+    const float minGameViewHeight = 300.0f;
     ImVec4 clear_color = ImVec4(0.27f, 0.51f, 0.71f, 1.00f);
 
     float spawnPosX = 100.0f;
@@ -195,6 +211,10 @@ public:
 
     void renderDevModeUI();
     std::string getComponentNameForDisplay(Entity entity);
+
+    // Panel resizing helpers
+    bool renderVerticalSplitter(const char* id, float& size, float minSize, float maxSize, float x, float y, float height);
+    bool renderHorizontalSplitter(const char* id, float& size, float minSize, float maxSize, float x, float y, float width);
 
 public:
     void createNewScene();

@@ -27,12 +27,10 @@ namespace EditorUI {
 
 void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
     ImVec2 displaySize = io.DisplaySize;
-    const float inspectorWidth = displaySize.x * scene.inspectorWidthRatio;
-    const float bottomPanelHeight = displaySize.y * scene.bottomPanelHeightRatio;
     const ImGuiWindowFlags fixedPanelFlags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar;
 
-    ImGui::SetNextWindowPos(ImVec2(displaySize.x - inspectorWidth, scene.topToolbarHeight), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(inspectorWidth, displaySize.y - scene.topToolbarHeight - bottomPanelHeight), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(ImVec2(displaySize.x - scene.inspectorWidth, scene.topToolbarHeight), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(scene.inspectorWidth, displaySize.y - scene.topToolbarHeight - scene.bottomPanelHeight), ImGuiCond_Always);
     ImGui::Begin("Inspector", nullptr, fixedPanelFlags);
 
     if (scene.selectedEntity != NO_ENTITY_SELECTED && std::find(scene.entityManager->getActiveEntities().begin(), scene.entityManager->getActiveEntities().end(), scene.selectedEntity) != scene.entityManager->getActiveEntities().end()) {

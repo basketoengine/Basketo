@@ -124,78 +124,288 @@ std::string AIPromptProcessor::ProcessGeminiPrompt(const std::string& prompt) {
     return response_string;
 }
 
+std::string AIPromptProcessor::ExtractGeminiResponseText(const std::string& jsonResponse) {
+    try {
+        auto json = nlohmann::json::parse(jsonResponse);
+        if (json.contains("candidates") &&
+            !json["candidates"].empty() &&
+            json["candidates"][0].contains("content") &&
+            json["candidates"][0]["content"].contains("parts") &&
+            !json["candidates"][0]["content"]["parts"].empty() &&
+            json["candidates"][0]["content"]["parts"][0].contains("text")) {
+            return json["candidates"][0]["content"]["parts"][0]["text"].get<std::string>();
+        } else {
+            return "Invalid response format from Gemini API";
+        }
+    } catch (const std::exception& e) {
+        return "JSON parsing error: " + std::string(e.what());
+    }
+}
+
 void AIPromptProcessor::PollAndProcessPendingCommands() {
     if (m_geminiFuture.valid()) {
         auto status = m_geminiFuture.wait_for(std::chrono::seconds(0));
         if (status == std::future_status::ready) {
             std::string translatedCommand = m_geminiFuture.get();
             Console::Log("LLM (Async): Gemini task completed with response: " + translatedCommand);
+            m_isProcessing = false;
+
             if (translatedCommand == "UNKNOWN_COMMAND" || translatedCommand.empty()) {
                 Console::Log("The command is: " + translatedCommand);
                 Console::Error("LLM (Async): Could not understand or translate the command.");
+                m_lastApiResponse = "Could not understand the command.\n\nPlease try rephrasing your request or be more specific about what you want to create or modify.";
             } else {
                 Console::Log("LLM (Async): Received translated command: " + translatedCommand);
-                HandlePrompt(translatedCommand, true);
+
+                // Format the response for better display
+                std::string formattedResponse = "AI Generated Commands:\n\n";
+                std::istringstream iss(translatedCommand);
+                std::string line;
+                int commandNum = 1;
+
+                while (std::getline(iss, line)) {
+                    if (!line.empty() && line.find_first_not_of(" \t\n\r") != std::string::npos) {
+                        formattedResponse += std::to_string(commandNum++) + ". " + line + "\n";
+                    }
+                }
+
+                m_lastApiResponse = formattedResponse;
+
+                // In agent mode, automatically execute commands
+                if (m_agentMode && !m_agentPaused) {
+                    HandlePrompt(translatedCommand, true);
+                    m_lastApiResponse = "Agent executed: " + formattedResponse;
+                    m_lastAgentActivity = std::chrono::steady_clock::now();
+                }
             }
         } else if (status == std::future_status::timeout) {
         } else if (status == std::future_status::deferred) {
             Console::Warn("LLM (Async): Gemini task was deferred.");
         }
     }
+
+    // Update agent mode processing
+    updateAgentMode();
 }
 
 std::string AIPromptProcessor::ListAssets() {
-    std::string asset_list = "Available assets:\n";
-    asset_list += "Textures (use the name without extension as textureId, e.g., 'mario' for 'mario.png'):\n";
+    std::string asset_list = "=== COMPREHENSIVE ASSET CONTEXT ===\n";
+
+    // Textures with detailed info and loading status
+    asset_list += "\nAVAILABLE TEXTURES:\n";
+
+    // First, show loaded textures from AssetManager
+    const auto& loadedTextures = m_assetManager->getAllTextures();
+    if (!loadedTextures.empty()) {
+        asset_list += "LOADED TEXTURES (ready to use immediately):\n";
+        for (const auto& [textureId, texture] : loadedTextures) {
+            asset_list += "  - '" + textureId + "' (LOADED & READY)\n";
+        }
+        asset_list += "\n";
+    }
+
+    // Then show available texture files
+    asset_list += "TEXTURE FILES AVAILABLE:\n";
     try {
         for (const auto& entry : std::filesystem::recursive_directory_iterator("assets/Textures")) {
             if (entry.is_regular_file()) {
-                asset_list += "- " + entry.path().stem().string() + "\n";
+                std::string filename = entry.path().filename().string();
+                std::string stem = entry.path().stem().string();
+                std::string ext = entry.path().extension().string();
+
+                if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp") {
+                    bool isLoaded = loadedTextures.find(filename) != loadedTextures.end();
+                    asset_list += "  - '" + filename + "' " + (isLoaded ? "(LOADED)" : "(will auto-load)") + "\n";
+                }
             }
         }
     } catch (const std::filesystem::filesystem_error& e) {
-        // Ignore error if directory doesn't exist, etc.
+        asset_list += "  - No textures directory found\n";
     }
 
-    asset_list += "Scripts (use the full path like 'assets/Scripts/player.lua'):\n";
+    asset_list += "\nTEXTURE USAGE:\n";
+    asset_list += "  - Use FULL FILENAME including extension (e.g., 'mario.png', 'player.png')\n";
+    asset_list += "  - Common textures: 'mario.png', 'player.png', 'background.jpg', 'marioblock.png'\n";
+    asset_list += "  - NEVER use 'default' - always use actual filenames!\n";
+
+    // Audio assets
+    asset_list += "\nAUDIO FILES:\n";
+    try {
+        for (const auto& entry : std::filesystem::recursive_directory_iterator("assets/Audio")) {
+            if (entry.is_regular_file()) {
+                std::string filename = entry.path().filename().string();
+                std::string ext = entry.path().extension().string();
+                if (ext == ".mp3" || ext == ".wav" || ext == ".ogg") {
+                    asset_list += "- " + entry.path().string() + "\n";
+                }
+            }
+        }
+    } catch (const std::filesystem::filesystem_error& e) {
+        asset_list += "- No audio directory found\n";
+    }
+
+    // Scripts with content preview
+    asset_list += "\nSCRIPTS (Lua files):\n";
     try {
         for (const auto& entry : std::filesystem::recursive_directory_iterator("assets/Scripts")) {
             if (entry.is_regular_file() && entry.path().extension() == ".lua") {
+                asset_list += "- " + entry.path().string();
+
+                // Add brief content preview
+                std::ifstream file(entry.path());
+                if (file.is_open()) {
+                    std::string line;
+                    int lineCount = 0;
+                    asset_list += " (contains: ";
+                    while (std::getline(file, line) && lineCount < 3) {
+                        if (!line.empty() && line.find("--") != 0) {
+                            asset_list += line.substr(0, 30) + "... ";
+                            lineCount++;
+                        }
+                    }
+                    asset_list += ")";
+                }
+                asset_list += "\n";
+            }
+        }
+    } catch (const std::filesystem::filesystem_error& e) {
+        asset_list += "- No scripts directory found\n";
+    }
+
+    // Scenes
+    asset_list += "\nSCENES:\n";
+    try {
+        for (const auto& entry : std::filesystem::recursive_directory_iterator("assets/Scenes")) {
+            if (entry.is_regular_file() && entry.path().extension() == ".json") {
                 asset_list += "- " + entry.path().string() + "\n";
             }
         }
     } catch (const std::filesystem::filesystem_error& e) {
-        // Ignore error
+        asset_list += "- No scenes directory found\n";
     }
+
     return asset_list;
+}
+
+std::string AIPromptProcessor::BuildComprehensiveContext() {
+    std::string context = "=== COMPLETE GAME ENGINE CONTEXT ===\n\n";
+
+    // Asset context
+    context += ListAssets();
+
+    // Current scene state
+    context += "\nCURRENT SCENE STATE:\n";
+    if (m_entityManager) {
+        const auto& entities = m_entityManager->getActiveEntities();
+        context += "Active Entities (" + std::to_string(entities.size()) + "):\n";
+
+        for (Entity entity : entities) {
+            context += "- Entity " + std::to_string(entity) + ": ";
+
+            // Check for name component
+            if (m_componentManager && m_componentManager->hasComponent<NameComponent>(entity)) {
+                auto& name = m_componentManager->getComponent<NameComponent>(entity);
+                context += "'" + name.name + "' ";
+            }
+
+            // Check for transform
+            if (m_componentManager && m_componentManager->hasComponent<TransformComponent>(entity)) {
+                auto& transform = m_componentManager->getComponent<TransformComponent>(entity);
+                context += "at (" + std::to_string(transform.x) + ", " + std::to_string(transform.y) + ") ";
+                context += "size " + std::to_string(transform.width) + "x" + std::to_string(transform.height) + " ";
+            }
+
+            // Check for sprite
+            if (m_componentManager && m_componentManager->hasComponent<SpriteComponent>(entity)) {
+                auto& sprite = m_componentManager->getComponent<SpriteComponent>(entity);
+                context += "sprite: " + sprite.textureId + " ";
+            }
+
+            // Check for script
+            if (m_componentManager && m_componentManager->hasComponent<ScriptComponent>(entity)) {
+                auto& script = m_componentManager->getComponent<ScriptComponent>(entity);
+                context += "script: " + script.scriptPath + " ";
+            }
+
+            context += "\n";
+        }
+    }
+
+    // Available commands with examples
+    context += "\nAVAILABLE COMMANDS:\n";
+    context += "1. create entity <name> at <x> <y> sprite <texture_id> [width <w>] [height <h>]\n";
+    context += "2. move entity <name> to <x> <y>\n";
+    context += "3. script entity <name> <script_path>\n";
+    context += "4. gemini_script <script_name> <script_content>\n";
+    context += "5. delete entity <name>\n";
+    context += "6. set entity <name> size <width> <height>\n";
+    context += "7. set entity <name> sprite <texture_id>\n";
+
+    context += "\nEXAMPLES:\n";
+    context += "- create entity player at 100 100 sprite mario width 64 height 64\n";
+    context += "- gemini_script player_movement.lua 'function update() player.x = player.x + 1 end'\n";
+    context += "- script entity player assets/Scripts/player_movement.lua\n";
+
+    return context;
 }
 
 std::string AIPromptProcessor::TranslateNaturalLanguageToCommand(const std::string& natural_language_query) {
     Console::Log("Translating natural language: " + natural_language_query);
-    std::string asset_context = ListAssets();
-    std::string system_prompt = 
-        "You are an AI assistant that translates natural language into structured game engine commands. "
-        "You are fully autonomous. When asked to create something, do it completely. Create entities, assign components, position them, write scripts, create the script files, and assign them to the entities."
-        "The available commands are: \n"
+    std::string comprehensive_context = BuildComprehensiveContext();
+    std::string system_prompt =
+        "You are an ADVANCED AI GAME DEVELOPMENT ASSISTANT - like Cursor or Windsurf but for game engines.\n\n"
+
+        "CORE CAPABILITIES:\n"
+        "- You are FULLY AUTONOMOUS and can iterate on solutions\n"
+        "- You understand the complete project context and available assets\n"
+        "- You can create complex game features from scratch\n"
+        "- You can debug, refine, and improve existing implementations\n"
+        "- You think step-by-step and break down complex requests\n\n"
+
+        "AVAILABLE COMMANDS:\n"
         "1. create entity <name> at <x> <y> sprite <texture_id> [width <w>] [height <h>]\n"
         "2. script entity <name> with <script_path.lua>\n"
         "3. move entity <name> to <x> <y>\n"
         "4. delete entity <name>\n"
-        "5. gemini_script <prompt for lua script> (Use this if the user asks to generate a script or code)\n"
-        "6. gemini_modify <entity_name> <modification prompt> (Use this if the user asks to change an existing entity in a complex way not covered by other commands)\n"
-        "Based on the user's input, provide a sequence of structured commands to achieve the goal. Each command should be on a new line. "
-        "IMPORTANT: All scripts MUST be in Lua (ending in .lua) and saved in the 'assets/Scripts/' directory. You MUST call gemini_script to create the script file BEFORE using the 'script' command to assign it."
-        "If the input is ambiguous, output 'UNKNOWN_COMMAND'. "
-        "For 'create', if width/height are not specified, they can be omitted. Assume common game object names if not specified (e.g., 'player', 'enemy', 'block'). "
-        "For 'script', the path should be a valid .lua path, if the user just gives a script name, assume it's in 'assets/Scripts/'."
-        "Here is the current asset context:\n" + asset_context +
-        "User input: " + natural_language_query;
+        "5. gemini_script <prompt for lua script> (Use this to generate complete Lua scripts)\n"
+        "6. gemini_modify <entity_name> <modification prompt> (Use this for complex entity modifications)\n\n"
+
+        "INTELLIGENT BEHAVIOR:\n"
+        "- ALWAYS use existing assets when appropriate (check the context below)\n"
+        "- NEVER use 'default' as texture ID - use actual filenames like 'mario.png', 'player.png'\n"
+        "- Use FULL FILENAMES including extensions for textures (e.g., 'mario.png' not 'mario')\n"
+        "- Create comprehensive, working solutions, not just partial implementations\n"
+        "- Write complete, functional Lua scripts with proper game logic\n"
+        "- Position entities intelligently based on game context\n"
+        "- Consider game design principles (spacing, balance, user experience)\n"
+        "- If something doesn't work as expected, iterate and improve\n\n"
+
+        "SCRIPT CREATION RULES:\n"
+        "- ALL scripts must be in Lua (.lua extension)\n"
+        "- ALWAYS use gemini_script to create script files BEFORE assigning them\n"
+        "- Scripts should be saved in 'assets/Scripts/' directory\n"
+        "- Write complete, functional scripts with proper game logic\n"
+        "- Include comments explaining the script's purpose\n\n" +
+
+        comprehensive_context + "\n\n" +
+        "USER REQUEST: " + natural_language_query + "\n\n" +
+
+        "THINK STEP BY STEP:\n"
+        "1. Analyze what the user wants to achieve\n"
+        "2. Check available assets that can be used\n"
+        "3. Plan the complete implementation\n"
+        "4. Generate the sequence of commands\n"
+        "5. Ensure scripts are created before being assigned\n\n"
+
+        "OUTPUT: Provide structured commands, one per line. Create complete, working game features!";
 
     std::string geminiResponse = ProcessGeminiPrompt(system_prompt);
 
-    Console::Log("Gemini Response: " + geminiResponse);
+    Console::Log("Gemini Raw Response: " + geminiResponse);
 
     std::string translated_command = "UNKNOWN_COMMAND";
+    std::string display_response = "Failed to parse response";
+
     try {
         auto json = nlohmann::json::parse(geminiResponse);
         if (json.contains("candidates") &&
@@ -205,14 +415,20 @@ std::string AIPromptProcessor::TranslateNaturalLanguageToCommand(const std::stri
             !json["candidates"][0]["content"]["parts"].empty() &&
             json["candidates"][0]["content"]["parts"][0].contains("text")) {
             translated_command = json["candidates"][0]["content"]["parts"][0]["text"].get<std::string>();
+            display_response = translated_command; // Store for UI display
+
             // Remove trailing newline if present
             if (!translated_command.empty() && translated_command.back() == '\n') {
                 translated_command.pop_back();
             }
+        } else {
+            display_response = "Invalid response format from Gemini API";
         }
     } catch (const std::exception& e) {
         Console::Error(std::string("Failed to parse Gemini response JSON: ") + e.what());
+        display_response = "JSON parsing error: " + std::string(e.what());
     }
+
     Console::Log("Translated command: " + translated_command);
     return translated_command;
 }
@@ -301,6 +517,7 @@ void AIPromptProcessor::HandlePrompt(const std::string& prompt, bool isTranslate
             return;
         }
         Console::Log("LLM: Submitting natural language prompt for asynchronous translation: " + prompt);
+        m_isProcessing = true;
 
         m_geminiFuture = std::async(std::launch::async, [this, prompt]() {
             return TranslateNaturalLanguageToCommand(prompt);
@@ -311,6 +528,7 @@ void AIPromptProcessor::HandlePrompt(const std::string& prompt, bool isTranslate
     Console::Log("Executing translated/direct command(s):\n" + prompt);
     std::istringstream iss(prompt);
     std::string line;
+    std::string lastGeneratedScriptPath = "";
 
     while (std::getline(iss, line)) {
         // Trim leading/trailing whitespace from the line
@@ -334,34 +552,13 @@ void AIPromptProcessor::HandlePrompt(const std::string& prompt, bool isTranslate
             }
             if (!script_prompt_parts.empty()) {
                 script_prompt_parts.pop_back(); 
-                std::string generatedPath;
-                GenerateScriptFromGemini(script_prompt_parts, generatedPath);
-                if (!generatedPath.empty()) {
-                     Console::Log("Gemini generated script at: " + generatedPath);
-                     // This is a bit of a hack. We assume the next command will be `script entity`
-                     // and we will inject the generated path.
-                     // A better solution would be a more robust command queue or context.
-                     if (std::getline(iss, line)) {
-                        // Trim and process the next line
-                        line.erase(0, line.find_first_not_of(" \t\n\r"));
-                        line.erase(line.find_last_not_of(" \t\n\r") + 1);
-                        if (!line.empty()) {
-                            std::string next_command;
-                            std::istringstream next_line_iss(line);
-                            next_line_iss >> next_command;
-                            if (next_command == "script") {
-                                std::string type, entityName, with_keyword, scriptPath;
-                                next_line_iss >> type >> entityName >> with_keyword >> scriptPath;
-                                // Replace the placeholder script path with the generated one.
-                                line.replace(line.find(scriptPath), scriptPath.length(), generatedPath);
-                            }
-                        }
-                     }
+                GenerateScriptFromGemini(script_prompt_parts, lastGeneratedScriptPath);
+                if (!lastGeneratedScriptPath.empty()) {
+                     Console::Log("Gemini generated script at: " + lastGeneratedScriptPath);
                 }
             } else {
                 Console::Warn("Gemini script prompt is empty. Usage: gemini_script <your detailed prompt for a lua script>");
             }
-            // We've processed the gemini_script and the following script command, so continue.
             continue;
         } else if (command == "gemini_modify") {
             std::string entityName;
@@ -465,6 +662,18 @@ void AIPromptProcessor::HandlePrompt(const std::string& prompt, bool isTranslate
                 continue;
             }
 
+            // If the script path is a placeholder and we have a recently generated script, use that.
+            if (!lastGeneratedScriptPath.empty() && scriptPath.find(".lua") != std::string::npos) {
+                 // Heuristic: if the script path given by the LLM contains the base name of the generated script, use the full generated path.
+                std::filesystem::path genPath(lastGeneratedScriptPath);
+                std::filesystem::path givenPath(scriptPath);
+                if (scriptPath.find(genPath.stem().string()) != std::string::npos) {
+                    Console::Log("LLM: Replacing script path '" + scriptPath + "' with last generated path '" + lastGeneratedScriptPath + "'.");
+                    scriptPath = lastGeneratedScriptPath;
+                }
+            }
+
+
             Entity targetEntity = m_findEntityByNameFunc(entityName);
             if (targetEntity == NO_ENTITY_SELECTED) {
                 Console::Error("LLM: Entity '" + entityName + "' not found for scripting.");
@@ -488,6 +697,7 @@ void AIPromptProcessor::HandlePrompt(const std::string& prompt, bool isTranslate
                 scriptComp.scriptPath = scriptPath;
                 Console::Log("LLM: Updated script for entity '" + entityName + "' to '" + scriptPath + "'.");
             }
+            lastGeneratedScriptPath = ""; // Reset after use
 
         } else if (command == "move") {
             std::string type, entityName, to_keyword;
@@ -539,140 +749,301 @@ void AIPromptProcessor::HandlePrompt(const std::string& prompt, bool isTranslate
 }
 
 void AIPromptProcessor::renderAIPromptUI() {
-    ImGui::Text("AI Prompt (Natural Language or Direct Command)"); 
+    ImGui::TextColored(ImVec4(0.2f, 0.8f, 1.0f, 1.0f), "ADVANCED AI ASSISTANT");
+    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Powered by Gemini 2.0 - Context-Aware & Iterative");
+    ImGui::Separator();
+
+    // Show capabilities
+    if (ImGui::CollapsingHeader("AI Capabilities")) {
+        ImGui::BulletText("Full project context awareness");
+        ImGui::BulletText("Intelligent asset usage");
+        ImGui::BulletText("Complete feature implementation");
+        ImGui::BulletText("Iterative improvement & debugging");
+        ImGui::BulletText("Autonomous agent mode");
+        ImGui::BulletText("Game design best practices");
+    }
+
+    // Agent mode controls
+    if (ImGui::CollapsingHeader("Autonomous Agent Mode", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.2f, 1.0f), "Like Cursor/Windsurf for Game Development");
+
+        ImGui::Checkbox("Enable Agent Mode", &m_agentMode);
+        ImGui::SameLine();
+        if (ImGui::Button(m_agentPaused ? "Resume" : "Pause")) {
+            pauseAgentMode(!m_agentPaused);
+        }
+
+        if (m_agentMode) {
+            ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Agent Status: %s",
+                m_agentPaused ? "PAUSED" : "ACTIVE & ITERATING");
+            ImGui::Text("Tasks in queue: %zu", m_agentTaskQueue.size());
+            ImGui::Text("Conversation history: %zu actions", m_conversationHistory.size());
+
+            ImGui::Separator();
+            if (ImGui::Button("Clear Queue")) {
+                clearAgentTasks();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Add Improvement Task")) {
+                addAgentTask("Analyze the current scene and suggest improvements to make it more engaging");
+            }
+
+            // Show recent agent actions
+            if (!m_conversationHistory.empty()) {
+                ImGui::Text("Recent Actions:");
+                ImGui::BeginChild("AgentHistory", ImVec2(0, 80), true);
+                for (int i = std::max(0, (int)m_conversationHistory.size() - 5); i < (int)m_conversationHistory.size(); ++i) {
+                    ImGui::BulletText("%s", m_conversationHistory[i].c_str());
+                }
+                ImGui::EndChild();
+            }
+        } else {
+            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Enable agent mode for autonomous development");
+        }
+    }
+
+    // Display AI responses or thinking status
+    if (m_isProcessing) {
+        ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "AI is thinking...");
+
+        // Add a simple progress indicator
+        static float progress = 0.0f;
+        progress += 0.02f;
+        if (progress > 1.0f) progress = 0.0f;
+        ImGui::ProgressBar(progress, ImVec2(-1.0f, 0.0f), "");
+    } else if (!m_lastApiResponse.empty()) {
+        ImGui::Text("AI Response:");
+        ImGui::Separator();
+
+        // Create a scrollable text area for the response
+        ImGui::BeginChild("AIResponseArea", ImVec2(0, 150), true, ImGuiWindowFlags_HorizontalScrollbar);
+        ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + ImGui::GetContentRegionAvail().x);
+
+        // Color code different types of responses
+        ImVec4 responseColor = ImVec4(0.6f, 1.0f, 0.6f, 1.0f); // Default green
+        if (m_lastApiResponse.find("Could not understand") != std::string::npos) {
+            responseColor = ImVec4(1.0f, 0.6f, 0.6f, 1.0f); // Red for errors
+        } else if (m_lastApiResponse.find("Agent executed") != std::string::npos) {
+            responseColor = ImVec4(0.6f, 0.8f, 1.0f, 1.0f); // Blue for agent actions
+        }
+
+        ImGui::TextColored(responseColor, "%s", m_lastApiResponse.c_str());
+        ImGui::PopTextWrapPos();
+        ImGui::EndChild();
+
+        // Action buttons
+        if (!m_agentMode) { // Only show manual execution in non-agent mode
+            if (ImGui::Button("Execute Commands")) {
+                // Extract the actual commands from the formatted response
+                std::string commandsToExecute = m_lastApiResponse;
+                if (commandsToExecute.find("AI Generated Commands:") != std::string::npos) {
+                    // Extract just the command part
+                    size_t start = commandsToExecute.find("\n\n");
+                    if (start != std::string::npos) {
+                        commandsToExecute = commandsToExecute.substr(start + 2);
+                        // Remove the numbering
+                        std::string cleanCommands;
+                        std::istringstream iss(commandsToExecute);
+                        std::string line;
+                        while (std::getline(iss, line)) {
+                            size_t dotPos = line.find(". ");
+                            if (dotPos != std::string::npos) {
+                                cleanCommands += line.substr(dotPos + 2) + "\n";
+                            }
+                        }
+                        commandsToExecute = cleanCommands;
+                    }
+                }
+                HandlePrompt(commandsToExecute, true);
+                m_lastApiResponse = ""; // Clear after execution
+            }
+            ImGui::SameLine();
+        }
+        if (ImGui::Button("Clear Response")) {
+            m_lastApiResponse = "";
+        }
+        if (!m_agentMode) {
+            ImGui::SameLine();
+            if (ImGui::Button("Copy to Clipboard")) {
+                ImGui::SetClipboardText(m_lastApiResponse.c_str());
+            }
+        }
+    }
+
+    ImGui::Separator();
+
+    // Example prompts section
+    if (ImGui::CollapsingHeader("Example Prompts")) {
+        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.2f, 1.0f), "Try these advanced requests:");
+
+        if (ImGui::Button("Create a platformer game")) {
+            strcpy(m_llmPromptBuffer, "Create a complete platformer game using mario.png as the player, marioblock.png for platforms, and mario obstacle.png for enemies. Add jumping mechanics and collectibles!");
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Build a space shooter")) {
+            strcpy(m_llmPromptBuffer, "Create a space shooter game using player.png as the ship, create enemies and projectiles with movement and shooting mechanics");
+        }
+
+        if (ImGui::Button("Make an RPG character")) {
+            strcpy(m_llmPromptBuffer, "Create an RPG character using mario.png with stats, inventory system, and level progression. Add NPCs using player.png");
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Design a puzzle game")) {
+            strcpy(m_llmPromptBuffer, "Design a puzzle game using marioblock.png for movable blocks, create switches and doors with mario.png textures");
+        }
+
+        if (ImGui::Button("Improve current scene")) {
+            strcpy(m_llmPromptBuffer, "Analyze the current scene and add improvements to make it more engaging and interactive");
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Add game mechanics")) {
+            strcpy(m_llmPromptBuffer, "Add interesting game mechanics like physics, particle effects, or AI behaviors to existing entities");
+        }
+    }
+
+    // Input prompt
+    ImGui::Text("Your Request:");
     if (ImGui::InputText("##llmPrompt", m_llmPromptBuffer, sizeof(m_llmPromptBuffer), ImGuiInputTextFlags_EnterReturnsTrue)) {
         if (strlen(m_llmPromptBuffer) > 0) {
             Console::Log("User input: " + std::string(m_llmPromptBuffer));
-            HandlePrompt(m_llmPromptBuffer, false); 
-            m_llmPromptBuffer[0] = '\0'; 
+            m_lastApiResponse = ""; // Clear previous response
+
+            if (m_agentMode) {
+                addAgentTask(std::string(m_llmPromptBuffer));
+            } else {
+                HandlePrompt(m_llmPromptBuffer, false);
+            }
+            m_llmPromptBuffer[0] = '\0';
         } else {
             Console::Warn("Prompt is empty.");
         }
     }
     ImGui::SameLine();
-    if (ImGui::Button("Execute##llm")) {
+    if (ImGui::Button(m_agentMode ? "Add to Queue" : "Send")) {
         if (strlen(m_llmPromptBuffer) > 0) {
             Console::Log("User input: " + std::string(m_llmPromptBuffer));
-            HandlePrompt(m_llmPromptBuffer, false); 
-            m_llmPromptBuffer[0] = '\0'; 
+            m_lastApiResponse = ""; // Clear previous response
+
+            if (m_agentMode) {
+                addAgentTask(std::string(m_llmPromptBuffer));
+            } else {
+                HandlePrompt(m_llmPromptBuffer, false);
+            }
+            m_llmPromptBuffer[0] = '\0';
         } else {
             Console::Warn("Prompt is empty.");
         }
     }
-    ImGui::SameLine();
-    if (ImGui::Button("Clear##llm")) {
-        m_llmPromptBuffer[0] = '\0'; 
-    }
-    ImGui::TextWrapped("Local Commands: create entity <name> at <x> <y> sprite <id> | script entity <name> with <path.lua> | move <name> to <x> <y> | delete <name>");
-    ImGui::TextWrapped("Gemini: gemini_script <prompt for lua script> | gemini_modify <entity_name> <modification prompt>");
 
     // Gemini API Key Configuration Section
     ImGui::Separator();
-    ImGui::Text("🤖 Gemini AI Configuration");
+    if (ImGui::CollapsingHeader("AI Configuration")) {
+        ImGui::Text("Gemini AI Configuration");
 
-    // API Key status indicator and direct input
-    if (isApiKeyConfigured()) {
-        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Gemini API Key Configured");
-        ImGui::SameLine();
-        if (ImGui::Button("Change Key##gemini")) {
-            m_showApiKeyInput = !m_showApiKeyInput;
-            if (m_showApiKeyInput) {
-                // Pre-fill with current API key (masked)
-                std::string maskedKey = std::string(m_apiKey.length(), '*');
-                strncpy(m_apiKeyBuffer, maskedKey.c_str(), sizeof(m_apiKeyBuffer) - 1);
-                m_apiKeyBuffer[sizeof(m_apiKeyBuffer) - 1] = '\0';
-            }
-        }
-    } else {
-        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "✗ Gemini API Key Required");
-
-        // Always show input field when not configured
-        ImGui::Text("🔑 Enter Gemini API Key:");
-        ImGui::SetNextItemWidth(-100); // Leave space for buttons
-        if (ImGui::InputText("##gemini_api_key_main", m_apiKeyBuffer, sizeof(m_apiKeyBuffer), ImGuiInputTextFlags_Password)) {
-            // Real-time validation could go here
-        }
-
-        ImGui::SameLine();
-        if (ImGui::Button("Save##apikey_main")) {
-            if (strlen(m_apiKeyBuffer) > 0) {
-                std::string newApiKey = std::string(m_apiKeyBuffer);
-                setApiKey(newApiKey);
-                saveApiKeyToConfig(newApiKey);
-                Console::Log("Gemini API Key saved successfully!");
-                m_apiKeyBuffer[0] = '\0';
-            } else {
-                Console::Warn("Gemini API Key cannot be empty.");
-            }
-        }
-
-        ImGui::SameLine();
-        if (ImGui::Button("Help##apikey_help")) {
-            m_showApiKeyInput = !m_showApiKeyInput;
-        }
-    }
-
-    if (m_showApiKeyInput) {
-        ImGui::Indent();
-        ImGui::Spacing();
-
-        // Instructions
-        ImGui::TextColored(ImVec4(0.7f, 0.7f, 1.0f, 1.0f), "📋 How to get your Gemini API Key:");
-        ImGui::BulletText("1. Visit: https://aistudio.google.com/app/apikey");
-        ImGui::BulletText("2. Sign in with your Google account");
-        ImGui::BulletText("3. Click 'Create API Key' and copy it");
-        ImGui::BulletText("4. Paste it in the field below");
-
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::Spacing();
-
-        // API Key input field
-        ImGui::Text("🔑 Gemini API Key:");
-        ImGui::SetNextItemWidth(-100); // Leave space for buttons
-        if (ImGui::InputText("##gemini_api_key", m_apiKeyBuffer, sizeof(m_apiKeyBuffer), ImGuiInputTextFlags_Password)) {
-            // Real-time validation could go here
-        }
-
-        ImGui::SameLine();
-        if (ImGui::Button("Save##apikey")) {
-            if (strlen(m_apiKeyBuffer) > 0) {
-                std::string newApiKey = std::string(m_apiKeyBuffer);
-                setApiKey(newApiKey);
-                saveApiKeyToConfig(newApiKey);
-                Console::Log("Gemini API Key saved successfully!");
-                m_showApiKeyInput = false;
-                m_apiKeyBuffer[0] = '\0';
-            } else {
-                Console::Warn("Gemini API Key cannot be empty.");
-            }
-        }
-
-        ImGui::SameLine();
-        if (ImGui::Button("Clear##apikey")) {
-            m_apiKeyBuffer[0] = '\0';
-        }
-
-        ImGui::Spacing();
-        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "💡 Your API key is stored securely in config.json");
-
+        // API Key status indicator and direct input
         if (isApiKeyConfigured()) {
+            ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Gemini API Key Configured");
+            ImGui::SameLine();
+            if (ImGui::Button("Change Key##gemini")) {
+                m_showApiKeyInput = !m_showApiKeyInput;
+                if (m_showApiKeyInput) {
+                    // Pre-fill with current API key (masked)
+                    std::string maskedKey = std::string(m_apiKey.length(), '*');
+                    strncpy(m_apiKeyBuffer, maskedKey.c_str(), sizeof(m_apiKeyBuffer) - 1);
+                    m_apiKeyBuffer[sizeof(m_apiKeyBuffer) - 1] = '\0';
+                }
+            }
+        } else {
+            ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "✗ Gemini API Key Required");
+
+            // Always show input field when not configured
+            ImGui::Text("Enter Gemini API Key:");
+            ImGui::SetNextItemWidth(-100); // Leave space for buttons
+            if (ImGui::InputText("##gemini_api_key_main", m_apiKeyBuffer, sizeof(m_apiKeyBuffer), ImGuiInputTextFlags_Password)) {
+                // Real-time validation could go here
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Save##apikey_main")) {
+                if (strlen(m_apiKeyBuffer) > 0) {
+                    std::string newApiKey = std::string(m_apiKeyBuffer);
+                    setApiKey(newApiKey);
+                    saveApiKeyToConfig(newApiKey);
+                    Console::Log("Gemini API Key saved successfully!");
+                    m_apiKeyBuffer[0] = '\0';
+                } else {
+                    Console::Warn("Gemini API Key cannot be empty.");
+                }
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Help##apikey_help")) {
+                m_showApiKeyInput = !m_showApiKeyInput;
+            }
+        }
+
+        if (m_showApiKeyInput) {
+            ImGui::Indent();
+            ImGui::Spacing();
+
+            // Instructions
+            ImGui::TextColored(ImVec4(0.7f, 0.7f, 1.0f, 1.0f), "How to get your Gemini API Key:");
+            ImGui::BulletText("1. Visit: https://aistudio.google.com/app/apikey");
+            ImGui::BulletText("2. Sign in with your Google account");
+            ImGui::BulletText("3. Click 'Create API Key' and copy it");
+            ImGui::BulletText("4. Paste it in the field below");
+
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
-            ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.6f, 1.0f), "⚠️ Danger Zone");
-            if (ImGui::Button("🗑️ Remove Gemini API Key")) {
-                setApiKey("");
-                saveApiKeyToConfig("");
-                Console::Log("Gemini API Key removed.");
-                m_showApiKeyInput = false;
+
+            // API Key input field
+            ImGui::Text("Gemini API Key:");
+            ImGui::SetNextItemWidth(-100); // Leave space for buttons
+            if (ImGui::InputText("##gemini_api_key", m_apiKeyBuffer, sizeof(m_apiKeyBuffer), ImGuiInputTextFlags_Password)) {
+                // Real-time validation could go here
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Save##apikey")) {
+                if (strlen(m_apiKeyBuffer) > 0) {
+                    std::string newApiKey = std::string(m_apiKeyBuffer);
+                    setApiKey(newApiKey);
+                    saveApiKeyToConfig(newApiKey);
+                    Console::Log("Gemini API Key saved successfully!");
+                    m_showApiKeyInput = false;
+                    m_apiKeyBuffer[0] = '\0';
+                } else {
+                    Console::Warn("Gemini API Key cannot be empty.");
+                }
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Clear##apikey")) {
                 m_apiKeyBuffer[0] = '\0';
             }
-            ImGui::SameLine();
-            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "(This will disable AI features)");
-        }
 
-        ImGui::Unindent();
+            ImGui::Spacing();
+            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Your API key is stored securely in config.json");
+
+            if (isApiKeyConfigured()) {
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Spacing();
+                ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.6f, 1.0f), "Danger Zone");
+                if (ImGui::Button("Remove Gemini API Key")) {
+                    setApiKey("");
+                    saveApiKeyToConfig("");
+                    Console::Log("Gemini API Key removed.");
+                    m_showApiKeyInput = false;
+                    m_apiKeyBuffer[0] = '\0';
+                }
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "(This will disable AI features)");
+            }
+
+            ImGui::Unindent();
+        }
     }
 }
 
@@ -716,5 +1087,136 @@ void AIPromptProcessor::saveApiKeyToConfig(const std::string& apiKey) {
         Console::Log("Configuration saved to " + configPath);
     } catch (const std::exception& e) {
         Console::Error("Failed to save config.json: " + std::string(e.what()));
+    }
+}
+
+// Agent mode functionality
+void AIPromptProcessor::enableAgentMode(bool enable) {
+    m_agentMode = enable;
+    if (enable) {
+        Console::Log("Agent mode enabled - AI will operate autonomously");
+        m_lastAgentActivity = std::chrono::steady_clock::now();
+    } else {
+        Console::Log("Agent mode disabled");
+        clearAgentTasks();
+    }
+}
+
+bool AIPromptProcessor::isAgentModeEnabled() const {
+    return m_agentMode;
+}
+
+void AIPromptProcessor::pauseAgentMode(bool pause) {
+    m_agentPaused = pause;
+    if (pause) {
+        Console::Log("Agent mode paused");
+    } else {
+        Console::Log("Agent mode resumed");
+        m_lastAgentActivity = std::chrono::steady_clock::now();
+    }
+}
+
+bool AIPromptProcessor::isAgentModePaused() const {
+    return m_agentPaused;
+}
+
+void AIPromptProcessor::addAgentTask(const std::string& task) {
+    if (m_agentTaskQueue.size() >= m_maxAgentTasks) {
+        Console::Warn("Agent task queue is full, removing oldest task");
+        m_agentTaskQueue.pop_front();
+    }
+    m_agentTaskQueue.push_back(task);
+    Console::Log("Added task to agent queue: " + task);
+}
+
+void AIPromptProcessor::clearAgentTasks() {
+    m_agentTaskQueue.clear();
+    Console::Log("Agent task queue cleared");
+}
+
+void AIPromptProcessor::processNextAgentTask() {
+    if (m_agentTaskQueue.empty() || m_agentPaused || !m_agentMode) {
+        return;
+    }
+
+    if (m_geminiFuture.valid() && m_geminiFuture.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+        return; // Still processing previous task
+    }
+
+    std::string nextTask = m_agentTaskQueue.front();
+    m_agentTaskQueue.pop_front();
+
+    Console::Log("Agent processing task: " + nextTask);
+
+    // Build comprehensive context for the agent
+    std::string agentPrompt = "AUTONOMOUS AGENT MODE - ADVANCED ITERATION\n\n";
+
+    // Add comprehensive context
+    agentPrompt += BuildComprehensiveContext() + "\n\n";
+
+    // Add conversation history for context
+    if (!m_conversationHistory.empty()) {
+        agentPrompt += "PREVIOUS ACTIONS (for context):\n";
+        for (size_t i = 0; i < m_conversationHistory.size(); ++i) {
+            agentPrompt += std::to_string(i + 1) + ". " + m_conversationHistory[i] + "\n";
+        }
+        agentPrompt += "\n";
+    }
+
+    // Add the current task with enhanced instructions
+    agentPrompt += "CURRENT TASK: " + nextTask + "\n\n";
+
+    agentPrompt += "AGENT INSTRUCTIONS:\n";
+    agentPrompt += "- You are in AUTONOMOUS AGENT MODE - be creative and comprehensive\n";
+    agentPrompt += "- Analyze the current scene state and build upon existing entities\n";
+    agentPrompt += "- Use available assets intelligently and create engaging gameplay\n";
+    agentPrompt += "- If the task seems incomplete or could be improved, enhance it\n";
+    agentPrompt += "- Create complete, working game features, not just basic implementations\n";
+    agentPrompt += "- Think about user experience and game design principles\n";
+    agentPrompt += "- If you notice issues with previous implementations, fix them\n\n";
+
+    agentPrompt += "REMEMBER:\n";
+    agentPrompt += "- Create scripts BEFORE assigning them to entities\n";
+    agentPrompt += "- Position entities thoughtfully in the game world\n";
+    agentPrompt += "- Make the game fun and interactive\n";
+    agentPrompt += "- Use existing assets when appropriate\n\n";
+
+    agentPrompt += "EXECUTE THE TASK NOW:";
+
+    HandlePrompt(agentPrompt, false);
+
+    // Add to conversation history with more detail
+    std::string historyEntry = nextTask;
+    if (m_lastApiResponse.find("right") != std::string::npos) {
+        historyEntry += " (SUCCESS)";
+    } else if (m_lastApiResponse.find("X") != std::string::npos) {
+        historyEntry += " (ERROR - may need retry)";
+    }
+
+    m_conversationHistory.push_back(historyEntry);
+    if (m_conversationHistory.size() > 15) { // Keep more history for better context
+        m_conversationHistory.erase(m_conversationHistory.begin());
+    }
+
+    // Auto-add follow-up tasks for complex requests
+    if (nextTask.find("create") != std::string::npos && nextTask.find("game") != std::string::npos) {
+        // If creating a game, add follow-up tasks
+        addAgentTask("Add interactive elements and improve gameplay");
+        addAgentTask("Test and refine the game mechanics");
+    }
+}
+
+void AIPromptProcessor::updateAgentMode() {
+    if (!m_agentMode || m_agentPaused) {
+        return;
+    }
+
+    // Check if we should process the next task
+    auto now = std::chrono::steady_clock::now();
+    auto timeSinceLastActivity = std::chrono::duration_cast<std::chrono::seconds>(now - m_lastAgentActivity);
+
+    // Process next task if we're not currently processing and enough time has passed
+    if (timeSinceLastActivity.count() >= 2 && !m_isProcessing) { // 2 second delay between tasks
+        processNextAgentTask();
     }
 }
