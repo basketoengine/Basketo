@@ -8,6 +8,10 @@
 #include "../components/AnimationComponent.h"
 #include "../components/ColliderComponent.h"
 #include "../components/AudioComponent.h"
+#include "../components/ParticleComponent.h"
+#include "../components/EventComponent.h"
+#include "../components/StateMachineComponent.h"
+#include "../components/UIComponent.h"
 #include "../../InputManager.h"
 #include <iostream>
 #include <fstream>
@@ -353,5 +357,393 @@ void ScriptSystem::registerEntityAPI() {
             }
         }
         return false;
+    });
+
+    // Particle System API
+    registerFunction("CreateFireEffect", [this](Entity entity) {
+        if (!componentManager->hasComponent<ParticleEmitterComponent>(entity)) {
+            ParticleEmitterComponent emitter;
+            emitter.emissionRate = 30.0f;
+            emitter.maxParticles = 150;
+            emitter.minLifetime = 0.5f;
+            emitter.maxLifetime = 1.5f;
+            emitter.shape = EmissionShape::CIRCLE;
+            emitter.shapeRadius = 5.0f;
+            emitter.minSpeed = 20.0f;
+            emitter.maxSpeed = 60.0f;
+            emitter.directionAngle = -90.0f;
+            emitter.directionSpread = 30.0f;
+            emitter.gravityY = -20.0f;
+            emitter.damping = 0.95f;
+            emitter.blendMode = ParticleBlendMode::ADDITIVE;
+            emitter.minStartSize = 2.0f;
+            emitter.maxStartSize = 6.0f;
+            emitter.startColor = {255, 100, 0, 255};
+            emitter.endColor = {255, 0, 0, 0};
+            componentManager->addComponent(entity, emitter);
+
+            ParticleComponent particleComp;
+            particleComp.reserveParticles(emitter.maxParticles);
+            componentManager->addComponent(entity, particleComp);
+        }
+    });
+
+    registerFunction("CreateExplosionEffect", [this](Entity entity) {
+        if (!componentManager->hasComponent<ParticleEmitterComponent>(entity)) {
+            ParticleEmitterComponent emitter;
+            emitter.emissionRate = 200.0f;
+            emitter.maxParticles = 100;
+            emitter.minLifetime = 0.3f;
+            emitter.maxLifetime = 1.0f;
+            emitter.shape = EmissionShape::POINT;
+            emitter.minSpeed = 100.0f;
+            emitter.maxSpeed = 300.0f;
+            emitter.directionAngle = 0.0f;
+            emitter.directionSpread = 360.0f;
+            emitter.gravityY = 200.0f;
+            emitter.damping = 0.9f;
+            emitter.blendMode = ParticleBlendMode::ADDITIVE;
+            emitter.minStartSize = 3.0f;
+            emitter.maxStartSize = 8.0f;
+            emitter.startColor = {255, 255, 100, 255};
+            emitter.endColor = {255, 50, 0, 0};
+            emitter.looping = false;
+            emitter.duration = 0.2f;
+            componentManager->addComponent(entity, emitter);
+
+            ParticleComponent particleComp;
+            particleComp.reserveParticles(emitter.maxParticles);
+            componentManager->addComponent(entity, particleComp);
+        }
+    });
+
+    registerFunction("CreateSmokeEffect", [this](Entity entity) {
+        if (!componentManager->hasComponent<ParticleEmitterComponent>(entity)) {
+            ParticleEmitterComponent emitter;
+            emitter.emissionRate = 15.0f;
+            emitter.maxParticles = 80;
+            emitter.minLifetime = 2.0f;
+            emitter.maxLifetime = 4.0f;
+            emitter.shape = EmissionShape::CIRCLE;
+            emitter.shapeRadius = 8.0f;
+            emitter.minSpeed = 10.0f;
+            emitter.maxSpeed = 30.0f;
+            emitter.directionAngle = -90.0f;
+            emitter.directionSpread = 20.0f;
+            emitter.gravityY = -10.0f;
+            emitter.damping = 0.98f;
+            emitter.blendMode = ParticleBlendMode::ALPHA;
+            emitter.minStartSize = 4.0f;
+            emitter.maxStartSize = 8.0f;
+            emitter.startColor = {100, 100, 100, 150};
+            emitter.endColor = {200, 200, 200, 0};
+            componentManager->addComponent(entity, emitter);
+
+            ParticleComponent particleComp;
+            particleComp.reserveParticles(emitter.maxParticles);
+            componentManager->addComponent(entity, particleComp);
+        }
+    });
+
+    registerFunction("CreateSparkleEffect", [this](Entity entity) {
+        if (!componentManager->hasComponent<ParticleEmitterComponent>(entity)) {
+            ParticleEmitterComponent emitter;
+            emitter.emissionRate = 20.0f;
+            emitter.maxParticles = 60;
+            emitter.minLifetime = 1.0f;
+            emitter.maxLifetime = 2.0f;
+            emitter.shape = EmissionShape::CIRCLE;
+            emitter.shapeRadius = 15.0f;
+            emitter.minSpeed = 5.0f;
+            emitter.maxSpeed = 25.0f;
+            emitter.directionAngle = 0.0f;
+            emitter.directionSpread = 360.0f;
+            emitter.gravityY = 0.0f;
+            emitter.damping = 0.99f;
+            emitter.blendMode = ParticleBlendMode::ADDITIVE;
+            emitter.minStartSize = 1.0f;
+            emitter.maxStartSize = 3.0f;
+            emitter.startColor = {255, 255, 255, 255};
+            emitter.endColor = {255, 255, 100, 0};
+            emitter.minRotationSpeed = -180.0f;
+            emitter.maxRotationSpeed = 180.0f;
+            componentManager->addComponent(entity, emitter);
+
+            ParticleComponent particleComp;
+            particleComp.reserveParticles(emitter.maxParticles);
+            componentManager->addComponent(entity, particleComp);
+        }
+    });
+
+    registerFunction("SetParticleEmissionRate", [this](Entity entity, float rate) {
+        if (componentManager->hasComponent<ParticleEmitterComponent>(entity)) {
+            auto& emitter = componentManager->getComponent<ParticleEmitterComponent>(entity);
+            emitter.emissionRate = rate;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] SetParticleEmissionRate: Entity " + std::to_string(entity) + " does not have a ParticleEmitterComponent.");
+            }
+        }
+    });
+
+    registerFunction("EnableParticleEmitter", [this](Entity entity, bool enabled) {
+        if (componentManager->hasComponent<ParticleEmitterComponent>(entity)) {
+            auto& emitter = componentManager->getComponent<ParticleEmitterComponent>(entity);
+            emitter.enabled = enabled;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] EnableParticleEmitter: Entity " + std::to_string(entity) + " does not have a ParticleEmitterComponent.");
+            }
+        }
+    });
+
+    registerFunction("GetActiveParticleCount", [this](Entity entity) -> int {
+        if (componentManager->hasComponent<ParticleComponent>(entity)) {
+            auto& particleComp = componentManager->getComponent<ParticleComponent>(entity);
+            return particleComp.activeParticleCount;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] GetActiveParticleCount: Entity " + std::to_string(entity) + " does not have a ParticleComponent.");
+            }
+        }
+        return 0;
+    });
+
+    // Event System API
+    registerFunction("SendEvent", [this](Entity entity, const std::string& eventName) {
+        if (componentManager->hasComponent<EventComponent>(entity)) {
+            auto& eventComp = componentManager->getComponent<EventComponent>(entity);
+            eventComp.sendCustomEvent(eventName);
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] SendEvent: Entity " + std::to_string(entity) + " does not have an EventComponent.");
+            }
+        }
+    });
+
+    registerFunction("SendEventToTarget", [this](Entity entity, Entity target, const std::string& eventName) {
+        if (componentManager->hasComponent<EventComponent>(entity)) {
+            auto& eventComp = componentManager->getComponent<EventComponent>(entity);
+            eventComp.sendCustomEvent(eventName, target);
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] SendEventToTarget: Entity " + std::to_string(entity) + " does not have an EventComponent.");
+            }
+        }
+    });
+
+    registerFunction("AddEventListener", [this](Entity entity, const std::string& eventName) {
+        if (!componentManager->hasComponent<EventComponent>(entity)) {
+            componentManager->addComponent(entity, EventComponent{});
+        }
+
+        auto& eventComp = componentManager->getComponent<EventComponent>(entity);
+        eventComp.addEventListener(eventName, [entity, eventName, this](const EventData& event) {
+            // This would call a Lua callback if we had script component integration
+            std::cout << "[EventSystem] Event received: " << eventName << " on entity " << entity << std::endl;
+        });
+    });
+
+    // State Machine System API
+    registerFunction("ChangeState", [this](Entity entity, const std::string& stateName) {
+        if (componentManager->hasComponent<StateMachineComponent>(entity)) {
+            auto& stateMachine = componentManager->getComponent<StateMachineComponent>(entity);
+            // Force state change (this would normally go through StateMachineSystem)
+            if (stateMachine.hasState(stateName)) {
+                stateMachine.previousState = stateMachine.currentState;
+                stateMachine.currentState = stateName;
+                stateMachine.currentStateTime = 0.0f;
+                stateMachine.addToHistory(stateName);
+                std::cout << "[StateMachine] State changed to: " << stateName << std::endl;
+            }
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] ChangeState: Entity " + std::to_string(entity) + " does not have a StateMachineComponent.");
+            }
+        }
+    });
+
+    registerFunction("GetCurrentState", [this](Entity entity) -> std::string {
+        if (componentManager->hasComponent<StateMachineComponent>(entity)) {
+            auto& stateMachine = componentManager->getComponent<StateMachineComponent>(entity);
+            return stateMachine.currentState;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] GetCurrentState: Entity " + std::to_string(entity) + " does not have a StateMachineComponent.");
+            }
+        }
+        return "";
+    });
+
+    registerFunction("IsInState", [this](Entity entity, const std::string& stateName) -> bool {
+        if (componentManager->hasComponent<StateMachineComponent>(entity)) {
+            auto& stateMachine = componentManager->getComponent<StateMachineComponent>(entity);
+            return stateMachine.currentState == stateName;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] IsInState: Entity " + std::to_string(entity) + " does not have a StateMachineComponent.");
+            }
+        }
+        return false;
+    });
+
+    registerFunction("CreatePlayerStateMachine", [this](Entity entity) {
+        if (!componentManager->hasComponent<StateMachineComponent>(entity)) {
+            auto playerSM = StateMachineTemplates::createPlayerController();
+            componentManager->addComponent(entity, playerSM);
+            std::cout << "[StateMachine] Created player state machine for entity " << entity << std::endl;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] CreatePlayerStateMachine: Entity " + std::to_string(entity) + " already has a StateMachineComponent.");
+            }
+        }
+    });
+
+    registerFunction("CreateEnemyStateMachine", [this](Entity entity) {
+        if (!componentManager->hasComponent<StateMachineComponent>(entity)) {
+            auto enemySM = StateMachineTemplates::createEnemyAI();
+            componentManager->addComponent(entity, enemySM);
+            std::cout << "[StateMachine] Created enemy AI state machine for entity " << entity << std::endl;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] CreateEnemyStateMachine: Entity " + std::to_string(entity) + " already has a StateMachineComponent.");
+            }
+        }
+    });
+
+    // UI System API
+    registerFunction("CreateButton", [this](Entity entity, const std::string& text, float x, float y, float width, float height) {
+        if (!componentManager->hasComponent<UIComponent>(entity)) {
+            UIComponent ui(UIElementType::BUTTON);
+            ui.x = x;
+            ui.y = y;
+            ui.width = width;
+            ui.height = height;
+            ui.interactive = true;
+            ui.focusable = true;
+            componentManager->addComponent(entity, ui);
+
+            UIButtonComponent button(text);
+            componentManager->addComponent(entity, button);
+
+            std::cout << "[UI] Created button '" << text << "' for entity " << entity << std::endl;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] CreateButton: Entity " + std::to_string(entity) + " already has a UIComponent.");
+            }
+        }
+    });
+
+    registerFunction("CreateText", [this](Entity entity, const std::string& text, float x, float y) {
+        if (!componentManager->hasComponent<UIComponent>(entity)) {
+            UIComponent ui(UIElementType::TEXT);
+            ui.x = x;
+            ui.y = y;
+            ui.width = 200.0f;
+            ui.height = 30.0f;
+            ui.interactive = false;
+            componentManager->addComponent(entity, ui);
+
+            UITextComponent textComp(text);
+            componentManager->addComponent(entity, textComp);
+
+            std::cout << "[UI] Created text '" << text << "' for entity " << entity << std::endl;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] CreateText: Entity " + std::to_string(entity) + " already has a UIComponent.");
+            }
+        }
+    });
+
+    registerFunction("CreatePanel", [this](Entity entity, float x, float y, float width, float height) {
+        if (!componentManager->hasComponent<UIComponent>(entity)) {
+            UIComponent ui(UIElementType::PANEL);
+            ui.x = x;
+            ui.y = y;
+            ui.width = width;
+            ui.height = height;
+            ui.interactive = false;
+            componentManager->addComponent(entity, ui);
+
+            UIPanelComponent panel;
+            componentManager->addComponent(entity, panel);
+
+            std::cout << "[UI] Created panel for entity " << entity << std::endl;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] CreatePanel: Entity " + std::to_string(entity) + " already has a UIComponent.");
+            }
+        }
+    });
+
+    registerFunction("CreateSlider", [this](Entity entity, float min, float max, float value, float x, float y, float width, float height) {
+        if (!componentManager->hasComponent<UIComponent>(entity)) {
+            UIComponent ui(UIElementType::SLIDER);
+            ui.x = x;
+            ui.y = y;
+            ui.width = width;
+            ui.height = height;
+            ui.interactive = true;
+            ui.focusable = true;
+            componentManager->addComponent(entity, ui);
+
+            UISliderComponent slider(min, max, value);
+            componentManager->addComponent(entity, slider);
+
+            std::cout << "[UI] Created slider for entity " << entity << std::endl;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] CreateSlider: Entity " + std::to_string(entity) + " already has a UIComponent.");
+            }
+        }
+    });
+
+    registerFunction("SetUIText", [this](Entity entity, const std::string& text) {
+        if (componentManager->hasComponent<UITextComponent>(entity)) {
+            auto& textComp = componentManager->getComponent<UITextComponent>(entity);
+            textComp.text = text;
+        } else if (componentManager->hasComponent<UIButtonComponent>(entity)) {
+            auto& buttonComp = componentManager->getComponent<UIButtonComponent>(entity);
+            buttonComp.text = text;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] SetUIText: Entity " + std::to_string(entity) + " does not have a text component.");
+            }
+        }
+    });
+
+    registerFunction("SetUIPosition", [this](Entity entity, float x, float y) {
+        if (componentManager->hasComponent<UIComponent>(entity)) {
+            auto& ui = componentManager->getComponent<UIComponent>(entity);
+            ui.x = x;
+            ui.y = y;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] SetUIPosition: Entity " + std::to_string(entity) + " does not have a UIComponent.");
+            }
+        }
+    });
+
+    registerFunction("SetUISize", [this](Entity entity, float width, float height) {
+        if (componentManager->hasComponent<UIComponent>(entity)) {
+            auto& ui = componentManager->getComponent<UIComponent>(entity);
+            ui.width = width;
+            ui.height = height;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] SetUISize: Entity " + std::to_string(entity) + " does not have a UIComponent.");
+            }
+        }
+    });
+
+    registerFunction("SetUIVisible", [this](Entity entity, bool visible) {
+        if (componentManager->hasComponent<UIComponent>(entity)) {
+            auto& ui = componentManager->getComponent<UIComponent>(entity);
+            ui.visible = visible;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] SetUIVisible: Entity " + std::to_string(entity) + " does not have a UIComponent.");
+            }
+        }
     });
 }

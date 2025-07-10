@@ -12,7 +12,8 @@ set(LUA_INCLUDE_DIR /usr/include/lua5.4 CACHE PATH "Path to Lua 5.4 include dire
 
 find_package(Lua 5.4 REQUIRED)
 
-add_subdirectory(vendor/sol2)
+# Include sol2 as header-only library
+include_directories(vendor/sol2/include)
 
 pkg_check_modules(SDL2_IMAGE REQUIRED SDL2_image)
 include_directories(${SDL2_IMAGE_INCLUDE_DIRS})
@@ -76,6 +77,13 @@ target_sources(BasketoGameEngine PRIVATE
     src/ecs/systems/ScriptSystem.cpp
     src/ecs/systems/AnimationSystem.cpp
     src/ecs/systems/PhysicsSystem.cpp
+    src/ecs/systems/ParticleSystem.cpp
+    src/ecs/systems/EventSystem.cpp
+    src/ecs/systems/StateMachineSystem.cpp
+    src/ecs/systems/UISystem.cpp
+
+    # ECS Components
+    src/ecs/components/ParticleComponent.cpp
 
     # Utilities
     utils/utility.cpp
@@ -101,14 +109,13 @@ endif()
 target_include_directories(BasketoGameEngine PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/vendor/nlohmann) # Ensure nlohmann is found
 
 target_link_libraries(BasketoGameEngine
-    PRIVATE 
+    PRIVATE
     ${SDL2_LIBRARIES}
     ${SDL2_IMAGE_LIBRARIES}
     ${SDL2_TTF_LIBRARIES}
     ${SDL2_MIXER_LIBRARIES}
     ${OpenGL_LIBRARIES}
     ${LUA_LIBRARIES}
-    PUBLIC sol2 
 )
 
 # Find CURL
