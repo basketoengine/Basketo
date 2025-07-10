@@ -80,6 +80,7 @@ target_sources(BasketoGameEngine PRIVATE
     src/ecs/systems/ParticleSystem.cpp
     src/ecs/systems/EventSystem.cpp
     src/ecs/systems/StateMachineSystem.cpp
+    src/ecs/systems/UISystem.cpp
 
     # ECS Components
     src/ecs/components/ParticleComponent.cpp

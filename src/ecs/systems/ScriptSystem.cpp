@@ -11,6 +11,7 @@
 #include "../components/ParticleComponent.h"
 #include "../components/EventComponent.h"
 #include "../components/StateMachineComponent.h"
+#include "../components/UIComponent.h"
 #include "../../InputManager.h"
 #include <iostream>
 #include <fstream>
@@ -606,6 +607,142 @@ void ScriptSystem::registerEntityAPI() {
         } else {
             if (errorLogCallback) {
                 errorLogCallback("[LUA ERROR] CreateEnemyStateMachine: Entity " + std::to_string(entity) + " already has a StateMachineComponent.");
+            }
+        }
+    });
+
+    // UI System API
+    registerFunction("CreateButton", [this](Entity entity, const std::string& text, float x, float y, float width, float height) {
+        if (!componentManager->hasComponent<UIComponent>(entity)) {
+            UIComponent ui(UIElementType::BUTTON);
+            ui.x = x;
+            ui.y = y;
+            ui.width = width;
+            ui.height = height;
+            ui.interactive = true;
+            ui.focusable = true;
+            componentManager->addComponent(entity, ui);
+
+            UIButtonComponent button(text);
+            componentManager->addComponent(entity, button);
+
+            std::cout << "[UI] Created button '" << text << "' for entity " << entity << std::endl;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] CreateButton: Entity " + std::to_string(entity) + " already has a UIComponent.");
+            }
+        }
+    });
+
+    registerFunction("CreateText", [this](Entity entity, const std::string& text, float x, float y) {
+        if (!componentManager->hasComponent<UIComponent>(entity)) {
+            UIComponent ui(UIElementType::TEXT);
+            ui.x = x;
+            ui.y = y;
+            ui.width = 200.0f;
+            ui.height = 30.0f;
+            ui.interactive = false;
+            componentManager->addComponent(entity, ui);
+
+            UITextComponent textComp(text);
+            componentManager->addComponent(entity, textComp);
+
+            std::cout << "[UI] Created text '" << text << "' for entity " << entity << std::endl;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] CreateText: Entity " + std::to_string(entity) + " already has a UIComponent.");
+            }
+        }
+    });
+
+    registerFunction("CreatePanel", [this](Entity entity, float x, float y, float width, float height) {
+        if (!componentManager->hasComponent<UIComponent>(entity)) {
+            UIComponent ui(UIElementType::PANEL);
+            ui.x = x;
+            ui.y = y;
+            ui.width = width;
+            ui.height = height;
+            ui.interactive = false;
+            componentManager->addComponent(entity, ui);
+
+            UIPanelComponent panel;
+            componentManager->addComponent(entity, panel);
+
+            std::cout << "[UI] Created panel for entity " << entity << std::endl;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] CreatePanel: Entity " + std::to_string(entity) + " already has a UIComponent.");
+            }
+        }
+    });
+
+    registerFunction("CreateSlider", [this](Entity entity, float min, float max, float value, float x, float y, float width, float height) {
+        if (!componentManager->hasComponent<UIComponent>(entity)) {
+            UIComponent ui(UIElementType::SLIDER);
+            ui.x = x;
+            ui.y = y;
+            ui.width = width;
+            ui.height = height;
+            ui.interactive = true;
+            ui.focusable = true;
+            componentManager->addComponent(entity, ui);
+
+            UISliderComponent slider(min, max, value);
+            componentManager->addComponent(entity, slider);
+
+            std::cout << "[UI] Created slider for entity " << entity << std::endl;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] CreateSlider: Entity " + std::to_string(entity) + " already has a UIComponent.");
+            }
+        }
+    });
+
+    registerFunction("SetUIText", [this](Entity entity, const std::string& text) {
+        if (componentManager->hasComponent<UITextComponent>(entity)) {
+            auto& textComp = componentManager->getComponent<UITextComponent>(entity);
+            textComp.text = text;
+        } else if (componentManager->hasComponent<UIButtonComponent>(entity)) {
+            auto& buttonComp = componentManager->getComponent<UIButtonComponent>(entity);
+            buttonComp.text = text;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] SetUIText: Entity " + std::to_string(entity) + " does not have a text component.");
+            }
+        }
+    });
+
+    registerFunction("SetUIPosition", [this](Entity entity, float x, float y) {
+        if (componentManager->hasComponent<UIComponent>(entity)) {
+            auto& ui = componentManager->getComponent<UIComponent>(entity);
+            ui.x = x;
+            ui.y = y;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] SetUIPosition: Entity " + std::to_string(entity) + " does not have a UIComponent.");
+            }
+        }
+    });
+
+    registerFunction("SetUISize", [this](Entity entity, float width, float height) {
+        if (componentManager->hasComponent<UIComponent>(entity)) {
+            auto& ui = componentManager->getComponent<UIComponent>(entity);
+            ui.width = width;
+            ui.height = height;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] SetUISize: Entity " + std::to_string(entity) + " does not have a UIComponent.");
+            }
+        }
+    });
+
+    registerFunction("SetUIVisible", [this](Entity entity, bool visible) {
+        if (componentManager->hasComponent<UIComponent>(entity)) {
+            auto& ui = componentManager->getComponent<UIComponent>(entity);
+            ui.visible = visible;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] SetUIVisible: Entity " + std::to_string(entity) + " does not have a UIComponent.");
             }
         }
     });

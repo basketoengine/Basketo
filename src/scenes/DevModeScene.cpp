@@ -75,6 +75,13 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     componentManager->registerComponent<ParticleComponent>();
     componentManager->registerComponent<EventComponent>();
     componentManager->registerComponent<StateMachineComponent>();
+    componentManager->registerComponent<UIComponent>();
+    componentManager->registerComponent<UIButtonComponent>();
+    componentManager->registerComponent<UITextComponent>();
+    componentManager->registerComponent<UISliderComponent>();
+    componentManager->registerComponent<UIInputFieldComponent>();
+    componentManager->registerComponent<UIPanelComponent>();
+    componentManager->registerComponent<UIImageComponent>();
     loadDevModeScene(*this, sceneFilePath);
 
     renderSystem = systemManager->registerSystem<RenderSystem>();
@@ -88,6 +95,7 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     particleSystem = systemManager->registerSystem<ParticleSystem>();
     eventSystem = systemManager->registerSystem<EventSystem>();
     stateMachineSystem = systemManager->registerSystem<StateMachineSystem>();
+    uiSystem = systemManager->registerSystem<UISystem>();
 
     scriptSystem->setLoggingFunctions(
         [this](const std::string& msg) { this->addLogToConsole(msg); },
@@ -155,6 +163,10 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     Signature stateMachineSig;
     stateMachineSig.set(componentManager->getComponentType<StateMachineComponent>());
     systemManager->setSignature<StateMachineSystem>(stateMachineSig);
+
+    Signature uiSig;
+    uiSig.set(componentManager->getComponentType<UIComponent>());
+    systemManager->setSignature<UISystem>(uiSig);
 
     AssetManager& assets = AssetManager::getInstance();
     std::string texturePath = "../assets/Textures/";
@@ -334,7 +346,12 @@ void DevModeScene::update(float deltaTime) {
         stateMachineSystem->update(componentManager.get(), deltaTime);
     }
 
-    // 9. Particles
+    // 9. UI System
+    if (uiSystem) {
+        uiSystem->update(componentManager.get(), deltaTime);
+    }
+
+    // 10. Particles
     if (particleSystem) {
         particleSystem->update(componentManager.get(), deltaTime);
     }
@@ -1358,6 +1375,11 @@ void DevModeScene::renderGameWindow() {
     // Render particles
     if (particleSystem) {
         particleSystem->render(gameRenderer, componentManager.get(), currentRenderCameraX, currentRenderCameraY);
+    }
+
+    // Render UI (always on top)
+    if (uiSystem) {
+        uiSystem->render(gameRenderer, componentManager.get());
     }
 
     SDL_RenderSetViewport(gameRenderer, nullptr);

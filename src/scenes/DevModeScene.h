@@ -24,6 +24,7 @@
 #include "../ecs/components/ParticleComponent.h"
 #include "../ecs/components/EventComponent.h"
 #include "../ecs/components/StateMachineComponent.h"
+#include "../ecs/components/UIComponent.h"
 #include "../ecs/systems/RenderSystem.h"
 #include "../ecs/systems/ScriptSystem.h"
 #include "../ecs/systems/MovementSystem.h"
@@ -35,6 +36,7 @@
 #include "../ecs/systems/ParticleSystem.h"
 #include "../ecs/systems/EventSystem.h"
 #include "../ecs/systems/StateMachineSystem.h"
+#include "../ecs/systems/UISystem.h"
 #include "../AssetManager.h"
 #include "../ecs/Entity.h"
 #include "../../vendor/nlohmann/json.hpp"
@@ -56,6 +58,7 @@ class PhysicsSystem;
 class ParticleSystem;
 class EventSystem;
 class StateMachineSystem;
+class UISystem;
 class AIPromptProcessor;
 
 const int HANDLE_SIZE = 8; 
@@ -145,6 +148,7 @@ public:
     std::shared_ptr<ParticleSystem> particleSystem;
     std::shared_ptr<EventSystem> eventSystem;
     std::shared_ptr<StateMachineSystem> stateMachineSystem;
+    std::shared_ptr<UISystem> uiSystem;
 
     std::vector<std::string> consoleLogBuffer;
 
