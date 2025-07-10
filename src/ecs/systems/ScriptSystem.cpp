@@ -8,6 +8,7 @@
 #include "../components/AnimationComponent.h"
 #include "../components/ColliderComponent.h"
 #include "../components/AudioComponent.h"
+#include "../components/ParticleComponent.h"
 #include "../../InputManager.h"
 #include <iostream>
 #include <fstream>
@@ -353,5 +354,155 @@ void ScriptSystem::registerEntityAPI() {
             }
         }
         return false;
+    });
+
+    // Particle System API
+    registerFunction("CreateFireEffect", [this](Entity entity) {
+        if (!componentManager->hasComponent<ParticleEmitterComponent>(entity)) {
+            ParticleEmitterComponent emitter;
+            emitter.emissionRate = 30.0f;
+            emitter.maxParticles = 150;
+            emitter.minLifetime = 0.5f;
+            emitter.maxLifetime = 1.5f;
+            emitter.shape = EmissionShape::CIRCLE;
+            emitter.shapeRadius = 5.0f;
+            emitter.minSpeed = 20.0f;
+            emitter.maxSpeed = 60.0f;
+            emitter.directionAngle = -90.0f;
+            emitter.directionSpread = 30.0f;
+            emitter.gravityY = -20.0f;
+            emitter.damping = 0.95f;
+            emitter.blendMode = ParticleBlendMode::ADDITIVE;
+            emitter.minStartSize = 2.0f;
+            emitter.maxStartSize = 6.0f;
+            emitter.startColor = {255, 100, 0, 255};
+            emitter.endColor = {255, 0, 0, 0};
+            componentManager->addComponent(entity, emitter);
+
+            ParticleComponent particleComp;
+            particleComp.reserveParticles(emitter.maxParticles);
+            componentManager->addComponent(entity, particleComp);
+        }
+    });
+
+    registerFunction("CreateExplosionEffect", [this](Entity entity) {
+        if (!componentManager->hasComponent<ParticleEmitterComponent>(entity)) {
+            ParticleEmitterComponent emitter;
+            emitter.emissionRate = 200.0f;
+            emitter.maxParticles = 100;
+            emitter.minLifetime = 0.3f;
+            emitter.maxLifetime = 1.0f;
+            emitter.shape = EmissionShape::POINT;
+            emitter.minSpeed = 100.0f;
+            emitter.maxSpeed = 300.0f;
+            emitter.directionAngle = 0.0f;
+            emitter.directionSpread = 360.0f;
+            emitter.gravityY = 200.0f;
+            emitter.damping = 0.9f;
+            emitter.blendMode = ParticleBlendMode::ADDITIVE;
+            emitter.minStartSize = 3.0f;
+            emitter.maxStartSize = 8.0f;
+            emitter.startColor = {255, 255, 100, 255};
+            emitter.endColor = {255, 50, 0, 0};
+            emitter.looping = false;
+            emitter.duration = 0.2f;
+            componentManager->addComponent(entity, emitter);
+
+            ParticleComponent particleComp;
+            particleComp.reserveParticles(emitter.maxParticles);
+            componentManager->addComponent(entity, particleComp);
+        }
+    });
+
+    registerFunction("CreateSmokeEffect", [this](Entity entity) {
+        if (!componentManager->hasComponent<ParticleEmitterComponent>(entity)) {
+            ParticleEmitterComponent emitter;
+            emitter.emissionRate = 15.0f;
+            emitter.maxParticles = 80;
+            emitter.minLifetime = 2.0f;
+            emitter.maxLifetime = 4.0f;
+            emitter.shape = EmissionShape::CIRCLE;
+            emitter.shapeRadius = 8.0f;
+            emitter.minSpeed = 10.0f;
+            emitter.maxSpeed = 30.0f;
+            emitter.directionAngle = -90.0f;
+            emitter.directionSpread = 20.0f;
+            emitter.gravityY = -10.0f;
+            emitter.damping = 0.98f;
+            emitter.blendMode = ParticleBlendMode::ALPHA;
+            emitter.minStartSize = 4.0f;
+            emitter.maxStartSize = 8.0f;
+            emitter.startColor = {100, 100, 100, 150};
+            emitter.endColor = {200, 200, 200, 0};
+            componentManager->addComponent(entity, emitter);
+
+            ParticleComponent particleComp;
+            particleComp.reserveParticles(emitter.maxParticles);
+            componentManager->addComponent(entity, particleComp);
+        }
+    });
+
+    registerFunction("CreateSparkleEffect", [this](Entity entity) {
+        if (!componentManager->hasComponent<ParticleEmitterComponent>(entity)) {
+            ParticleEmitterComponent emitter;
+            emitter.emissionRate = 20.0f;
+            emitter.maxParticles = 60;
+            emitter.minLifetime = 1.0f;
+            emitter.maxLifetime = 2.0f;
+            emitter.shape = EmissionShape::CIRCLE;
+            emitter.shapeRadius = 15.0f;
+            emitter.minSpeed = 5.0f;
+            emitter.maxSpeed = 25.0f;
+            emitter.directionAngle = 0.0f;
+            emitter.directionSpread = 360.0f;
+            emitter.gravityY = 0.0f;
+            emitter.damping = 0.99f;
+            emitter.blendMode = ParticleBlendMode::ADDITIVE;
+            emitter.minStartSize = 1.0f;
+            emitter.maxStartSize = 3.0f;
+            emitter.startColor = {255, 255, 255, 255};
+            emitter.endColor = {255, 255, 100, 0};
+            emitter.minRotationSpeed = -180.0f;
+            emitter.maxRotationSpeed = 180.0f;
+            componentManager->addComponent(entity, emitter);
+
+            ParticleComponent particleComp;
+            particleComp.reserveParticles(emitter.maxParticles);
+            componentManager->addComponent(entity, particleComp);
+        }
+    });
+
+    registerFunction("SetParticleEmissionRate", [this](Entity entity, float rate) {
+        if (componentManager->hasComponent<ParticleEmitterComponent>(entity)) {
+            auto& emitter = componentManager->getComponent<ParticleEmitterComponent>(entity);
+            emitter.emissionRate = rate;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] SetParticleEmissionRate: Entity " + std::to_string(entity) + " does not have a ParticleEmitterComponent.");
+            }
+        }
+    });
+
+    registerFunction("EnableParticleEmitter", [this](Entity entity, bool enabled) {
+        if (componentManager->hasComponent<ParticleEmitterComponent>(entity)) {
+            auto& emitter = componentManager->getComponent<ParticleEmitterComponent>(entity);
+            emitter.enabled = enabled;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] EnableParticleEmitter: Entity " + std::to_string(entity) + " does not have a ParticleEmitterComponent.");
+            }
+        }
+    });
+
+    registerFunction("GetActiveParticleCount", [this](Entity entity) -> int {
+        if (componentManager->hasComponent<ParticleComponent>(entity)) {
+            auto& particleComp = componentManager->getComponent<ParticleComponent>(entity);
+            return particleComp.activeParticleCount;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] GetActiveParticleCount: Entity " + std::to_string(entity) + " does not have a ParticleComponent.");
+            }
+        }
+        return 0;
     });
 }

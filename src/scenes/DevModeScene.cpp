@@ -71,6 +71,8 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     componentManager->registerComponent<SoundEffectsComponent>();
     componentManager->registerComponent<RigidbodyComponent>();
     componentManager->registerComponent<CameraComponent>();
+    componentManager->registerComponent<ParticleEmitterComponent>();
+    componentManager->registerComponent<ParticleComponent>();
     loadDevModeScene(*this, sceneFilePath);
 
     renderSystem = systemManager->registerSystem<RenderSystem>();
@@ -80,7 +82,8 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     audioSystem = systemManager->registerSystem<AudioSystem>();
     cameraSystem = systemManager->registerSystem<CameraSystem>(componentManager.get(), entityManager.get(), renderer);
     collisionSystem = systemManager->registerSystem<CollisionSystem>();
-    physicsSystem = systemManager->registerSystem<PhysicsSystem>(); 
+    physicsSystem = systemManager->registerSystem<PhysicsSystem>();
+    particleSystem = systemManager->registerSystem<ParticleSystem>();
 
     scriptSystem->setLoggingFunctions(
         [this](const std::string& msg) { this->addLogToConsole(msg); },
@@ -129,11 +132,17 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     collisionSig.set(componentManager->getComponentType<ColliderComponent>());
     systemManager->setSignature<CollisionSystem>(collisionSig);
 
-    Signature physicsSig; 
+    Signature physicsSig;
     physicsSig.set(componentManager->getComponentType<TransformComponent>());
     physicsSig.set(componentManager->getComponentType<VelocityComponent>());
     physicsSig.set(componentManager->getComponentType<RigidbodyComponent>());
     systemManager->setSignature<PhysicsSystem>(physicsSig);
+
+    Signature particleSig;
+    particleSig.set(componentManager->getComponentType<TransformComponent>());
+    particleSig.set(componentManager->getComponentType<ParticleEmitterComponent>());
+    particleSig.set(componentManager->getComponentType<ParticleComponent>());
+    systemManager->setSignature<ParticleSystem>(particleSig);
 
     AssetManager& assets = AssetManager::getInstance();
     std::string texturePath = "../assets/Textures/";
@@ -297,6 +306,11 @@ void DevModeScene::update(float deltaTime) {
     // 6. Audio
     if (audioSystem) {
         audioSystem->update(deltaTime, *entityManager, *componentManager);
+    }
+
+    // 7. Particles
+    if (particleSystem) {
+        particleSystem->update(componentManager.get(), deltaTime);
     }
 
     // Camera system is only updated in game view, not in scene editor
@@ -1313,6 +1327,11 @@ void DevModeScene::renderGameWindow() {
         SDL_Rect* srcRectPtr = sprite.useSrcRect ? &sprite.srcRect : nullptr;
         SDL_Point center = { (int)(transform.width * currentRenderZoom / 2), (int)(transform.height * currentRenderZoom / 2) };
         SDL_RenderCopyEx(gameRenderer, texture, srcRectPtr, &destRect, transform.rotation, &center, sprite.flip);
+    }
+
+    // Render particles
+    if (particleSystem) {
+        particleSystem->render(gameRenderer, componentManager.get(), currentRenderCameraX, currentRenderCameraY);
     }
 
     SDL_RenderSetViewport(gameRenderer, nullptr);

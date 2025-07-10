@@ -13,6 +13,7 @@
 #include "../ecs/components/AudioComponent.h" 
 #include "../ecs/components/CameraComponent.h"
 #include "../ecs/components/RigidbodyComponent.h"
+#include "../ecs/components/ParticleComponent.h"
 #include "../AssetManager.h"
 #include "../utils/FileUtils.h" 
 #include "../utils/EditorHelpers.h" 
@@ -38,7 +39,7 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
         ImGui::Separator();
 
         ImGui::PushItemWidth(-1);
-        const char* component_types[] = { "Transform", "Sprite", "Velocity", "Script", "Collider", "Animation", "Audio", "SoundEffects", "Camera", "Rigidbody" };
+        const char* component_types[] = { "Transform", "Sprite", "Velocity", "Script", "Collider", "Animation", "Audio", "SoundEffects", "Camera", "Rigidbody", "ParticleEmitter", "Particle" };
         static int current_component_type_idx = 0;
 
         if (ImGui::BeginCombo("##AddComponentCombo", component_types[current_component_type_idx])) {
@@ -145,6 +146,28 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
                     std::cout << "Added RigidbodyComponent to Entity " << scene.selectedEntity << std::endl;
                 } else {
                     std::cout << "Entity " << scene.selectedEntity << " already has RigidbodyComponent." << std::endl;
+                }
+            } else if (selected_component_str == "ParticleEmitter") {
+                if (!scene.componentManager->hasComponent<ParticleEmitterComponent>(scene.selectedEntity)) {
+                    scene.componentManager->addComponent(scene.selectedEntity, ParticleEmitterComponent{});
+                    entitySignature.set(scene.componentManager->getComponentType<ParticleEmitterComponent>());
+                    scene.entityManager->setSignature(scene.selectedEntity, entitySignature);
+                    scene.systemManager->entitySignatureChanged(scene.selectedEntity, entitySignature);
+                    std::cout << "Added ParticleEmitterComponent to Entity " << scene.selectedEntity << std::endl;
+                } else {
+                    std::cout << "Entity " << scene.selectedEntity << " already has ParticleEmitterComponent." << std::endl;
+                }
+            } else if (selected_component_str == "Particle") {
+                if (!scene.componentManager->hasComponent<ParticleComponent>(scene.selectedEntity)) {
+                    ParticleComponent particleComp;
+                    particleComp.reserveParticles(100); // Default particle count
+                    scene.componentManager->addComponent(scene.selectedEntity, particleComp);
+                    entitySignature.set(scene.componentManager->getComponentType<ParticleComponent>());
+                    scene.entityManager->setSignature(scene.selectedEntity, entitySignature);
+                    scene.systemManager->entitySignatureChanged(scene.selectedEntity, entitySignature);
+                    std::cout << "Added ParticleComponent to Entity " << scene.selectedEntity << std::endl;
+                } else {
+                    std::cout << "Entity " << scene.selectedEntity << " already has ParticleComponent." << std::endl;
                 }
             }
 
@@ -563,6 +586,135 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
             ImGui::InputFloat("Gravity Scale", &rigidbody.gravityScale);
             ImGui::InputFloat("Drag", &rigidbody.drag);
             ImGui::Checkbox("Is Kinematic", &rigidbody.isKinematic);
+        }
+
+        // ParticleEmitterComponent Inspector
+        if (scene.componentManager->hasComponent<ParticleEmitterComponent>(scene.selectedEntity)) {
+            if (ImGui::CollapsingHeader("Particle Emitter Component", ImGuiTreeNodeFlags_DefaultOpen)) {
+                auto& emitter = scene.componentManager->getComponent<ParticleEmitterComponent>(scene.selectedEntity);
+
+                ImGui::Checkbox("Enabled", &emitter.enabled);
+                ImGui::DragFloat("Emission Rate", &emitter.emissionRate, 1.0f, 0.1f, 1000.0f);
+                ImGui::DragInt("Max Particles", &emitter.maxParticles, 1, 1, 10000);
+                ImGui::Checkbox("Looping", &emitter.looping);
+                if (!emitter.looping) {
+                    ImGui::DragFloat("Duration", &emitter.duration, 0.1f, 0.1f, 60.0f);
+                }
+
+                ImGui::Separator();
+                ImGui::Text("Particle Lifetime");
+                ImGui::DragFloat("Min Lifetime", &emitter.minLifetime, 0.1f, 0.1f, 60.0f);
+                ImGui::DragFloat("Max Lifetime", &emitter.maxLifetime, 0.1f, 0.1f, 60.0f);
+
+                ImGui::Separator();
+                ImGui::Text("Emission Shape");
+                const char* shapes[] = {"Point", "Circle", "Rectangle", "Line"};
+                int currentShape = static_cast<int>(emitter.shape);
+                if (ImGui::Combo("Shape", &currentShape, shapes, IM_ARRAYSIZE(shapes))) {
+                    emitter.shape = static_cast<EmissionShape>(currentShape);
+                }
+
+                if (emitter.shape == EmissionShape::CIRCLE) {
+                    ImGui::DragFloat("Radius", &emitter.shapeRadius, 1.0f, 0.0f, 1000.0f);
+                } else if (emitter.shape == EmissionShape::RECTANGLE || emitter.shape == EmissionShape::LINE) {
+                    ImGui::DragFloat("Width", &emitter.shapeWidth, 1.0f, 0.0f, 1000.0f);
+                    if (emitter.shape == EmissionShape::RECTANGLE) {
+                        ImGui::DragFloat("Height", &emitter.shapeHeight, 1.0f, 0.0f, 1000.0f);
+                    }
+                }
+
+                ImGui::Separator();
+                ImGui::Text("Velocity");
+                ImGui::DragFloat("Min Speed", &emitter.minSpeed, 1.0f, 0.0f, 1000.0f);
+                ImGui::DragFloat("Max Speed", &emitter.maxSpeed, 1.0f, 0.0f, 1000.0f);
+                ImGui::DragFloat("Direction Angle", &emitter.directionAngle, 1.0f, -360.0f, 360.0f);
+                ImGui::DragFloat("Direction Spread", &emitter.directionSpread, 1.0f, 0.0f, 360.0f);
+
+                ImGui::Separator();
+                ImGui::Text("Physics");
+                ImGui::DragFloat("Gravity X", &emitter.gravityX, 1.0f, -1000.0f, 1000.0f);
+                ImGui::DragFloat("Gravity Y", &emitter.gravityY, 1.0f, -1000.0f, 1000.0f);
+                ImGui::DragFloat("Damping", &emitter.damping, 0.01f, 0.0f, 1.0f);
+
+                ImGui::Separator();
+                ImGui::Text("Visual Properties");
+                ImGui::InputText("Texture ID", const_cast<char*>(emitter.textureId.c_str()), emitter.textureId.capacity() + 1);
+
+                const char* blendModes[] = {"Alpha", "Additive", "Multiply"};
+                int currentBlend = static_cast<int>(emitter.blendMode);
+                if (ImGui::Combo("Blend Mode", &currentBlend, blendModes, IM_ARRAYSIZE(blendModes))) {
+                    emitter.blendMode = static_cast<ParticleBlendMode>(currentBlend);
+                }
+
+                ImGui::DragFloat("Min Start Size", &emitter.minStartSize, 0.1f, 0.1f, 100.0f);
+                ImGui::DragFloat("Max Start Size", &emitter.maxStartSize, 0.1f, 0.1f, 100.0f);
+
+                ImGui::Separator();
+                ImGui::Text("Color");
+                float startColor[4] = {emitter.startColor.r/255.0f, emitter.startColor.g/255.0f, emitter.startColor.b/255.0f, emitter.startColor.a/255.0f};
+                if (ImGui::ColorEdit4("Start Color", startColor)) {
+                    emitter.startColor = {(Uint8)(startColor[0]*255), (Uint8)(startColor[1]*255), (Uint8)(startColor[2]*255), (Uint8)(startColor[3]*255)};
+                }
+
+                float endColor[4] = {emitter.endColor.r/255.0f, emitter.endColor.g/255.0f, emitter.endColor.b/255.0f, emitter.endColor.a/255.0f};
+                if (ImGui::ColorEdit4("End Color", endColor)) {
+                    emitter.endColor = {(Uint8)(endColor[0]*255), (Uint8)(endColor[1]*255), (Uint8)(endColor[2]*255), (Uint8)(endColor[3]*255)};
+                }
+
+                ImGui::Separator();
+                ImGui::Text("Rotation");
+                ImGui::DragFloat("Min Start Rotation", &emitter.minStartRotation, 1.0f, -360.0f, 360.0f);
+                ImGui::DragFloat("Max Start Rotation", &emitter.maxStartRotation, 1.0f, -360.0f, 360.0f);
+                ImGui::DragFloat("Min Rotation Speed", &emitter.minRotationSpeed, 1.0f, -360.0f, 360.0f);
+                ImGui::DragFloat("Max Rotation Speed", &emitter.maxRotationSpeed, 1.0f, -360.0f, 360.0f);
+
+                ImGui::Separator();
+                ImGui::Text("Particle Effect Presets");
+                if (ImGui::Button("Fire Effect")) {
+                    emitter = ParticleEffects::createFireEmitter();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Explosion Effect")) {
+                    emitter = ParticleEffects::createExplosionEmitter();
+                }
+                if (ImGui::Button("Smoke Effect")) {
+                    emitter = ParticleEffects::createSmokeEmitter();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Sparkle Effect")) {
+                    emitter = ParticleEffects::createSparkleEmitter();
+                }
+                if (ImGui::Button("Rain Effect")) {
+                    emitter = ParticleEffects::createRainEmitter();
+                }
+
+                if (ImGui::Button("Remove Particle Emitter Component")) {
+                    scene.componentManager->removeComponent<ParticleEmitterComponent>(scene.selectedEntity);
+                    Signature sig = scene.entityManager->getSignature(scene.selectedEntity);
+                    sig.reset(scene.componentManager->getComponentType<ParticleEmitterComponent>());
+                    scene.entityManager->setSignature(scene.selectedEntity, sig);
+                    scene.systemManager->entitySignatureChanged(scene.selectedEntity, sig);
+                }
+            }
+        }
+
+        // ParticleComponent Inspector (read-only info)
+        if (scene.componentManager->hasComponent<ParticleComponent>(scene.selectedEntity)) {
+            if (ImGui::CollapsingHeader("Particle Component (Info)", ImGuiTreeNodeFlags_DefaultOpen)) {
+                auto& particleComp = scene.componentManager->getComponent<ParticleComponent>(scene.selectedEntity);
+
+                ImGui::Text("Total Particles: %zu", particleComp.particles.size());
+                ImGui::Text("Active Particles: %d", particleComp.activeParticleCount);
+                ImGui::Text("Particles Emitted This Frame: %d", particleComp.particlesEmittedThisFrame);
+
+                if (ImGui::Button("Remove Particle Component")) {
+                    scene.componentManager->removeComponent<ParticleComponent>(scene.selectedEntity);
+                    Signature sig = scene.entityManager->getSignature(scene.selectedEntity);
+                    sig.reset(scene.componentManager->getComponentType<ParticleComponent>());
+                    scene.entityManager->setSignature(scene.selectedEntity, sig);
+                    scene.systemManager->entitySignatureChanged(scene.selectedEntity, sig);
+                }
+            }
         }
     } else {
         ImGui::Text("No entity selected.");

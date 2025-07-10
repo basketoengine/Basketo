@@ -20,7 +20,8 @@
 #include "../ecs/components/SpriteComponent.h"
 #include "../ecs/components/ScriptComponent.h"
 #include "../ecs/components/ColliderComponent.h"
-#include "../ecs/components/NameComponent.h" 
+#include "../ecs/components/NameComponent.h"
+#include "../ecs/components/ParticleComponent.h"
 #include "../ecs/systems/RenderSystem.h"
 #include "../ecs/systems/ScriptSystem.h"
 #include "../ecs/systems/MovementSystem.h"
@@ -28,7 +29,8 @@
 #include "../ecs/systems/AudioSystem.h"
 #include "../ecs/systems/CameraSystem.h"
 #include "../ecs/systems/CollisionSystem.h"
-#include "../ecs/systems/PhysicsSystem.h" 
+#include "../ecs/systems/PhysicsSystem.h"
+#include "../ecs/systems/ParticleSystem.h"
 #include "../AssetManager.h"
 #include "../ecs/Entity.h"
 #include "../../vendor/nlohmann/json.hpp"
@@ -46,7 +48,8 @@ class MovementSystem;
 class AnimationSystem; 
 class CameraSystem;
 class CollisionSystem;
-class PhysicsSystem;  
+class PhysicsSystem;
+class ParticleSystem;
 class AIPromptProcessor;
 
 const int HANDLE_SIZE = 8; 
@@ -133,6 +136,7 @@ public:
     std::shared_ptr<CameraSystem> cameraSystem;
     std::shared_ptr<CollisionSystem> collisionSystem;
     std::shared_ptr<PhysicsSystem> physicsSystem;
+    std::shared_ptr<ParticleSystem> particleSystem;
 
     std::vector<std::string> consoleLogBuffer;
 
