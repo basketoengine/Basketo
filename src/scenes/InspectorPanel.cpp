@@ -14,6 +14,8 @@
 #include "../ecs/components/CameraComponent.h"
 #include "../ecs/components/RigidbodyComponent.h"
 #include "../ecs/components/ParticleComponent.h"
+#include "../ecs/components/EventComponent.h"
+#include "../ecs/components/StateMachineComponent.h"
 #include "../AssetManager.h"
 #include "../utils/FileUtils.h" 
 #include "../utils/EditorHelpers.h" 
@@ -39,7 +41,7 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
         ImGui::Separator();
 
         ImGui::PushItemWidth(-1);
-        const char* component_types[] = { "Transform", "Sprite", "Velocity", "Script", "Collider", "Animation", "Audio", "SoundEffects", "Camera", "Rigidbody", "ParticleEmitter", "Particle" };
+        const char* component_types[] = { "Transform", "Sprite", "Velocity", "Script", "Collider", "Animation", "Audio", "SoundEffects", "Camera", "Rigidbody", "ParticleEmitter", "Particle", "Event", "StateMachine" };
         static int current_component_type_idx = 0;
 
         if (ImGui::BeginCombo("##AddComponentCombo", component_types[current_component_type_idx])) {
@@ -168,6 +170,30 @@ void renderInspectorPanel(DevModeScene& scene, ImGuiIO& io) {
                     std::cout << "Added ParticleComponent to Entity " << scene.selectedEntity << std::endl;
                 } else {
                     std::cout << "Entity " << scene.selectedEntity << " already has ParticleComponent." << std::endl;
+                }
+            } else if (selected_component_str == "Event") {
+                if (!scene.componentManager->hasComponent<EventComponent>(scene.selectedEntity)) {
+                    scene.componentManager->addComponent(scene.selectedEntity, EventComponent{});
+                    entitySignature.set(scene.componentManager->getComponentType<EventComponent>());
+                    scene.entityManager->setSignature(scene.selectedEntity, entitySignature);
+                    scene.systemManager->entitySignatureChanged(scene.selectedEntity, entitySignature);
+                    std::cout << "Added EventComponent to Entity " << scene.selectedEntity << std::endl;
+                } else {
+                    std::cout << "Entity " << scene.selectedEntity << " already has EventComponent." << std::endl;
+                }
+            } else if (selected_component_str == "StateMachine") {
+                if (!scene.componentManager->hasComponent<StateMachineComponent>(scene.selectedEntity)) {
+                    StateMachineComponent stateMachine;
+                    stateMachine.addState("DefaultState");
+                    stateMachine.initialState = "DefaultState";
+                    stateMachine.initialize();
+                    scene.componentManager->addComponent(scene.selectedEntity, stateMachine);
+                    entitySignature.set(scene.componentManager->getComponentType<StateMachineComponent>());
+                    scene.entityManager->setSignature(scene.selectedEntity, entitySignature);
+                    scene.systemManager->entitySignatureChanged(scene.selectedEntity, entitySignature);
+                    std::cout << "Added StateMachineComponent to Entity " << scene.selectedEntity << std::endl;
+                } else {
+                    std::cout << "Entity " << scene.selectedEntity << " already has StateMachineComponent." << std::endl;
                 }
             }
 

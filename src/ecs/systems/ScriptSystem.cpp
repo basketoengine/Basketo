@@ -9,6 +9,8 @@
 #include "../components/ColliderComponent.h"
 #include "../components/AudioComponent.h"
 #include "../components/ParticleComponent.h"
+#include "../components/EventComponent.h"
+#include "../components/StateMachineComponent.h"
 #include "../../InputManager.h"
 #include <iostream>
 #include <fstream>
@@ -504,5 +506,107 @@ void ScriptSystem::registerEntityAPI() {
             }
         }
         return 0;
+    });
+
+    // Event System API
+    registerFunction("SendEvent", [this](Entity entity, const std::string& eventName) {
+        if (componentManager->hasComponent<EventComponent>(entity)) {
+            auto& eventComp = componentManager->getComponent<EventComponent>(entity);
+            eventComp.sendCustomEvent(eventName);
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] SendEvent: Entity " + std::to_string(entity) + " does not have an EventComponent.");
+            }
+        }
+    });
+
+    registerFunction("SendEventToTarget", [this](Entity entity, Entity target, const std::string& eventName) {
+        if (componentManager->hasComponent<EventComponent>(entity)) {
+            auto& eventComp = componentManager->getComponent<EventComponent>(entity);
+            eventComp.sendCustomEvent(eventName, target);
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] SendEventToTarget: Entity " + std::to_string(entity) + " does not have an EventComponent.");
+            }
+        }
+    });
+
+    registerFunction("AddEventListener", [this](Entity entity, const std::string& eventName) {
+        if (!componentManager->hasComponent<EventComponent>(entity)) {
+            componentManager->addComponent(entity, EventComponent{});
+        }
+
+        auto& eventComp = componentManager->getComponent<EventComponent>(entity);
+        eventComp.addEventListener(eventName, [entity, eventName, this](const EventData& event) {
+            // This would call a Lua callback if we had script component integration
+            std::cout << "[EventSystem] Event received: " << eventName << " on entity " << entity << std::endl;
+        });
+    });
+
+    // State Machine System API
+    registerFunction("ChangeState", [this](Entity entity, const std::string& stateName) {
+        if (componentManager->hasComponent<StateMachineComponent>(entity)) {
+            auto& stateMachine = componentManager->getComponent<StateMachineComponent>(entity);
+            // Force state change (this would normally go through StateMachineSystem)
+            if (stateMachine.hasState(stateName)) {
+                stateMachine.previousState = stateMachine.currentState;
+                stateMachine.currentState = stateName;
+                stateMachine.currentStateTime = 0.0f;
+                stateMachine.addToHistory(stateName);
+                std::cout << "[StateMachine] State changed to: " << stateName << std::endl;
+            }
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] ChangeState: Entity " + std::to_string(entity) + " does not have a StateMachineComponent.");
+            }
+        }
+    });
+
+    registerFunction("GetCurrentState", [this](Entity entity) -> std::string {
+        if (componentManager->hasComponent<StateMachineComponent>(entity)) {
+            auto& stateMachine = componentManager->getComponent<StateMachineComponent>(entity);
+            return stateMachine.currentState;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] GetCurrentState: Entity " + std::to_string(entity) + " does not have a StateMachineComponent.");
+            }
+        }
+        return "";
+    });
+
+    registerFunction("IsInState", [this](Entity entity, const std::string& stateName) -> bool {
+        if (componentManager->hasComponent<StateMachineComponent>(entity)) {
+            auto& stateMachine = componentManager->getComponent<StateMachineComponent>(entity);
+            return stateMachine.currentState == stateName;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] IsInState: Entity " + std::to_string(entity) + " does not have a StateMachineComponent.");
+            }
+        }
+        return false;
+    });
+
+    registerFunction("CreatePlayerStateMachine", [this](Entity entity) {
+        if (!componentManager->hasComponent<StateMachineComponent>(entity)) {
+            auto playerSM = StateMachineTemplates::createPlayerController();
+            componentManager->addComponent(entity, playerSM);
+            std::cout << "[StateMachine] Created player state machine for entity " << entity << std::endl;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] CreatePlayerStateMachine: Entity " + std::to_string(entity) + " already has a StateMachineComponent.");
+            }
+        }
+    });
+
+    registerFunction("CreateEnemyStateMachine", [this](Entity entity) {
+        if (!componentManager->hasComponent<StateMachineComponent>(entity)) {
+            auto enemySM = StateMachineTemplates::createEnemyAI();
+            componentManager->addComponent(entity, enemySM);
+            std::cout << "[StateMachine] Created enemy AI state machine for entity " << entity << std::endl;
+        } else {
+            if (errorLogCallback) {
+                errorLogCallback("[LUA ERROR] CreateEnemyStateMachine: Entity " + std::to_string(entity) + " already has a StateMachineComponent.");
+            }
+        }
     });
 }

@@ -73,6 +73,8 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     componentManager->registerComponent<CameraComponent>();
     componentManager->registerComponent<ParticleEmitterComponent>();
     componentManager->registerComponent<ParticleComponent>();
+    componentManager->registerComponent<EventComponent>();
+    componentManager->registerComponent<StateMachineComponent>();
     loadDevModeScene(*this, sceneFilePath);
 
     renderSystem = systemManager->registerSystem<RenderSystem>();
@@ -84,6 +86,8 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     collisionSystem = systemManager->registerSystem<CollisionSystem>();
     physicsSystem = systemManager->registerSystem<PhysicsSystem>();
     particleSystem = systemManager->registerSystem<ParticleSystem>();
+    eventSystem = systemManager->registerSystem<EventSystem>();
+    stateMachineSystem = systemManager->registerSystem<StateMachineSystem>();
 
     scriptSystem->setLoggingFunctions(
         [this](const std::string& msg) { this->addLogToConsole(msg); },
@@ -143,6 +147,14 @@ DevModeScene::DevModeScene(SDL_Renderer* ren, SDL_Window* win)
     particleSig.set(componentManager->getComponentType<ParticleEmitterComponent>());
     particleSig.set(componentManager->getComponentType<ParticleComponent>());
     systemManager->setSignature<ParticleSystem>(particleSig);
+
+    Signature eventSig;
+    eventSig.set(componentManager->getComponentType<EventComponent>());
+    systemManager->setSignature<EventSystem>(eventSig);
+
+    Signature stateMachineSig;
+    stateMachineSig.set(componentManager->getComponentType<StateMachineComponent>());
+    systemManager->setSignature<StateMachineSystem>(stateMachineSig);
 
     AssetManager& assets = AssetManager::getInstance();
     std::string texturePath = "../assets/Textures/";
@@ -308,7 +320,21 @@ void DevModeScene::update(float deltaTime) {
         audioSystem->update(deltaTime, *entityManager, *componentManager);
     }
 
-    // 7. Particles
+    // 7. Events
+    if (eventSystem) {
+        eventSystem->update(componentManager.get(), deltaTime);
+    }
+
+    // 8. State Machines
+    if (stateMachineSystem) {
+        // Connect event system to state machine system
+        if (eventSystem) {
+            stateMachineSystem->setEventSystem(eventSystem.get());
+        }
+        stateMachineSystem->update(componentManager.get(), deltaTime);
+    }
+
+    // 9. Particles
     if (particleSystem) {
         particleSystem->update(componentManager.get(), deltaTime);
     }
