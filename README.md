@@ -1,34 +1,3 @@
-
-<div align="right">
-  <details>
-    <summary >🌐 Language</summary>
-    <div>
-      <div align="right">
-        <p><a href="https://openaitx.github.io/view.html?user=basketoengine&project=Basketo&lang=en">English</a></p>
-        <p><a href="https://openaitx.github.io/view.html?user=basketoengine&project=Basketo&lang=zh-CN">简体中文</a></p>
-        <p><a href="https://openaitx.github.io/view.html?user=basketoengine&project=Basketo&lang=zh-TW">繁體中文</a></p>
-        <p><a href="https://openaitx.github.io/view.html?user=basketoengine&project=Basketo&lang=ja">日本語</a></p>
-        <p><a href="https://openaitx.github.io/view.html?user=basketoengine&project=Basketo&lang=ko">한국어</a></p>
-        <p><a href="https://openaitx.github.io/view.html?user=basketoengine&project=Basketo&lang=hi">हिन्दी</a></p>
-        <p><a href="https://openaitx.github.io/view.html?user=basketoengine&project=Basketo&lang=th">ไทย</a></p>
-        <p><a href="https://openaitx.github.io/view.html?user=basketoengine&project=Basketo&lang=fr">Français</a></p>
-        <p><a href="https://openaitx.github.io/view.html?user=basketoengine&project=Basketo&lang=de">Deutsch</a></p>
-        <p><a href="https://openaitx.github.io/view.html?user=basketoengine&project=Basketo&lang=es">Español</a></p>
-        <p><a href="https://openaitx.github.io/view.html?user=basketoengine&project=Basketo&lang=it">Itapano</a></p>
-        <p><a href="https://openaitx.github.io/view.html?user=basketoengine&project=Basketo&lang=ru">Русский</a></p>
-        <p><a href="https://openaitx.github.io/view.html?user=basketoengine&project=Basketo&lang=pt">Português</a></p>
-        <p><a href="https://openaitx.github.io/view.html?user=basketoengine&project=Basketo&lang=nl">Nederlands</a></p>
-        <p><a href="https://openaitx.github.io/view.html?user=basketoengine&project=Basketo&lang=pl">Polski</a></p>
-        <p><a href="https://openaitx.github.io/view.html?user=basketoengine&project=Basketo&lang=ar">العربية</a></p>
-        <p><a href="https://openaitx.github.io/view.html?user=basketoengine&project=Basketo&lang=fa">فارسی</a></p>
-        <p><a href="https://openaitx.github.io/view.html?user=basketoengine&project=Basketo&lang=tr">Türkçe</a></p>
-        <p><a href="https://openaitx.github.io/view.html?user=basketoengine&project=Basketo&lang=vi">Tiếng Việt</a></p>
-        <p><a href="https://openaitx.github.io/view.html?user=basketoengine&project=Basketo&lang=id">Bahasa Indonesia</a></p>
-      </div>
-    </div>
-  </details>
-</div>
-
 <p align="center">
     <img src="readmeimgs/logo.png" alt="Basketo Game Engine Logo" width="200"/>
 </p>
